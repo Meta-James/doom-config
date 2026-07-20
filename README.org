@@ -1,0 +1,35 @@
+#+TITLE: doom-config
+#+AUTHOR: James Cook
+
+Personal Doom Emacs configuration. Evil-first, Doom-idiomatic, cloud-first for AI
+tooling. This README is an orientation pointer — canonical detail lives in
+=docs/=.
+
+* Where things live
+
+| What                          | Where |
+|--------------------------------+------------------------------------------|
+| Doom module activation         | =init.el= |
+| Package declarations           | =packages.el= |
+| Configuration                  | =config.el= |
+| Actionable work / progress     | [[file:PROJECT.org][PROJECT.org]] |
+| System architecture            | [[file:docs/architecture.org][docs/architecture.org]] |
+| Cross-phase rules              | [[file:docs/standards.org][docs/standards.org]] |
+| Verified current state         | [[file:docs/inventory.org][docs/inventory.org]] |
+| Phased direction                | [[file:docs/roadmap.org][docs/roadmap.org]] |
+| Decision records (ADRs)        | [[file:docs/decisions.org][docs/decisions.org]] |
+| AI subsystem detail            | [[file:docs/ai/][docs/ai/]] |
+| Reusable/executable prompts    | [[file:prompts/][prompts/]] |
+| Claude Code entry point        | [[file:CLAUDE.md][CLAUDE.md]] |
+| Shared agent instructions      | [[file:AGENTS.md][AGENTS.md]] |
+
+* Current status
+
+Phase 1 (AI integration) is in progress — see [[file:docs/roadmap.org][docs/roadmap.org]] for exactly
+which sub-phase, and [[file:docs/decisions.org][docs/decisions.org]] for what's been decided so far.
+
+* Conventions
+
+Doom-first, Evil-first, Org-first documentation, cloud-first for AI models, no
+automatic commits or pushes by any agent working in this repo. Full rules in
+[[file:docs/standards.org][docs/standards.org]].

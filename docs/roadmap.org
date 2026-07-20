@@ -1,0 +1,52 @@
+#+TITLE: Roadmap
+#+AUTHOR: James Cook
+#+STARTUP: overview
+:PROPERTIES:
+:ID:       docs-roadmap
+:END:
+
+Phased direction. Only Phase 1 (AI integration) is active work; everything after it
+is named so later phases stay compatible with it, not implemented now.
+
+* Phase 1 — AI integration (active)
+:PROPERTIES:
+:ID:       roadmap-phase-1
+:END:
+
+| Sub-phase | Status | Notes |
+|-----------+----------+----------------------------------------------------------|
+| 0 — Read-only discovery       | DONE | |
+| 1 — Architecture proposal     | DONE | See [[id:docs-decisions][decisions.org]] for the decisions locked in |
+| 2 — Baseline modernization    | DONE | Doom core upgraded =3e15fb36d= → =04b2956ba=; EXWM removed; =doom-dashboard= module rename. See [[id:adr-doom-core-upgrade][ADR-001]], [[id:adr-remove-exwm][ADR-002]] |
+| 3 — Documentation foundation  | DONE | This tree, validated (56 IDs, 0 duplicates, 57 links resolved) |
+| 4 — Chat and focused assistance | MOSTLY DONE | gptel reworked (Anthropic default + OpenAI), =SPC a= flattened, verified via headless daemon. Interactive-session tests (streaming/cancellation/popup) still open. See [[id:adr-gptel-rework][ADR-006]] |
+| 5 — Inline completion         | MOSTLY DONE | copilot.el kept, NES enabled, TAB precedence live-verified. Real authenticated-session test still open. See [[id:adr-copilot-nes][ADR-007]] |
+| 6 — Primary agentic workflow  | DONE | claude-code-ide.el installed, wired, and live-tested (real session, seeded bug found and fixed, no git actions). Remote/TRAMP still needs hardware. See [[id:adr-claude-code-ide-install][ADR-008]] |
+| 7 — Review, permissions, safety | TODO | Ediff/Magit integration, permission enforcement |
+| 8 — Prompts, memory, skills   | TODO | =CLAUDE.md=/=AGENTS.md= finalization, skill policy |
+| 9 — Validation and handoff    | TODO | Acceptance tests, final docs, clean diff for commit |
+
+See [[id:ai-architecture][docs/ai/architecture.org]] for the Phase 1 subsystem design.
+
+* Future phases (named, not implemented)
+:PROPERTIES:
+:ID:       roadmap-future
+:END:
+
+Listed so Phase 1 decisions don't paint these into a corner — none of this is
+scheduled or scoped yet.
+
+- Git and code review depth beyond Magit/Ediff
+- Org Agenda and personal project management
+- Capture and knowledge management
+- Documentation and publishing workflows
+- Email
+- Calendar
+- RSS and communications
+- Terminal and remote-system workflow depth (beyond what Phase 1 tests for
+  TRAMP/SBC targets)
+- File and media management
+- EXWM (or another Emacs-centred window-management approach) — EXWM package was
+  deliberately removed in Phase 1 ([[id:adr-remove-exwm][ADR-002]]); re-declare when this phase starts
+- Notifications and desktop integration
+- Reproducible machine provisioning

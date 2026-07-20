@@ -1,0 +1,142 @@
+#+TITLE: Inventory — Verified System State
+#+AUTHOR: James Cook
+#+STARTUP: overview
+:PROPERTIES:
+:ID:       docs-inventory
+:END:
+
+Verified, dated facts about this machine and this configuration. Not aspirational —
+if it's here, it was checked, not assumed. Superseded entries are struck through and
+dated rather than deleted, so history stays visible.
+
+* Repository
+:PROPERTIES:
+:ID:       inv-repository
+:END:
+
+| Field   | Value                                            |
+|---------+---------------------------------------------------|
+| Name    | Meta-James/doom-config                           |
+| Remote  | git@github.com:Meta-James/doom-config.git (GithubDoom) |
+| Branch  | main                                             |
+| Verified| 2026-07-20                                       |
+
+* Doom / Emacs / OS
+:PROPERTIES:
+:ID:       inv-platform
+:END:
+
+#+NAME: platform-history
+| Field                  | 2026-07-20 (pre-upgrade)        | 2026-07-20 (post-upgrade)                 |
+|------------------------+----------------------------------+--------------------------------------------|
+| Doom core commit       | =3e15fb36d= (2026-01-07)        | =04b2956ba= (2026-07-17)                  |
+| Doom reported version  | 3.0.0-pre                        | 2.2.0 (see [[id:adr-doom-core-upgrade][ADR-001]] note on version string) |
+| Doom modules source    | bundled in core repo             | split to =doomemacs/modules=, =3d516aab6= |
+| Packages detected      | 147                              | 141 (net: EXWM + exclusive deps removed)  |
+| =doom doctor=          | clean                            | clean (after clearing stale =.elc=, see [[id:ai-troubleshooting][troubleshooting]]) |
+
+| Field       | Value                                                          |
+|-------------+-----------------------------------------------------------------|
+| Emacs       | 30.1, native-comp, tree-sitter, pdumper build                   |
+| Doom recommends | Emacs 27.1–30.2, 30.2 recommended (per doomemacs/doomemacs README, checked 2026-07-20) |
+| Linux       | Ubuntu 24.04.4 LTS (noble), kernel 6.8.0-136-generic             |
+
+* Enabled Doom modules (=init.el=)
+:PROPERTIES:
+:ID:       inv-modules
+:END:
+
+43 modules as of 2026-07-20. Full source of truth is =init.el= itself — this is a
+summary, not a duplicate to keep in sync by hand:
+
+- =:completion= company +childframe, vertico
+- =:ui= doom, dashboard, hl-todo, ligatures, modeline, ophints, popup +defaults,
+  vc-gutter +pretty, vi-tilde-fringe, workspaces
+- =:editor= evil +everywhere, file-templates, fold, format +onsave, snippets
+- =:emacs= dired +icons, electric, undo, vc
+- =:term= vterm
+- =:checkers= syntax, spell +flyspell, grammar
+- =:tools= direnv, eval +overlay, lookup, lsp, magit, pdf, tree-sitter
+- =:lang= emacs-lisp, json, latex, markdown, org, python +lsp +pyenv +poetry
+  +pyright, sh
+- =:config= default +bindings +smartparens
+
+* Explicit packages (=packages.el=)
+:PROPERTIES:
+:ID:       inv-packages
+:END:
+
+| Package        | Recipe                                              | Pinned commit (2026-07-20, post-upgrade) |
+|----------------+------------------------------------------------------+--------------------------------------------|
+| gptel          | MELPA default                                       | =8701e2b= / header version 0.9.9.5        |
+| copilot        | =(:host github :repo "copilot-emacs/copilot.el" :files ("*.el"))= | =277ca35= / tagged release 0.9.0 |
+| perfect-margin | MELPA default                                       | unrelated to AI work, untouched            |
+| claude-code-ide | =(:host github :repo "manzaltu/claude-code-ide.el")= | Installed Phase 6, 2026-07-20; no tagged release upstream yet (pre-1.0) |
+| ~~exwm~~       | removed 2026-07-20, see [[id:adr-remove-exwm][ADR-002]]         | —                                          |
+
+* External binaries
+:PROPERTIES:
+:ID:       inv-binaries
+:END:
+
+| Binary  | Present | Path / version                          |
+|---------+---------+-------------------------------------------|
+| rg      | yes     | /usr/bin/rg                                |
+| fd      | no      | not installed                              |
+| git     | yes     | /usr/bin/git                               |
+| node    | yes     | v18.19.1, apt package =nodejs=, no nvm/fnm/volta |
+| python3 | yes     | pyenv shim                                 |
+| pyright | yes     | /usr/local/bin/pyright                     |
+| ruff    | yes     | ~/.local/bin/ruff                          |
+| black   | yes     | ~/.local/bin/black                         |
+| poetry  | yes     | ~/.local/bin/poetry                        |
+| pyenv   | yes     | ~/.pyenv/bin/pyenv                         |
+| direnv  | yes     | /usr/bin/direnv                            |
+| pass    | yes     | /usr/bin/pass                              |
+| gpg     | yes     | /usr/bin/gpg, one secret key (created 2026-02-05) |
+| claude  | yes     | ~/.local/bin/claude, CLI version 2.1.215   |
+| codex   | no      | not installed                              |
+| aider   | no      | not installed                              |
+| gh      | no      | not installed                              |
+
+Node 18.19.1 initially looked like a possible blocker for
+=copilot-language-server=. Resolved in Phase 5: this install actually uses the
+*npm* path (=copilot-install-server= prefers npm when found on =PATH=, and
+=npm= is present) — confirmed by inspecting the already-running server process
+(=ps=/=/proc=, read-only, on the user's own long-running daemon): a =node=-run
+JS dispatcher execs the platform-native binary as a child process for the
+actual LSP work. The installed package (=@github/copilot-language-server=
+1.452.0) declares no =engines= constraint in its =package.json= — the
+Node-version concern doesn't apply to this package as installed, and the
+server has been running successfully for hours as empirical confirmation. See
+[[id:adr-copilot-nes][docs/decisions.org ADR-007]].
+
+* Credential state
+:PROPERTIES:
+:ID:       inv-credentials
+:END:
+
+No secret values recorded here or anywhere in this repo — entry names only.
+
+| Store  | Entries present (2026-07-20) |
+|--------+--------------------------------|
+| pass   | =api/openai= only              |
+| gpg    | one ultimate-trust secret key (created 2026-02-05) |
+
+Anthropic and Google entries do not exist yet — required before Phase 4 (gptel
+multi-provider rework). See [[id:ai-providers][providers.org]] for the target credential
+architecture.
+
+* Known environment issues
+:PROPERTIES:
+:ID:       inv-env-issues
+:END:
+
+- =$PATH= contains a literal, unexpanded =~/.config/emacs/bin= entry. Interactive
+  bash resolves =doom= via its own tilde-aware command hashing, but any subprocess
+  doing a raw =execvp= PATH search (e.g. =timeout doom ...=, and potentially some
+  agent tool invocations) fails to find it. Not a Doom or Emacs issue — a shell
+  profile issue. Affects anything that shells out to =doom= non-interactively,
+  including future agent tool calls. Not yet fixed — out of scope for this
+  project unless it starts blocking an agent workflow (see
+  [[id:ai-troubleshooting][troubleshooting.org]]).

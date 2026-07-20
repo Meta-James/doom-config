@@ -1,0 +1,108 @@
+#+TITLE: AI Subsystem — Default Workflows
+#+AUTHOR: James Cook
+#+STARTUP: overview
+:PROPERTIES:
+:ID:       ai-workflows
+:END:
+
+One default, documented workflow per responsibility. Not implemented yet where
+marked TODO — this is the target, cross-referenced from [[id:docs-roadmap][roadmap.org]] as each
+phase lands.
+
+* Chat (implemented — Phase 4)
+:PROPERTIES:
+:ID:       wf-chat
+:END:
+
+=SPC a i= opens/toggles a gptel popup (right side, 0.42 width). Default backend
+is Anthropic (=claude-sonnet-5=); switch provider/model/directive via
+=gptel-menu= (=SPC a m=). Send region for an immediate response with =SPC a s=;
+add region/buffer/project-files/diagnostics as background context (no response
+triggered) with =SPC a a=/=SPC a d=. Org-mode is the default gptel buffer mode,
+so chat transcripts are themselves Org and can be saved/linked like any other
+document. Live-verified (headless daemon): backend/model/credentials all wire
+up correctly. Not yet verified: actual streaming/cancellation/popup behavior in
+a real interactive session — see [[id:ai-evaluation][evaluation.org]].
+
+* Focused transform (implemented — Phase 4)
+:PROPERTIES:
+:ID:       wf-transform
+:END:
+
+=SPC a r= invokes the built-in =gptel-rewrite= on the active region — ediff/diff
+-based in-place review, not the old copy-paste-from-scratch-buffer flow. Three
+reusable instructions (=clearer=, =formal=, =summarize=) are registered in
+=gptel-directives= and selectable from =gptel-rewrite='s own transient (its
+directive-edit suffix). This replaced =my/gptel-rewrite-clearer/-formal=,
+=my/gptel-summarize=, and =my/gptel--prompt-rewrite= entirely — see [[id:adr-gptel-rework][ADR-006]].
+
+* Inline completion (implemented — Phase 5)
+:PROPERTIES:
+:ID:       wf-completion
+:END:
+
+Passive: copilot.el overlays a suggestion in supported =prog-mode= buffers.
+=TAB= accepts a pending Copilot/NES suggestion; otherwise falls through to
+Company, then ordinary indent/yasnippet behavior. =copilot-nes-mode= is now
+also enabled on =prog-mode=, giving genuine multi-location Next Edit
+Suggestions (=textDocument/copilotInlineEdit=) alongside regular cursor-
+-position completions. Precedence is live-verified (simulated overlay in an
+isolated daemon, not assumed) — see [[id:adr-copilot-nes][ADR-007]] and [[id:ai-keybindings][keybindings.org]] for the
+full chain, including the yasnippet-overlap edge case.
+
+* Full agentic coding (installed, wired, and live-verified — Phase 6)
+:PROPERTIES:
+:ID:       wf-agent
+:END:
+
+=SPC a g= opens =claude-code-ide-menu=, the single entry point (session
+management, navigation, interaction, config, and debug submenus). One Claude
+instance per project (via =project.el= auto-detection). Plan → multi-file edit
+→ run formatters/tests → present diff via Ediff (opens automatically,
+=claude-code-ide-use-ide-diff= =t=) → user accepts/rejects per hunk. Agent
+never commits or pushes (see [[id:std-no-commit][standards.org]]). Terminal backend: vterm, matching
+this config's existing incumbent. Diagnostics backend: Flycheck, matching the
+existing Python stack.
+
+Verified structurally (headless daemon): package loads, settings applied,
+keybinding resolves, CLI correctly detected via a local, network-free check.
+
+Verified live (user-approved real smoke test, [[id:adr-claude-code-ide-install][ADR-008]]): launched a real
+session against a disposable scratch project, gave it a task with a
+deliberately seeded bug, and watched it inspect, plan, edit, run pytest, hit
+the failure, fix it, re-run to confirm, and stop cleanly — without touching
+git. Along the way this also surfaced and fixed a real prerequisite gap:
+vterm's native module had never been compiled on this machine (see
+[[id:tshoot-vterm-module][troubleshooting.org]]), which would otherwise have silently blocked this
+workflow (and =my/project-vterm=) the first time either was used for real.
+
+*Not yet exercised*: interactive interruption/partial-rejection mid-session
+(needs a human actually present, not a scripted test) and anything requiring
+a remote/TRAMP target (needs hardware this agent doesn't have).
+
+* Review (existing tools, no new package)
+:PROPERTIES:
+:ID:       wf-review
+:END:
+
+Magit for the git-level view, Ediff for the agent's proposed diff specifically,
+Flycheck/LSP diagnostics re-run after any agent edit. No replacement of Magit as
+the git authority.
+
+* Terminal-hosted agent sessions (existing)
+:PROPERTIES:
+:ID:       wf-terminal
+:END:
+
+Doom's =vterm= module remains the terminal host — both the existing
+=my/project-vterm= helper and claude-code-ide.el's own vterm backend share it. No
+=eat=/=ghostel= adoption planned; only reconsider if vterm demonstrably breaks the
+agent workflow (see [[id:adr-primary-agent][ADR-004]] revisit condition).
+
+* Diagnostics and status (existing, unchanged)
+:PROPERTIES:
+:ID:       wf-diagnostics
+:END:
+
+Flycheck/LSP as already configured. AI context-assembly commands (TODO, Phase 4)
+will read from these, not duplicate them.

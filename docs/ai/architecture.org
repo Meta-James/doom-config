@@ -1,0 +1,82 @@
+#+TITLE: AI Subsystem — Architecture
+#+AUTHOR: James Cook
+#+STARTUP: overview
+:PROPERTIES:
+:ID:       ai-architecture
+:END:
+
+Target architecture for Phase 1, as decided in [[id:docs-decisions][docs/decisions.org]]. As of
+Phase 6, every box in the diagram below is installed and structurally wired
+(package loads, credentials resolve, keybindings resolve); what remains is
+live-session exercising of the agent path and remote/TRAMP testing — see
+[[id:docs-roadmap][roadmap.org]] for the exact phase-by-phase status.
+
+* Diagram
+
+#+BEGIN_SRC text
+                     Doom Emacs (Evil)
+
+Inline completion  ──▶ copilot.el ──▶ copilot-language-server (native binary)
+(buffer-local,               interacts with: Company +childframe, LSP, snippets
+ passive overlay)
+
+Chat / focused edit ──▶ gptel ──▶ gptel-make-anthropic (primary)
+(region/buffer/               gptel-make-openai   (secondary)
+ diagnostic context,           gptel-make-gemini   (secondary)
+ Org-mode buffers)        popup: right, 0.42 width (existing rule pattern)
+
+Full agentic coding ──▶ claude-code-ide.el ──▶ MCP ──▶ claude (CLI, already on PATH)
+(project-wide plan/          terminal backend: vterm (existing Doom module)
+ edit/test/iterate)           review surface: Ediff + Magit (existing)
+                              Emacs-side MCP tools: xref, imenu, treesit-info,
+                              project-info
+
+                     Credential layer
+                     Doom :tools pass +auth
+                      +pass-get-secret ── api/anthropic (to be created)
+                      +pass-get-secret ── api/openai   (exists)
+                      auth-source-pass ── api/gemini   (to be created)
+                     claude CLI keeps its own subscription-based login,
+                     separate from these per-token API credentials
+#+END_SRC
+
+No secondary agentic-coding frontend — see [[id:adr-agent-shell-rejected][ADR-005]].
+
+* Responsibility boundaries
+
+| Responsibility               | Owner              | Notes |
+|-------------------------------+---------------------+---------------------------------|
+| Inline completion             | copilot.el          | Keep — see [[id:adr-doom-core-upgrade][ADR-001]] for version state |
+| Chat / conversational         | gptel               | Rework to multi-provider, Phase 4 |
+| Focused text/code transform   | gptel presets/directives | Replaces custom rewrite commands, Phase 4 |
+| Repository-wide agentic coding | claude-code-ide.el | Sole agent, [[id:adr-primary-agent][ADR-004]] |
+| Terminal agent hosting        | Doom's vterm module | Unchanged incumbent |
+| Context assembly              | Explicit commands only | Never silent — region/buffer/diagnostic/project context is always an explicit action |
+| Diff and patch review         | Ediff + Magit        | No new package |
+| Prompt/instruction management | CLAUDE.md + AGENTS.md + Org | See [[id:ai-prompts][prompts.org]] |
+| Provider/model selection      | gptel-menu           | See [[id:ai-providers][providers.org]] |
+| Diagnostics and status        | Flycheck/LSP (existing) | No change |
+| Documentation                 | This Org tree        | Canonical; CLAUDE.md/AGENTS.md are pointers only |
+
+* Process placement
+
+- gptel and claude-code-ide.el both run as Emacs sub-processes/network clients on
+  the *same host* as the buffer/project — correct for the local-machine workflow.
+- For remote/TRAMP projects (SBCs, Armbian boards), the CLI-driven agent must run
+  *on the remote host*, not locally against a TRAMP-mounted path. Untested — this
+  is a Phase 6 acceptance criterion, not yet verified. See [[id:ai-evaluation][evaluation.org]].
+
+* Context, provider, review, and credential flow
+
+- *Context*: region/buffer/diagnostic context flows into gptel only via explicit
+  user action; project-wide context flows into claude-code-ide.el via its own
+  repo-walking, not via Emacs shoveling files at it.
+- *Provider*: gptel's backend/model choice is explicit via =gptel-menu=; no silent
+  fallback between providers.
+- *Review*: agent proposes → Ediff/Magit surfaces the diff → per-hunk accept/reject
+  → nothing is committed by the agent. Enforcement should be technical (Claude
+  Code permission settings/hooks) where available, not merely instructional — see
+  [[id:std-no-commit][standards.org]] and Phase 7 in [[id:docs-roadmap][roadmap.org]].
+- *Credentials*: two-tier — the CLI agent uses its own subscription login;
+  gptel/API-based tools use per-provider tokens from =pass= via Doom's =:tools
+  pass=, never hardcoded. See [[id:ai-providers][providers.org]].

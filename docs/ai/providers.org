@@ -1,0 +1,68 @@
+#+TITLE: AI Subsystem — Providers, Models, Credentials
+#+AUTHOR: James Cook
+#+STARTUP: overview
+:PROPERTIES:
+:ID:       ai-providers
+:END:
+
+* Credential architecture — implemented (Phase 4)
+:PROPERTIES:
+:ID:       providers-credentials
+:END:
+
+Replaced the hand-rolled =my/pass-get= shell wrapper (shelled out via unquoted
+string interpolation into =shell-command-to-string=) with Doom's =:tools pass=
+module (=+auth= flag, enabled in =init.el=). gptel's =:key= parameter takes a
+function; each backend calls =+pass-get-secret= for its own entry, lazily,
+never storing the value in a variable. See [[id:adr-gptel-rework][ADR-006]].
+
+| Tool          | Credential source                          | Entry (pass path) | Status |
+|---------------+----------------------------------------------+----------------------+--------|
+| claude-code-ide.el (Phase 6) | Claude CLI's own subscription login | N/A — not a pass entry | Pending |
+| gptel (Anthropic, default)   | =:tools pass= =+pass-get-secret= | =api/anthropic= | Live — resolves to a 108-char string, verified without printing it |
+| gptel (OpenAI, secondary)    | =:tools pass= =+pass-get-secret= | =api/openai= | Live — resolves to a 164-char string, verified without printing it |
+| gptel (Gemini)               | N/A | =api/gemini= | Explicitly skipped per user request — see [[id:adr-gptel-rework][ADR-006]] |
+| copilot.el (Phase 5)         | GitHub's own device-code login flow (unrelated to =pass=) | N/A | Unchanged |
+
+Requirements carried over from [[id:std-credentials][standards.org]]: no secret values in git, in Org
+Babel results, in command transcripts, or in =CLAUDE.md=/=AGENTS.md=/prompts/logs.
+Held to throughout Phase 4 — every credential check during implementation
+verified only string type/length, never content.
+
+* Model policy — implemented (Phase 4)
+:PROPERTIES:
+:ID:       providers-models
+:END:
+
+Previous state hardcoded =gptel-make-openai= only, with model list
+=(gpt-4o-mini gpt-4o)= — both superseded as of 2026-07-20.
+
+Now: =:models= is omitted on both =gptel-make-anthropic= and =gptel-make-openai=
+calls. Source inspection of gptel 0.9.9.5 (=gptel-anthropic.el=/=gptel-openai.el=)
+confirmed both constructors default =:models= to gptel's own maintained registry
+(=gptel--anthropic-models=/=gptel--openai-models=) when the keyword is omitted —
+so the available model list tracks upstream automatically instead of being
+hardcoded here and going stale. Live-verified: the Anthropic registry includes
+=claude-sonnet-5=/=claude-opus-4-8=/=claude-haiku-4-5-20251001=/=claude-fable-5=;
+the OpenAI registry includes the current =gpt-5.x=/=o3=/=o4= generation.
+
+Default backend/model: Anthropic / =claude-sonnet-5= (matches cloud-first +
+"best engineering workflow, not cheapest" per [[id:std-cloud-first][standards.org]]). OpenAI
+configured as a secondary backend, selectable via =gptel-menu= (=SPC a m=).
+Gemini not configured — explicit user decision, not an oversight.
+
+* Known gaps
+:PROPERTIES:
+:ID:       providers-gaps
+:END:
+
+- Google/Gemini backend not configured — add =gptel-make-gemini= with a new
+  =api/gemini= pass entry if this is wanted later; the pattern is identical to
+  the Anthropic/OpenAI setup above.
+- Streaming visuals, cancellation, popup placement, and Org-buffer chat UX were
+  *not* verified in Phase 4 — those require an interactive session, and Phase 4
+  validation used a headless daemon. See [[id:ai-evaluation][evaluation.org]] for what's still open.
+- The credential values themselves were never read by the agent doing this
+  work beyond confirming they're non-empty strings of plausible length (108
+  and 164 characters respectively) — this document intentionally doesn't (and
+  shouldn't) say more than that.

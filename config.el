@@ -260,105 +260,113 @@ Does not write to disk unless you save."
         evil-escape-delay 0.20)
   (evil-escape-mode 1))
 
-;; ChatGPT Integration
-(defun my/pass-get (entry)
-  "Return first line of `pass ENTRY` or nil."
-  (when (executable-find "pass")
-    (let* ((out (string-trim (shell-command-to-string (format "pass %s" entry))))
-           (first (car (split-string out "\n" t))))
-      (unless (or (null first) (string-empty-p first))
-        first))))
-
-(let ((key (my/pass-get "api/openai")))
-  (when key
-    (setenv "OPENAI_API_KEY" key)))
-
+;; AI: chat and focused transformation via gptel.
+;; Credentials come from Doom's `:tools pass' module (`+auth' flag), never
+;; hand-rolled shell wrappers. See docs/ai/providers.org for the full
+;; credential map and docs/decisions.org ADR-003/004 for why the leader
+;; namespace and provider choices look like this.
 (after! gptel
-  ;; Key from pass
-  (setq gptel-api-key (lambda () (my/pass-get "api/openai")))
+  (setq gptel-default-mode 'org-mode)
 
-  ;; Set *defaults* (buffer-local vars need setq-default)
+  ;; Anthropic is the default backend. `:models' is deliberately omitted on
+  ;; both backends below -- gptel ships and maintains its own current model
+  ;; registry (gptel--anthropic-models / gptel--openai-models), so omitting
+  ;; `:models' tracks upstream automatically instead of hardcoding names that
+  ;; will be stale within months.
   (setq-default
-   gptel-backend (gptel-make-openai "OpenAI"
-                   :key (lambda () (my/pass-get "api/openai"))
-                   :stream t
-                   :models '(gpt-4o-mini gpt-4o))
-   gptel-model 'gpt-4o-mini
-   gptel-default-mode 'org-mode)
+   gptel-backend (gptel-make-anthropic "Claude"
+                   :key (lambda () (+pass-get-secret "api/anthropic"))
+                   :stream t)
+   gptel-model 'claude-sonnet-5)
 
-  ;; Popup rule for gptel buffers
+  ;; OpenAI kept as a secondary backend, explicitly selectable via `gptel-menu'.
+  (gptel-make-openai "ChatGPT"
+    :key (lambda () (+pass-get-secret "api/openai"))
+    :stream t)
+
+  ;; Reusable rewrite/transform directives, selectable from `gptel-rewrite''s
+  ;; own transient (its "s" suffix edits/picks the active directive) instead
+  ;; of bespoke commands that paste results into a scratch buffer for manual
+  ;; copy-paste.
+  (setf (alist-get 'clearer gptel-directives)
+        "Make the following clearer and more concise while keeping the meaning. Return only the rewritten text.")
+  (setf (alist-get 'formal gptel-directives)
+        "Rewrite the following in a more formal tone. Return only the rewritten text.")
+  (setf (alist-get 'summarize gptel-directives)
+        "Summarize the following in 3-5 bullet points.")
+
   (set-popup-rule! "^\\*gptel\\*"
     :side 'right :size 0.42 :quit t :select t :ttl nil))
 
-(defun my/gptel--prompt-rewrite (instruction)
-  "Rewrite the active region using INSTRUCTION, replacing the region."
-  (unless (use-region-p)
-    (user-error "Select a region first"))
-  (let* ((orig (buffer-substring-no-properties (region-beginning) (region-end)))
-         (buf  (get-buffer-create "*gptel-rewrite*"))
-         (start (region-beginning))
-         (end   (region-end)))
-    ;; Make sure we have a popup buffer
+(defun my/gptel-add-diagnostics ()
+  "Add the current buffer's Flycheck diagnostics to gptel's context.
+gptel has no built-in equivalent -- `gptel-add'/`gptel-add-file' cover
+region/buffer/project-file context already."
+  (interactive)
+  (unless (bound-and-true-p flycheck-mode)
+    (user-error "Flycheck is not active in this buffer"))
+  (require 'flycheck)
+  (let ((errors (flycheck-overlay-errors-in (point-min) (point-max)))
+        (src (or (buffer-file-name) (buffer-name)))
+        (buf (get-buffer-create "*gptel-diagnostics-context*")))
+    (unless errors
+      (user-error "No Flycheck diagnostics in this buffer"))
     (with-current-buffer buf
       (erase-buffer)
-      (org-mode))
-    (pop-to-buffer buf)
-    ;; Ask for ONLY the rewritten text so it's easy to paste back
-    (with-current-buffer buf
-      (insert (format "Rewrite the text following these instructions:\n- %s\n\nReturn ONLY the rewritten text.\n\nTEXT:\n%s"
-                      instruction orig))
-      ;; Send prompt
-      (gptel-send)
-      ;; You manually copy/paste the result back (reliable & simple).
-      ;; If you want auto-replace, we can wire that up next.
-      )))
+      (insert (format "Flycheck diagnostics for %s:\n\n" src))
+      (dolist (err errors)
+        (insert (format "%s:%s: %s: %s\n"
+                        src
+                        (flycheck-error-line err)
+                        (flycheck-error-level err)
+                        (flycheck-error-message err)))))
+    (gptel-context--add-buffer buf)
+    (message "Added %d diagnostic(s) to gptel context." (length errors))))
 
-(defun my/gptel-rewrite-clearer () (interactive)
-       (my/gptel--prompt-rewrite "Make it clearer and more concise while keeping the meaning."))
-
-(defun my/gptel-rewrite-formal () (interactive)
-       (my/gptel--prompt-rewrite "Rewrite in a more formal tone."))
-
-(defun my/gptel-summarize () (interactive)
-       (my/gptel--prompt-rewrite "Summarize in 3-5 bullet points."))
-
-(defun my/gptel-send-buffer ()
-  "Send the whole buffer to the current gptel session."
-  (interactive)
-  (save-excursion
-    (mark-whole-buffer)
-    (gptel-send)))
-
-;; Reclaim SPC a as Doom's "Apps" prefix (instead of embark-act)
-(after! doom-keybinds
-  (map! :leader "a" nil)
-  (map! :leader
-        (:prefix ("a" . "apps"))))
-
+;; SPC a is the AI namespace outright (see docs/decisions.org ADR-003) --
+;; this permanently removes Doom's default `embark-act' binding at SPC a,
+;; confirmed acceptable since Embark's leader shortcut isn't needed here.
+(map! :leader "a" nil)
 (map! :leader
-      (:prefix ("a" . "apps")
-               (:prefix ("i" . "AI")
-                :desc "Chat (popup)" "i" #'gptel
-                :desc "Send region"  "s" #'gptel-send
-                :desc "Send buffer"  "b" #'my/gptel-send-buffer
-                (:prefix ("r" . "Rewrite")
-                 :desc "Clearer"  "c" #'my/gptel-rewrite-clearer
-                 :desc "Formal"   "f" #'my/gptel-rewrite-formal
-                 :desc "Summarize" "s" #'my/gptel-summarize))))
+      (:prefix ("a" . "AI")
+       :desc "Chat (popup)"           "i" #'gptel
+       :desc "Send region"            "s" #'gptel-send
+       :desc "Add context (region/buffer/files)" "a" #'gptel-add
+       :desc "Add diagnostics context" "d" #'my/gptel-add-diagnostics
+       :desc "Rewrite/transform"      "r" #'gptel-rewrite
+       :desc "Model/provider/directive menu" "m" #'gptel-menu
+       :desc "Agent (Claude Code)"    "g" #'claude-code-ide-menu
+       :desc "Project vterm"          "t" #'my/project-vterm))
 
-;; accept completion from copilot and fallback to company
+;; Inline completion: Copilot overlay + Next Edit Suggestions.
+;; TAB/C-TAB below are copilot.el's own default bindings (`copilot-completion-map'
+;; and `copilot-nes-mode-map'), not re-bound here -- both are activated via
+;; overlay-local/filtered keymaps that fall through to Company/indent/yasnippet
+;; when no suggestion is pending. See docs/ai/keybindings.org for the precedence
+;; analysis and docs/decisions.org ADR-007.
 (use-package! copilot
-  :hook (prog-mode . copilot-mode)
-  :bind (:map copilot-completion-map
-              ("<tab>" . 'copilot-accept-completion)
-              ("TAB" . 'copilot-accept-completion)
-              ("C-TAB" . 'copilot-accept-completion-by-word)
-              ("C-<tab>" . 'copilot-accept-completion-by-word)))
+  :hook ((prog-mode . copilot-mode)
+         (prog-mode . copilot-nes-mode)))
 
 (after! copilot
   (set-face-attribute 'copilot-overlay-face nil
                       :foreground "#9FC59F"  ;; zenburn green+2, bright but still subtle
                       :background 'unspecified))
+
+;; Primary agentic coding workflow: claude-code-ide.el drives the already-
+;; installed Claude Code CLI over MCP. vterm backend and ediff-based review
+;; match this config's existing incumbents (docs/decisions.org ADR-004).
+;; Settings below are set explicitly even where they match upstream defaults,
+;; so an upstream default change doesn't silently change behavior here.
+(use-package! claude-code-ide
+  :commands (claude-code-ide-menu)
+  :init
+  (setq claude-code-ide-terminal-backend 'vterm
+        claude-code-ide-diagnostics-backend 'flycheck
+        claude-code-ide-use-ide-diff t)
+  :config
+  (claude-code-ide-emacs-tools-setup))
+
 ;; EXWM
 ;; (defun my/exwm-screen-layout ()
 ;;   "Configure monitors: external on the left of the laptop."

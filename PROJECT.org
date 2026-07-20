@@ -1,0 +1,135 @@
+#+TITLE: Project — Actionable Work
+#+AUTHOR: James Cook
+#+STARTUP: overview
+#+TODO: TODO(t) IN-PROGRESS(i) BLOCKED(b) | DONE(d) REJECTED(r)
+:PROPERTIES:
+:ID:       project-root
+:END:
+
+Actionable tracking, separate from [[file:docs/roadmap.org][docs/roadmap.org]] (which is the phased
+narrative). This file is meant to be Agenda-includable later without restructuring
+— see the Documentation acceptance test in [[file:docs/ai/evaluation.org][docs/ai/evaluation.org]].
+
+* Phase 1 — AI integration
+
+** DONE Phase 0 — Read-only discovery
+CLOSED: [2026-07-20 Mon]
+:PROPERTIES:
+:EFFORT:   1h
+:END:
+
+** DONE Phase 1 — Architecture proposal
+CLOSED: [2026-07-20 Mon]
+Decisions recorded in [[file:docs/decisions.org][docs/decisions.org]] ADR-003, ADR-004, ADR-005.
+
+** DONE Phase 2 — Baseline modernization
+CLOSED: [2026-07-20 Mon]
+:PROPERTIES:
+:EFFORT:   1h
+:END:
+Doom core upgraded, EXWM removed, =doom-dashboard= rename. See ADR-001, ADR-002.
+
+** DONE Phase 3 — Documentation foundation
+CLOSED: [2026-07-20 Mon]
+:PROPERTIES:
+:EFFORT:   1h
+:END:
+- [X] docs/architecture.org
+- [X] docs/standards.org
+- [X] docs/inventory.org
+- [X] docs/roadmap.org
+- [X] docs/decisions.org
+- [X] docs/ai/architecture.org
+- [X] docs/ai/workflows.org
+- [X] docs/ai/keybindings.org
+- [X] docs/ai/providers.org
+- [X] docs/ai/prompts.org
+- [X] docs/ai/evaluation.org
+- [X] docs/ai/troubleshooting.org
+- [X] README.org
+- [X] CLAUDE.md
+- [X] AGENTS.md
+- [X] .claude/rules/doom-emacs.md
+- [X] .claude/rules/security.md
+- [X] .claude/rules/documentation.md
+- [X] prompts/phase-01-ai-integration.md (moved from repo root)
+
+** IN-PROGRESS Phase 4 — Chat and focused assistance
+:PROPERTIES:
+:EFFORT:   2h
+:END:
+- [X] Create =api/anthropic= pass entry (user action); Google skipped per
+  user decision, no =api/gemini= needed
+- [X] Migrate credential access to Doom =:tools pass= =+auth=, remove
+  =my/pass-get=
+- [X] Configure =gptel-make-anthropic=/=-openai=, Anthropic as default backend
+  (Gemini explicitly skipped)
+- [X] Replace =my/gptel-rewrite-*=/=my/gptel-send-buffer= with built-in
+  =gptel-rewrite=/=gptel-add= + =gptel-directives= entries
+- [X] Flatten =SPC a= to the AI namespace (ADR-003), fixing a discovered
+  dead-code bug in the original reclamation ([[file:docs/ai/troubleshooting.org][troubleshooting.org]])
+- [X] Verify backend/model/credential/keybinding wiring via isolated headless
+  daemon
+- [ ] Test in the user's own interactive session: streaming, cancellation,
+  popup behavior, Org-buffer chat UX, network-down behavior (needs Emacs
+  restart — see [[file:docs/decisions.org][decisions.org]] "Known gaps after Phase 4")
+
+** DONE Phase 5 — Inline completion
+CLOSED: [2026-07-20 Mon]
+:PROPERTIES:
+:EFFORT:   1h
+:END:
+- [X] Verify copilot-language-server install path: npm path confirmed (system
+  npm found), server v1.452.0, no =engines= constraint — Node 18.19.1 concern
+  resolved
+- [X] Live-test =TAB= precedence: Copilot overlay vs. Company vs. Evil vs.
+  yasnippet, all verified via simulated overlays in disposable isolated
+  daemons (user's own daemon never touched beyond read-only =ps=/=/proc=)
+- [X] Confirm next-edit-suggestion behavior: =copilot-nes-mode= exists,
+  compatible (min server 1.434.0, installed 1.452.0), enabled, keymap
+  fallthrough verified
+- [X] Removed a redundant no-op =:bind= block in =config.el=
+- [ ] Still needs the user's own interactive/authenticated session: an actual
+  live suggestion/NES-edit appearing and being accepted against real output
+
+** DONE Phase 6 — Primary agentic workflow
+CLOSED: [2026-07-20 Mon]
+:PROPERTIES:
+:EFFORT:   3h
+:END:
+- [X] Install claude-code-ide.el ([[id:adr-primary-agent][ADR-004]], implemented [[id:adr-claude-code-ide-install][ADR-008]])
+- [X] Verify CLI detection (local, network-free =claude --version= check)
+- [X] Verify tree-sitter MCP tool given [[id:tshoot-treesitter-confirmed][the tree-sitter issue]] — *confirmed*
+  reproduced on this exact Emacs 30.1 build (not just theoretical), plus a
+  separate finding that no grammars were installed at all
+- [X] Full project workflow test (plan → edit → test → diff → no commit) —
+  user approved, real live smoke test run against a disposable scratch
+  project: seeded bug found and fixed, tests run, no git actions, clean
+  teardown. Also surfaced and fixed a real vterm-module compile gap
+  ([[id:tshoot-vterm-module][troubleshooting.org]]) that would have blocked this in the user's own
+  session too
+- [ ] Remote/TRAMP test against an Armbian/SBC target — needs actual remote
+  hardware not available to this agent; only genuinely deferred item
+
+** TODO Phase 7 — Review, permissions, safety
+:PROPERTIES:
+:EFFORT:   1h
+:END:
+- [ ] Confirm Ediff review path end-to-end
+- [ ] Look for Claude Code permission/hook mechanisms to enforce no-commit/no-push
+  technically
+
+** TODO Phase 8 — Prompts, memory, skills
+:PROPERTIES:
+:EFFORT:   1h
+:END:
+- [ ] Finalize =CLAUDE.md=/=AGENTS.md= once Phase 4-6 commands exist to document
+- [ ] Decide on a skill policy if repeatable workflows emerge
+
+** TODO Phase 9 — Validation and handoff
+:PROPERTIES:
+:EFFORT:   1h
+:END:
+- [ ] Run all acceptance tests in [[file:docs/ai/evaluation.org][docs/ai/evaluation.org]]
+- [ ] Final docs pass
+- [ ] Clean diff presented for user commit

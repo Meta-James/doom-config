@@ -1,0 +1,92 @@
+#+TITLE: AI Subsystem — Keybindings
+#+AUTHOR: James Cook
+#+STARTUP: overview
+:PROPERTIES:
+:ID:       ai-keybindings
+:END:
+
+Implemented map per [[id:adr-ai-leader-namespace][ADR-003]]/[[id:adr-gptel-rework][ADR-006]]/[[id:adr-claude-code-ide-install][ADR-008]], as of Phase 6. Verified
+live via isolated headless Doom daemons (see
+[[id:tshoot-daemon-validation][troubleshooting.org]]) — every binding below resolves to the
+command shown.
+
+* Leader: =SPC a= (AI) — implemented
+
+| Key       | Command                     | Evil state | Modes  | Rationale |
+|-----------+------------------------------+------------+--------+--------------------------------------------|
+| =SPC a i= | =gptel= (toggle chat popup) | normal     | global | Primary entry point |
+| =SPC a s= | =gptel-send= (send region, get immediate response) | visual/normal | global | Distinct from "add as context" — this gets an answer now |
+| =SPC a a= | =gptel-add= (built-in DWIM: add region/buffer/dired-marked-files/ibuffer-marked as context) | normal | global, Dired, IBuffer | One command, not three — its behavior is already context-sensitive; separate keys for "region"/"buffer"/"project" would have been artificial |
+| =SPC a d= | =my/gptel-add-diagnostics= (new, Flycheck has no gptel integration) | normal | global | Explicit diagnostic context, genuinely not covered by any built-in |
+| =SPC a r= | =gptel-rewrite= (built-in, ediff-based) | visual | global | Replaces the old scratch-buffer copy-paste rewrite flow entirely |
+| =SPC a m= | =gptel-menu= (transient: backend/model/directive/tools) | normal | global | Provider switching frequent enough to deserve a direct key |
+| =SPC a t= | =my/project-vterm= (existing, unchanged, =config.el:166-172=) | normal | global | Also still bound at =SPC p t=; two legitimate entry points to the same command, not duplication of logic |
+| =SPC a g= | =claude-code-ide-menu= (transient: session mgmt, navigation, interaction, config, debug) | normal | global | One binding, not two — the transient's own submenus cover launch/stop/status/list-sessions/diff-toggle; no separate "review" key needed since Ediff opens automatically on file changes (=claude-code-ide-use-ide-diff= =t=) |
+
+No separate =SPC a R= was added — the original sketch assumed a distinct
+review-trigger command would be needed; source inspection during Phase 6
+([[id:adr-claude-code-ide-install][ADR-008]]) found Ediff review is automatic, and the transient menu already
+exposes everything else (stop, list sessions, switch buffer, toggle window)
+under =SPC a g='s own submenus rather than needing top-level leader keys.
+
+* What changed from the original sketch
+
+The Phase 1 proposal assumed three separate thin wrapper commands would be
+needed for region/buffer/project context (=SPC a s=/=b=/=p=). Source inspection
+during Phase 4 ([[id:adr-gptel-rework][ADR-006]]) found gptel already ships =gptel-add= — a single
+DWIM command whose behavior depends on where it's invoked from (region active →
+add region; in Dired with marks → add those files/directories recursively; in
+IBuffer → add marked buffers; otherwise → add current buffer). Three keys
+mapped to context-sensitive behavior that doesn't vary by which key was pressed
+would have been artificial, so this collapsed to one binding (=SPC a a=) plus
+the still-distinct =SPC a s= (immediate send, not context-add).
+
+* Completion — verified (Phase 5)
+
+| Key      | Behavior                                                        |
+|----------+--------------------------------------------------------------------|
+| =TAB=    | Copilot accept if a suggestion overlay is visible → else NES accept if an edit is pending → else Company (=company-indent-for-tab-command=) → else indent/yasnippet |
+| =C-TAB=  | Copilot accept-by-word                                          |
+| =M-n=/=M-p= | Cycle between multiple Copilot completion candidates (discovered in source, not previously documented) |
+| =C-g=     | Dismiss a pending NES suggestion (=copilot-nes-mode-map=); regular Copilot overlays dismiss automatically on the next non-whitelisted command via =post-command-hook=, no dedicated key needed |
+
+Live-verified in an isolated headless daemon (not the user's session; both
+disposable test daemons killed after use) via a simulated suggestion overlay,
+with Evil active in normal state throughout:
+- No overlay present → =TAB= → =company-indent-for-tab-command=
+- Copilot overlay present at point → =TAB= → =copilot-accept-completion=,
+  =C-TAB= → =copilot-accept-completion-by-word=
+- Overlay removed → =TAB= reverts identically to the no-overlay case
+- =copilot-nes-mode= enabled but no edit pending → =TAB= still falls through
+  to Company (its =:filter=-based keymap doesn't misfire when idle)
+- A yasnippet active-field overlay and a Copilot suggestion overlay
+  simultaneously present at the same point → =TAB= resolves to
+  =copilot-accept-completion= (verified: Copilot's overlay priority 101 beats
+  yasnippet's default 100 by exactly one point — by design, not accident; see
+  [[id:adr-copilot-nes][ADR-007]])
+
+Evil doesn't bind =TAB= in normal/insert/visual state (only in
+=evil-command-line-map=, the Ex minibuffer), so there's no Evil-vs-Copilot or
+Evil-vs-NES conflict in the states that matter.
+
+Not yet verified (needs the user's own authenticated session, not a headless
+daemon): an actual live suggestion/NES-edit appearing and being
+accepted/dismissed against real Copilot output.
+
+* Conflicts resolved by ADR-003
+
+- =SPC a= previously unbound Doom's default =embark-act= binding. Confirmed via
+  the original code being dead ([[id:tshoot-dead-keybind-code][troubleshooting.org]]) — Embark-act was, in
+  practice, still live at =SPC a= right up until this phase actually flattened
+  the namespace. Now genuinely gone, live-verified.
+- The intermediate "apps" prefix layer is removed; AI commands sit directly
+  under =SPC a=.
+
+* Alternatives considered and rejected
+
+- =SPC A= (shifted, avoids touching Embark entirely) — rejected, unnecessary
+  given the user doesn't need Embark on the leader at all.
+- =C-c a= non-leader prefix — rejected, inconsistent with Doom's leader-first
+  convention ([[id:std-doom-first][standards.org]]).
+- Three separate context-add wrapper commands — rejected once =gptel-add='s DWIM
+  behavior was found; see "What changed" above.

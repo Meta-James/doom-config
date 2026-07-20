@@ -1,0 +1,24 @@
+#+TITLE: System Architecture
+#+AUTHOR: James Cook
+#+STARTUP: overview
+:PROPERTIES:
+:ID:       docs-architecture
+:END:
+
+Top-level pointer. Right now this configuration has exactly one designed subsystem
+— AI integration — documented in full at [[id:ai-architecture][docs/ai/architecture.org]]. This file
+exists so later phases ([[id:docs-roadmap][roadmap.org]]) have somewhere to register their own
+subsystem architecture without redesigning this one.
+
+* Current subsystems
+
+| Subsystem        | Status | Doc |
+|-------------------+----------+-------------------------------------------|
+| AI integration    | Phase 1, in progress | [[id:ai-architecture][docs/ai/architecture.org]] |
+| Everything else   | unmodified Doom defaults | [[id:docs-inventory][inventory.org]] |
+
+* Cross-subsystem rules
+
+Rules that apply regardless of which subsystem is being worked on live in
+[[id:docs-standards][standards.org]], not here — this file is for how subsystems fit together, not
+the rules governing any one of them.

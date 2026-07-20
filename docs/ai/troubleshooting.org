@@ -1,0 +1,278 @@
+#+TITLE: AI Subsystem — Troubleshooting Log
+#+AUTHOR: James Cook
+#+STARTUP: overview
+:PROPERTIES:
+:ID:       ai-troubleshooting
+:END:
+
+Known issues, in the order discovered. Resolved issues stay here with their
+resolution rather than being deleted — the next person (or agent) hitting the
+same symptom should find it immediately.
+
+* RESOLVED: =SPC a= reclamation was dead code, never executed
+:PROPERTIES:
+:ID:       tshoot-dead-keybind-code
+:END:
+:LOGBOOK:
+- Resolved [2026-07-20 Mon], during [[id:adr-ai-leader-namespace][ADR-003]] implementation
+:END:
+
+The original =SPC a= reclamation (unbinding =embark-act=, adding an "apps"
+prefix with AI commands under =SPC a i=) was wrapped in =(after! doom-keybinds
+...)=. =doom-keybinds= was never a real Emacs feature — grepped the entire
+Doom core (=~/.config/emacs/lisp=) and the full split-out module source
+(=~/.config/emacs/sources/doom+/modules=) for any =(provide 'doom-keybinds)=:
+zero matches. =after!= expands to something like =with-eval-after-load=; it
+waits forever for a =provide= that never happens. This block never ran, in any
+session, ever.
+
+*Practical consequence*: Embark's default =SPC a= binding was presumably still
+live the entire time this config was in use, and the old AI commands under
+=SPC a i= were only reachable via =M-x=, never via the documented keybinding.
+
+*Fix*: removed the =after!= wrapper entirely. Plain =(map! :leader "a" nil)=
+followed by a real =(map! :leader (:prefix ("a" . "AI") ...))= works correctly
+without any guard, because =config.el= loads after Doom's default-bindings
+module has already run — there's nothing to "wait for."
+
+*Takeaway*: an =after!= (or =with-eval-after-load=) block on a feature symbol
+that is never independently verified to exist is silently inert, not an error.
+If a keybinding or config block "should be working" but demonstrably isn't,
+check whether its guard condition (feature symbol, hook, mode) is real before
+assuming the body itself is wrong.
+
+* Technique: validating config changes without touching the user's live session
+:PROPERTIES:
+:ID:       tshoot-daemon-validation
+:END:
+
+Doom only loads =config.el=/=packages.el=/=init.el= changes at Emacs startup —
+there's no live-reload for structural changes. Two failed approaches before
+finding one that works, kept here so the next validation pass doesn't repeat
+them:
+
+- Plain =emacs --batch --eval '...'= *does* auto-load Doom's core (since
+  =~/.config/emacs= is the default =user-emacs-directory=), but Doom detects
+  =noninteractive= and skips loading the user's =config.el= entirely (it's
+  treated as UI-only). A batch run reporting "no errors" proves nothing about
+  =config.el= correctness — nothing in it actually ran.
+- =~/.config/emacs/bin/doom run --eval '(...)'= and
+  =~/.config/emacs/bin/doom emacs --batch --eval '(...)'= both fail with a
+  shell-level =Syntax error: "(" unexpected= — the =bin/doom= wrapper script
+  mishandles arguments containing parentheses when invoked this way from
+  another shell. Use the absolute =emacs= binary directly instead of routing
+  through =bin/doom= for anything beyond =sync=/=doctor=/=upgrade=/=build=.
+
+*What actually works*: start a fully interactive Doom instance as a named,
+isolated daemon — =emacs --daemon=some-test-name= — which loads =config.el=
+exactly as a real interactive session would (confirmed: it even started the
+Copilot language server, which only happens via a =prog-mode= hook). Then
+inspect live state with
+=emacsclient --socket-name=some-test-name --eval '(...)'=, and clean up with
+=emacsclient --socket-name=some-test-name --eval '(kill-emacs)'=. Always use a
+distinct =--socket-name= — the user's own day-to-day Doom session runs as a
+persistent daemon on the *default* socket (discovered via =ps aux= showing an
+=/usr/bin/emacs --daemon= process pre-dating this project), and it must never
+be queried, reloaded, or killed as a side effect of validation.
+
+Reminder for every future phase: that long-running daemon does not
+automatically pick up config changes. After any phase that changes
+=init.el=/=config.el=/=packages.el=, tell the user their live session needs a
+restart to actually get the changes — don't assume it happened.
+
+* OPEN: literal-tilde =$PATH= entry breaks non-interactive =doom= invocation
+:PROPERTIES:
+:ID:       tshoot-path-tilde
+:END:
+
+=$PATH= contains =~/.config/emacs/bin= as a literal, unexpanded string (confirmed
+via =echo $PATH=, 2026-07-20). Interactive bash resolves =doom= anyway via its own
+tilde-aware command hashing (=type doom= succeeds), but any subprocess doing a raw
+=execvp= PATH search fails: e.g. =timeout doom doctor= errored with "No such file
+or directory" even though =doom= itself was reachable in the same shell a moment
+earlier.
+
+*Impact*: anything that shells out to =doom= non-interactively — including a
+future agent asked to run =doom sync=/=doom doctor= as part of its own workflow —
+may silently fail to find the command. Workaround used throughout this project:
+always invoke via the absolute path, =~/.config/emacs/bin/doom=.
+
+*Not yet fixed* — this is a shell-profile issue (wherever =$PATH= is being
+assembled with an unexpanded =~=), outside this repo's scope unless it starts
+blocking a real agent workflow in Phase 6, at which point it should be fixed at
+the shell-profile level, not worked around again in Elisp.
+
+* CONFIRMED: Doom's tree-sitter module grammar-install advice is broken on Emacs 30.x
+:PROPERTIES:
+:ID:       tshoot-treesitter-confirmed
+:END:
+:LOGBOOK:
+- Confirmed [2026-07-20 Mon], during [[id:adr-claude-code-ide-install][ADR-008]] verification (Phase 6)
+:END:
+
+Upstream issue =doomemacs/doomemacs#8578= reports the =:tools tree-sitter=
+module advising a function that doesn't exist on Emacs 30.x, corrupting the
+advice system and breaking interactive grammar installation. Reproduced
+directly on this machine (isolated headless daemon, read-only inspection):
+
+- =~/.config/emacs/sources/doom+/modules/tools/tree-sitter/config.el= (lines
+  ~108-114) has a version-conditional: on Emacs 30+, it calls a single
+  =defadvice!= with *two* =:around= targets —
+  =treesit-install-language-grammar= and =treesit--build-grammar=.
+- =(fboundp 'treesit-install-language-grammar)= → t (exists; advice attached
+  successfully, confirmed via =advice-member-p=).
+- =(fboundp 'treesit--build-grammar)= → *nil* — this function does not exist
+  on Emacs 30.1. This is the exact defect the upstream issue describes.
+- Separately, and independently of this bug: *zero* tree-sitter grammars (for
+  any language, not just Python/Elisp) were installed anywhere on this
+  machine before this check — =treesit-language-available-p= returned nil for
+  both =python= and =elisp=, and no =libtree-sitter-*.so= files exist under
+  =~/.config/emacs/.local/etc/tree-sitter= or elsewhere on the system.
+
+*Impact*: claude-code-ide.el's =claude-code-ide-mcp-treesit-info= MCP tool
+(see [[id:adr-claude-code-ide-install][ADR-008]]) has no working grammars to draw on right now, for two
+independent reasons — the confirmed upstream bug, and the separate fact that
+grammar installation was never attempted on this machine at all.
+
+*Not fixed* — deliberately did not attempt a real grammar install to see it
+fail, since that would mean fetching and compiling third-party C source
+without prior sign-off, for a test whose outcome is already evidenced by the
+=fboundp= check above. Workarounds, in order of preference:
+1. Wait for upstream to fix the =doomemacs/doomemacs#8578= advice.
+2. Manually build the needed grammar(s) via the =tree-sitter= CLI directly
+   (bypassing Doom's automatic installer entirely) and place the resulting
+   =.so= file(s) in =(doom-profile-data-dir t "tree-sitter")=, matching where
+   Doom's own hook adds to =treesit-extra-load-path=.
+3. Patch the local module copy to split the =defadvice!= into two calls (one
+   per target function), guarding the =treesit--build-grammar= one with
+   =(fboundp 'treesit--build-grammar)= — a small, local, easily-reverted fix,
+   not proposed unprompted since it edits Doom's own module source rather
+   than this repo's files.
+
+* RESOLVED: =package-lint= upstream default-branch rename broke =doom sync=
+:PROPERTIES:
+:ID:       tshoot-package-lint
+:END:
+:LOGBOOK:
+- Resolved [2026-07-20 Mon], during [[id:adr-doom-core-upgrade][ADR-001]] implementation
+:END:
+
+=doom upgrade -!= failed with exit 1: =fatal: couldn't find remote ref
+refs/heads/master= while fetching =package-lint= (a transitive dev-dependency
+pulled in by =use-package='s lint feature and =flycheck-package=, not anything
+this config declares directly). Upstream (=purcell/package-lint=) had renamed its
+default branch =master= → =main=; straight's local mirror was still pinned to the
+now-nonexistent ref.
+
+*Fix*: confirmed the local mirror
+(=~/.config/emacs/.local/straight/repos/package-lint=) had no uncommitted
+changes, deleted it, re-ran =doom sync -u -!=, which re-cloned against the
+current default branch and completed cleanly.
+
+*Takeaway*: if a future =doom upgrade=/=doom sync= fails with "couldn't find
+remote ref" for some package, check whether that package's upstream renamed its
+default branch before assuming a real bug — the fix is almost always "delete the
+clean local mirror, let straight re-clone."
+
+* RESOLVED: 148 stale =.elc= warnings after =git pull --rebase=
+:PROPERTIES:
+:ID:       tshoot-stale-elc
+:END:
+:LOGBOOK:
+- Resolved [2026-07-20 Mon], during [[id:adr-doom-core-upgrade][ADR-001]] implementation
+:END:
+
+After the Doom core upgrade, =doom doctor= reported 148 "=.elc= is out-of-date"
+warnings across =org=, =evil=, =flycheck=, and other packages. This is an mtime
+artifact of =git pull --rebase= resetting checkout timestamps — the compiled
+=.elc= already matched the content, but its mtime looked older than the
+freshly-checked-out =.el=.
+
+*Fix*: =doom build -!= cleared all but one (=annalist.elc=); that one was cleared
+with a direct =emacs --batch --eval '(byte-compile-file ...)'= call. =doom
+doctor= confirmed 0 warnings afterward.
+
+* RESOLVED: =(:ui doom-dashboard)= module rename
+:PROPERTIES:
+:ID:       tshoot-dashboard-rename
+:END:
+:LOGBOOK:
+- Resolved [2026-07-20 Mon]
+:END:
+
+Doom warned on every invocation: "(:ui doom-dashboard) module was moved to (:ui
+dashboard) in 2.1, remapping...". Fixed by renaming the module in =init.el=
+directly and re-running =doom sync=. Warning gone, =doom doctor= clean.
+
+* NON-ISSUE: =:doom compat= module is not a config problem
+:PROPERTIES:
+:ID:       tshoot-doom-compat-nonissue
+:END:
+
+=doom info= shows a =:doom (compat +keybinds +better-jumper +projectile
++smartparens)= module block that isn't declared anywhere in this repo's
+=init.el=. This looks like it might correspond to (or supersede) the =:config
+(default +bindings +smartparens)= line in =init.el=, but it doesn't — it's a
+hardcoded, always-on virtual module Doom's own bootstrapper injects for every
+v3 config (confirmed in =~/.config/emacs/lisp/doom-modules.el:60-65=; the comment
+there literally says "here to stay... won't be hardcoded after v3"). The actual
+=:config default= module still exists intact, just relocated into a newly
+split-out =doomemacs/modules= source tree at
+=~/.config/emacs/sources/doom+/modules/config/default/=. No action was taken and
+none is needed.
+
+* RESOLVED: vterm's native module was never compiled, hanging any headless =(require 'vterm)=
+:PROPERTIES:
+:ID:       tshoot-vterm-module
+:END:
+:LOGBOOK:
+- Resolved [2026-07-20 Mon], during the Phase 6 live smoke test ([[id:adr-claude-code-ide-install][ADR-008]])
+:END:
+
+Attempting to launch a claude-code-ide.el session (vterm backend) in a
+headless test daemon hung indefinitely — not just slow, genuinely
+unresponsive to even trivial evals afterward (=(+ 1 1)= timed out). Bisected
+by testing each step of =claude-code-ide--start-session= individually in
+fresh daemons rather than guessing: =claude-code-ide-mcp-server-ensure-server=
+and =claude-code-ide--display-buffer-in-side-window= both returned instantly
+in isolation; =claude-code-ide--terminal-ensure-backend= was the one that
+hung.
+
+Root cause: that function calls =(require 'vterm nil t)=. No
+=vterm-module.so= existed anywhere under
+=~/.config/emacs/.local/straight/build-30.1/vterm/= — only the C source. On
+first load with no compiled module, =vterm.el= checks
+=vterm-always-compile-module= (defaults to =nil=) and *asks for interactive
+confirmation* before compiling. Over a headless =emacsclient --eval= with no
+attached terminal or frame, that confirmation prompt has nowhere to go and
+blocks the entire Lisp thread forever — every subsequent =emacsclient --eval=
+call queues behind it and also appears to hang, which is what made this look
+like a total daemon lockup rather than one blocked function.
+
+*This would have hit the user's real session too* — the first time either
+=my/project-vterm= or claude-code-ide.el actually tried to use vterm
+interactively, they'd have hit the same confirmation prompt (harmlessly, since
+their session has a real terminal/frame to show it on and they could just
+answer yes).
+
+*Fix*: ran vterm's own documented build recipe directly instead of trying to
+trigger/bypass the confirmation prompt inside another fragile headless eval:
+#+BEGIN_SRC sh
+cd ~/.config/emacs/.local/straight/build-30.1/vterm
+mkdir -p build && cd build
+cmake -G 'Unix Makefiles' ..
+make
+#+END_SRC
+This fetched and built =libvterm= (no system copy was installed) and produced
+=vterm-module.so= in that build directory — the same shared location every
+Doom Emacs instance on this machine reads from, including the user's real
+daemon. Confirmed fixed: =(require 'vterm)= in a fresh headless daemon
+returned instantly afterward, and the actual smoke-test session launched
+successfully on the next attempt.
+
+*Takeaway*: when a headless daemon appears to hang on ANY eval (not just the
+one you just ran), suspect a blocked interactive prompt from something loaded
+during that call, not a crashed or infinite-looping daemon — kill it, then
+bisect the triggering call's internal steps individually in fresh daemons
+with short timeouts to find which one actually blocks, rather than re-running
+the same monolithic call and waiting out the same timeout repeatedly.

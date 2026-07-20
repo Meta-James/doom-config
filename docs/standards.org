@@ -1,0 +1,117 @@
+#+TITLE: Standards — Rules That Apply Across All Phases
+#+AUTHOR: James Cook
+#+STARTUP: overview
+:PROPERTIES:
+:ID:       docs-standards
+:END:
+
+Durable rules for this configuration, independent of which phase or subsystem is
+being worked on. Phase-specific detail belongs in [[id:ai-architecture][docs/ai/]] or later
+phase directories, not here.
+
+* Doom-first
+:PROPERTIES:
+:ID:       std-doom-first
+:END:
+
+- Prefer Doom modules and abstractions (=package!=, module flags, =use-package!=,
+  =after!=, =map!=, =set-popup-rule!=, =load!=, =add-hook!=, =setq-hook!=) over
+  generic vanilla Emacs configuration.
+- Never use =package-install=, =package-selected-packages=, or a second package
+  manager alongside straight.
+- Vanilla Emacs code is acceptable when it's genuinely the correct tool — say so
+  explicitly when it is, don't default to it out of habit.
+
+* Evil-first
+:PROPERTIES:
+:ID:       std-evil-first
+:END:
+
+Don't design workflows that fight Evil states or Doom's modal conventions. Account
+for normal, insert, visual, motion, operator, and Emacs states where relevant.
+
+* Org-first documentation
+:PROPERTIES:
+:ID:       std-org-first
+:END:
+
+Canonical architecture, inventory, decisions, workflow, and roadmap documentation
+is Org, using Org's real capabilities (property drawers, IDs, TODO states, tags,
+tables, LOGBOOK, source blocks) — not just files with an =.org= extension.
+Markdown is fine for files an external tool conventionally requires: =CLAUDE.md=,
+=AGENTS.md=, =.claude/rules/*.md=, executable prompt assets under =prompts/=.
+
+* Cloud-first
+:PROPERTIES:
+:ID:       std-cloud-first
+:END:
+
+Use frontier hosted models for primary workflows. Local models only for a concrete,
+named benefit (privacy, offline operation, low-cost bulk work, fallback) — never
+build local-model infrastructure merely because it's possible.
+
+* External binaries allowed, but documented
+:PROPERTIES:
+:ID:       std-binaries
+:END:
+
+Every external binary this config relies on needs, somewhere in
+[[id:docs-inventory][inventory.org]]: a documented role, install method, version check, upgrade
+method, and rollback/removal method.
+
+* No automatic commits or pushes
+:PROPERTIES:
+:ID:       std-no-commit
+:END:
+
+- Never commit. Never push. Never amend, rebase, reset, clean, or rewrite Git
+  history without explicit, in-the-moment permission.
+- Read-only Git commands and diffs are always fine.
+- At stable checkpoints, state plainly that the tree is ready for the user to
+  inspect and commit — don't do it for them.
+
+* Credentials
+:PROPERTIES:
+:ID:       std-credentials
+:END:
+
+- Never hardcode, print, log, echo, or commit secret values.
+- Prefer Doom's =:tools pass= module, Emacs =auth-source=, or a provider's own
+  official login flow over hand-rolled shell wrappers.
+- Redact tokens from all documentation and command output — entry *names* are fine
+  to record, values never are.
+- See [[id:ai-providers][docs/ai/providers.org]] for the concrete credential map.
+
+* No redundant tool duplication
+:PROPERTIES:
+:ID:       std-no-duplication
+:END:
+
+- One chat client, one inline-completion engine, one primary agentic-coding
+  frontend at a time.
+- A secondary tool needs a clearly distinct, frequently-useful responsibility the
+  primary tool can't cover well — "it's popular" or "it supports another model" is
+  not sufficient justification on its own.
+
+* No premature scope expansion
+:PROPERTIES:
+:ID:       std-no-scope-creep
+:END:
+
+- Don't activate or redesign EXWM until its own phase.
+- Don't build the full Org Agenda system until its own phase.
+- Don't migrate this entire configuration to literate programming.
+- Don't create a private Doom module (=config/development.el= etc.) until a
+  subsystem is stable enough to justify the split.
+
+* Human authority
+:PROPERTIES:
+:ID:       std-human-authority
+:END:
+
+- Ask for approval at architectural and destructive boundaries.
+- Tests and formatters may run automatically once a stage is approved.
+- Package installs, system upgrades, broad rewrites, deletions, and permission
+  changes require explicit, current-turn approval — a prior approval doesn't
+  carry forward to a new category of action.
+- The user remains responsible for commits and pushes, always.

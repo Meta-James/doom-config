@@ -1,0 +1,706 @@
+#+TITLE: Architecture Decision Records
+#+AUTHOR: James Cook
+#+STARTUP: overview
+:PROPERTIES:
+:ID:       docs-decisions
+:END:
+
+One heading per decision. Every decision carries a revisit condition, not just a
+date — a date alone doesn't tell you *why* to reopen something.
+
+* ADR-001: Upgrade Doom core independently of the AI subsystem
+:PROPERTIES:
+:ID:       adr-doom-core-upgrade
+:STATUS:   Accepted
+:DATE:     2026-07-20
+:END:
+:LOGBOOK:
+- State "Accepted"    from "Proposed"    [2026-07-20 Mon]
+:END:
+
+** Context
+Doom core (=~/.config/emacs=) was 6.5 months behind =doomemacs/doomemacs= master
+(=3e15fb36d=, 2026-01-07) at the start of this project. The user asked to upgrade
+before any AI package work, matching the project's own constraint against mixing
+upgrade risk with feature work.
+
+** Decision drivers
+- Constraint: "do not mix upgrade failures with AI package changes"
+- Constraint: separate Doom upgrade from any Emacs upgrade
+- gptel and copilot.el both had substantial upstream progress worth having before
+  reconfiguring them (Claude Sonnet 5 support, BYOK, tagged releases)
+
+** Candidates
+Only one real candidate: run =doom upgrade= (=git pull --rebase= + =doom sync -u=)
+without touching the installed Emacs binary (30.1, already within Doom's supported
+27.1–30.2 range).
+
+** Evidence
+=doom info= (2026-07-20) confirmed the stale core revision and a clean =doom
+doctor= baseline before touching anything.
+
+** Decision
+Ran =doom upgrade -!=, hit one transient upstream problem (see Consequences), fixed
+it, then =doom build -!= to force full recompilation, verified with =doom doctor=.
+
+** Consequences
+- Doom core: =3e15fb36d= → =04b2956ba=. Doom's own reported version string went
+  =3.0.0-pre= → =2.2.0=; this reads like a regression but isn't — Doom's own
+  version file changed between those revisions upstream, unrelated to anything
+  local. Not investigated further since =doom doctor= is clean either way.
+- Doom's module tree was split into a separate =doomemacs/modules= source
+  (fetched to =~/.config/emacs/sources/doom+/modules/=), tracked independently.
+  =:config default= (used by this config) still exists there intact — no action
+  needed.
+- gptel =fd876e6= → =8701e2b= (0.9.9.3 → 0.9.9.5): now includes Claude Sonnet 5
+  support in =gptel-anthropic=, directly relevant to [[id:ai-providers][the Phase 4 provider rework]].
+- copilot.el =59a4a29= → =277ca35= (unreleased → tagged 0.9.0): gained BYOK model
+  support and a chat/compose interface — worth a second look during Phase 5,
+  since it changes copilot.el's role from pure completion toward also-a-chat-tool.
+- Upstream incident: =purcell/package-lint= (a transitive dev-dependency pulled in
+  by =use-package='s lint feature, not anything this config declares) renamed its
+  default branch =master= → =main=. straight's local mirror was still pinned to
+  the now-nonexistent =refs/heads/master=, failing the sync. Fixed by deleting the
+  clean, uncommitted local mirror at
+  =~/.config/emacs/.local/straight/repos/package-lint= and re-running sync so
+  straight re-cloned against the current default branch.
+- 148 "stale =.elc=" warnings appeared after the =git pull --rebase= (an mtime
+  artifact of checkout, not real breakage) — cleared to 0 via =doom build= plus one
+  direct =byte-compile-file= on the single holdout (=annalist.elc=).
+- =init.el='s =(:ui doom-dashboard)= module name was flagged by Doom as moved to
+  =(:ui dashboard)= in 2.1; renamed directly (trivial, see commit diff on
+  =init.el=), re-synced, warning gone.
+
+** Rejected alternatives
+- Upgrading Emacs itself in the same pass — rejected per the project's own
+  constraint; Emacs 30.1 is still within Doom's supported/recommended range.
+- Ignoring the stale =.elc= warnings as harmless — rejected; conventions require
+  running diagnostics after changes and not hiding warnings to make checks pass.
+
+** Validation
+=doom info= (43 modules, 141 packages), =doom doctor= (0 warnings), =git status=
+clean on both the Doom core repo and this config repo except the intended
+=packages.el=/=init.el= diffs.
+
+** Rollback
+=cd ~/.config/emacs && git reset --hard 3e15fb36d && doom sync -u=. Not recommended
+— current state passes all checks.
+
+** Revisit when
+Doom's =3.0.0= final ships, or the =:doom compat= shim (hardcoded in
+=doom-modules.el=, "here to stay... won't be hardcoded after v3") is removed
+upstream — check whether =:config default +bindings +smartparens= is still the
+correct declaration at that point.
+
+* ADR-002: Remove the unused EXWM package declaration
+:PROPERTIES:
+:ID:       adr-remove-exwm
+:STATUS:   Accepted
+:DATE:     2026-07-20
+:END:
+
+** Context
+=packages.el= declared =(package! exwm)= but =init.el= never loaded EXWM as a
+module, and the entire EXWM configuration block in =config.el= was commented out.
+Pure install footprint for a capability explicitly out of scope for Phase 1.
+
+** Decision drivers
+- Constraint: "do not activate or redesign EXWM in Phase 1"
+- User preference, given directly: remove it for now rather than leave it declared
+
+** Candidates
+Keep declared (placeholder for later) vs. remove now (re-declare when the EXWM
+phase starts).
+
+** Evidence
+=packages.el:51= (pre-upgrade), =config.el= EXWM block fully commented out,
+confirmed zero references from any loaded module.
+
+** Decision
+Removed =(package! exwm)= from =packages.el=; =doom sync= dropped it and its
+exclusive dependencies (147 → 141 packages detected).
+
+** Consequences
+Smaller =doom sync= surface, one fewer package to carry through future upgrades
+until it's actually wanted.
+
+** Rejected alternatives
+Leaving it declared as a placeholder — rejected per explicit user preference.
+
+** Validation
+=doom doctor= clean post-removal; =git diff packages.el= shows exactly the one
+line removed.
+
+** Rollback
+=(package! exwm)= back into =packages.el=, =doom sync=.
+
+** Revisit when
+The EXWM/window-manager phase of the long-term roadmap actually starts (see
+[[id:docs-roadmap][roadmap.org]]).
+
+* ADR-003: =SPC a= becomes the AI namespace outright
+:PROPERTIES:
+:ID:       adr-ai-leader-namespace
+:STATUS:   Implemented
+:DATE:     2026-07-20
+:END:
+:LOGBOOK:
+- State "Implemented" from "Accepted"  [2026-07-20 Mon] — Phase 4
+:END:
+
+** Context
+=config.el= previously unbound Doom's default =SPC a= (bound to =embark-act= by
+Doom's default bindings module) and repurposed it as an "apps" prefix with AI
+nested a level deeper at =SPC a i=. Nothing else occupied =SPC a=, so the extra
+"apps" layer added a level of nesting for no benefit.
+
+*Correction found during Phase 4 implementation*: that reclamation code was
+wrapped in =(after! doom-keybinds ...)=, and =doom-keybinds= was never a real
+Emacs feature anywhere in Doom core or the default module (confirmed by
+grepping the full Doom core and module sources for =provide 'doom-keybinds=:
+zero matches). =after!= on an unrecognized feature never fires — so this block
+was dead code that never ran. Embark's default =SPC a= binding was, in
+practice, still live the whole time, and the old =SPC a i= AI commands were
+never reachable via keybinding at all (only via =M-x=). See
+[[id:tshoot-dead-keybind-code][troubleshooting.org]] for the full writeup.
+
+** Decision drivers
+- Discoverability/shallowness requirement for frequently-used AI actions
+- User confirmed no need to preserve Embark's leader shortcut
+
+** Candidates
+1. Full =SPC a= = AI, flattened (chosen)
+2. Keep the "apps" layer, AI under =SPC a i=
+3. A fresh unused prefix (e.g. =SPC A=) to avoid touching Embark's binding at all
+
+** Evidence
+=config.el:332-347= (existing reclamation code); confirmed via user answer that
+Embark's leader shortcut is not needed.
+
+** Decision
+=SPC a= is the AI namespace directly (chat/context/rewrite/model-menu/terminal for
+now; agent/review keys land in Phase 6), no intermediate "apps" layer. Implemented
+as plain =(map! :leader "a" nil)= followed by a real =(map! :leader (:prefix ("a" .
+"AI") ...))= block — no =after!= guard needed, since =config.el= loads after
+Doom's default bindings are already active. See [[id:ai-keybindings][keybindings.org]] for the concrete,
+now-implemented map.
+
+** Consequences
+Embark's default leader-key access is gone (confirmed live: =SPC a= no longer
+resolves to =embark-act=) — accepted tradeoff, user-confirmed. Unlike the
+original code, this is now actually in effect, not dormant.
+
+** Rejected alternatives
+Option 3 (fresh prefix) — rejected, since the user does not need Embark on the
+leader at all, so there's no reason to avoid the conflict.
+
+** Validation
+Verified live via a headless Doom Emacs daemon (isolated =--socket-name=,
+separate from the user's own running session): =(lookup-key doom-leader-map (kbd
+"a i"))= etc. resolve to the correct commands, and =(lookup-key doom-leader-map
+(kbd "a"))= no longer resolves to =embark-act=. Which-key discoverability and
+in-editor conflict testing still to be done by the user in their own session.
+
+** Rollback
+Revert the =map!= block in =config.el= (see git diff); =embark-act= reasserts
+itself at =SPC a= once Doom's default binding is no longer shadowed.
+
+** Revisit when
+Any future phase wants to reintroduce Embark or another "apps"-style prefix.
+
+* ADR-004: claude-code-ide.el as the sole primary agentic-coding frontend
+:PROPERTIES:
+:ID:       adr-primary-agent
+:STATUS:   Accepted (not yet implemented)
+:DATE:     2026-07-20
+:END:
+
+** Context
+The user already has Claude Code CLI 2.1.215 installed and on PATH, with no
+Anthropic credential yet configured for anything else. Two serious agentic-coding
+frontends were evaluated: =claude-code-ide.el= (deep MCP integration with the
+existing CLI) and =agent-shell= (protocol-neutral ACP client, works with multiple
+agent backends but requires a separate bridge package rather than reusing the CLI
+session directly).
+
+** Decision drivers
+- Constraint: one primary agent, at most one secondary, and only if the secondary
+  serves a clearly distinct, frequently-used role
+- User confirmed: no anticipated need for other agent backends (Codex, Gemini)
+
+** Candidates
+| Candidate | Score (see [[id:docs-decisions][§4 of the original proposal]]) | Fate |
+|-----------+-----------------------------------------------------------------+---------|
+| claude-code-ide.el | ~72 | Accepted, primary |
+| agent-shell        | ~70 | Rejected, see [[id:adr-agent-shell-rejected][ADR-005]] |
+| Aidermacs          | ~58 | Rejected — no distinct role beyond what claude-code-ide.el covers |
+
+** Evidence
+GitHub =manzaltu/claude-code-ide.el= (fetched 2026-07-20): Emacs 28.1+, drives the
+installed =claude= CLI over MCP, vterm/eat/ghostel backends (vterm matches this
+config's incumbent terminal module), Ediff-based diff review, MCP tools exposing
+=xref=, =imenu=, =treesit-info=, =project-info= back to the agent. ~1.6k stars, 115
+commits, no tagged release yet, 58 open issues at time of check.
+
+** Decision
+=claude-code-ide.el= is the one and only agentic-coding frontend for Phase 1.
+
+** Consequences
+Deepest available integration with a CLI already installed and (presumably)
+already paid for. No second bridge package, no second credential/login flow to
+maintain.
+
+** Rejected alternatives
+See [[id:adr-agent-shell-rejected][ADR-005]] for agent-shell specifically. Aidermacs rejected: Aider is a credible
+tool, but adding it alongside claude-code-ide.el would need a distinct
+justification (e.g. wanting a second model family workflow) that doesn't currently
+exist — "Aider is popular" is explicitly not sufficient per this project's own
+anti-goals.
+
+** Validation
+Not yet — implementation is Phase 6. Acceptance criteria are in
+[[id:ai-evaluation][evaluation.org]].
+
+** Rollback
+Package removal via =packages.el= + =doom sync= if it doesn't work out; nothing
+else in the config depends on it.
+
+** Revisit when
+- claude-code-ide.el stalls (no tagged release after an extended period, issues pile
+  up unaddressed), or
+- the user's own needs change and a second agent backend becomes genuinely
+  necessary (see ADR-005's revisit condition, which is the same trigger).
+
+* ADR-005: agent-shell rejected as a secondary agent (for now)
+:PROPERTIES:
+:ID:       adr-agent-shell-rejected
+:STATUS:   Accepted
+:DATE:     2026-07-20
+:END:
+
+** Context
+agent-shell (=xenodium/agent-shell= + =acp.el=) offers protocol-neutral access to
+many agent backends (Claude Agent, Codex, Gemini CLI, and others) via the Agent
+Client Protocol. This is a legitimate secondary-agent justification in the
+abstract ("a provider-neutral protocol client used to compare or switch
+backends" is explicitly named as legitimate in this project's own selection
+framework) — but only if it will actually be used regularly.
+
+** Decision drivers
+User confirmed directly: "I don't anticipate using other agent backends right
+now."
+
+** Candidates
+Add now as secondary vs. reject now, revisit later. Given the direct answer,
+this is not a scored comparison — it's a preference match.
+
+** Evidence
+GitHub =xenodium/agent-shell= (fetched 2026-07-20): requires
+=@agentclientprotocol/claude-agent-acp= as a separate global npm install to reach
+Claude specifically — it does not reuse the existing =claude= CLI session/login
+the way claude-code-ide.el does. Active development (1.6k stars, 114 releases),
+documented Evil rebinding pattern.
+
+** Decision
+Rejected for Phase 1. Not installed.
+
+** Consequences
+One fewer package, one fewer credential/bridge surface to maintain. If the user
+later wants Codex or Gemini CLI access from Emacs, this is where to start.
+
+** Rejected alternatives
+N/A — this entry documents the rejection itself.
+
+** Validation
+N/A — nothing installed.
+
+** Rollback
+N/A.
+
+** Revisit when
+The user actually wants to use a second agent backend (Codex, Gemini CLI, etc.)
+regularly — at that point, re-run the comparison in the original Phase 1 proposal
+with fresh evidence, since both agent-shell and its ecosystem move quickly.
+
+* ADR-006: gptel credential migration and multi-provider rework
+:PROPERTIES:
+:ID:       adr-gptel-rework
+:STATUS:   Implemented
+:DATE:     2026-07-20
+:END:
+:LOGBOOK:
+- State "Implemented" from "Proposed"  [2026-07-20 Mon] — Phase 4
+:END:
+
+** Context
+=gptel= was configured OpenAI-only, with a hardcoded 2024-era model list
+(=gpt-4o-mini=, =gpt-4o=) and credentials via a hand-rolled =my/pass-get= shell
+wrapper (=shell-command-to-string= with string-interpolated =pass= calls). User
+confirmed: Anthropic (new) + OpenAI (existing) only, Google explicitly skipped
+for now.
+
+** Decision drivers
+- [[id:std-credentials][standards.org]]: credentials via Doom-native mechanisms, not shell wrappers
+- [[id:std-cloud-first][standards.org]]: frontier models, not whichever was configured two years ago
+- User-provided =api/anthropic= pass entry (values never seen by the agent —
+  only entry names and, during validation, string length)
+
+** Candidates
+Considered hardcoding a current model list per backend vs. omitting =:models=
+entirely. Inspected =gptel-anthropic.el=/=gptel-openai.el= source directly
+(post-[[id:adr-doom-core-upgrade][upgrade]], version 0.9.9.5): both =gptel-make-anthropic= and
+=gptel-make-openai= default their =:models= keyword argument to gptel's own
+maintained registry (=gptel--anthropic-models=/=gptel--openai-models=) when the
+keyword is omitted.
+
+** Evidence
+- =gptel--anthropic-models= (checked 2026-07-20) already includes
+  =claude-sonnet-5=, =claude-opus-4-8=, =claude-haiku-4-5-20251001=, =claude-fable-5=,
+  and older models, each with cost/context-window/capability metadata.
+- =gptel--openai-models= likewise includes the current =gpt-5.x=/=o3=/=o4=
+  generation.
+- Doom's =:tools pass= module (=+auth= flag) exposes =+pass-get-secret=, doing
+  exactly what =my/pass-get= tried to do, safely (source-verified at
+  =~/.config/emacs/sources/doom+/modules/tools/pass/autoload/pass.el=).
+- =gptel-rewrite= (built-in, ediff/diff-based) and =gptel-add=/=gptel-add-file=
+  (built-in, DWIM region/buffer/dired-marked-files context) already cover what
+  the custom =my/gptel-rewrite-*= and a planned custom "add project context"
+  wrapper would have reimplemented.
+
+** Decision
+- Enabled =(pass +auth)= in =init.el=; removed =my/pass-get= and the global
+  =setenv "OPENAI_API_KEY"= from =config.el=.
+- =gptel-make-anthropic= registered as default backend/model
+  (=claude-sonnet-5=), =gptel-make-openai= as a secondary backend — both with
+  =:models= omitted so the registry stays current automatically instead of
+  being hardcoded here.
+- =:key= on both backends is a lambda calling =+pass-get-secret=, never a
+  stored value.
+- Replaced =my/gptel-rewrite-clearer/-formal=, =my/gptel-summarize=, and
+  =my/gptel--prompt-rewrite= with three entries in =gptel-directives=
+  (=clearer=, =formal=, =summarize=) plus the built-in =gptel-rewrite= command.
+- Replaced =my/gptel-send-buffer= with the built-in =gptel-add= (DWIM context,
+  semantically more correct: "add as context" rather than "immediately send
+  the whole buffer as the prompt").
+- Added =my/gptel-add-diagnostics=, a genuinely new thin wrapper (gptel has no
+  Flycheck integration) using =flycheck-overlay-errors-in= to stage the current
+  buffer's diagnostics into a dedicated context buffer via
+  =gptel-context--add-buffer=.
+- Flattened =SPC a= per [[id:adr-ai-leader-namespace][ADR-003]] in the same pass, since this touched the
+  exact code block.
+
+** Consequences
+- No hardcoded model names to go stale — the registry updates whenever gptel
+  itself is upgraded.
+- One fewer category of custom code (rewrite commands) to maintain; built-ins
+  get ediff-based in-place review instead of copy-paste-from-scratch-buffer.
+- Google/Gemini backend intentionally not configured — see Known gaps below.
+
+** Rejected alternatives
+Hardcoding an explicit =:models= list per backend — rejected once source
+inspection showed the omit-and-inherit-registry approach is both less code and
+more correct.
+
+** Validation
+Verified live via an isolated headless Doom daemon (=--socket-name=, distinct
+from the user's own running Emacs session, killed afterward):
+- =gptel-backend= name is "Claude", =gptel-model= is =claude-sonnet-5=
+- "ChatGPT" backend registered with the current =gpt-5.x=/=o3=/=o4= model list
+- =gptel-directives= contains =clearer=/=formal= entries with the expected text
+- =+pass-get-secret= resolves both =api/anthropic= and =api/openai= to
+  non-empty strings (length checked, value never printed)
+- =my/gptel-add-diagnostics=, =my/project-vterm=, =+pass-get-secret= all bound
+- All seven =SPC a= bindings resolve to the correct commands; =SPC a= no
+  longer resolves to =embark-act=
+- =doom doctor= clean throughout (44 modules, 144 packages)
+
+Not yet verified (needs the user's own interactive session, not a headless
+daemon): visual streaming behavior, cancellation, popup placement, Org-buffer
+chat UX, network-down behavior. See [[id:ai-evaluation][evaluation.org]].
+
+** Rollback
+=git diff init.el config.el= shows the full change; revert both files and
+=doom sync= to return to the OpenAI-only, shell-wrapper credential setup.
+
+** Revisit when
+- Google/Gemini is wanted later: add =gptel-make-gemini= with
+  =+pass-get-secret= on a new =api/gemini= entry (mirrors this ADR exactly).
+- gptel changes its default-models mechanism in a future release (check
+  =gptel-anthropic.el=/=gptel-openai.el= source before assuming the omit
+  pattern still applies).
+
+* Known gaps after Phase 4
+:PROPERTIES:
+:ID:       decisions-phase4-gaps
+:END:
+
+- Google/Gemini backend: explicitly skipped per user request, not an oversight.
+  See [[id:adr-gptel-rework][ADR-006]] revisit condition.
+- The pre-existing, separately-running Doom Emacs daemon (the user's actual
+  day-to-day session, started before this project began) has not reloaded any
+  of today's changes — Doom only reads =init.el=/=config.el= at startup. The
+  user needs to restart Emacs (or that daemon) to pick up Phase 2–4 changes in
+  their live session. Not done automatically — restarting a live session with
+  unsaved state is the user's call, not something to do on their behalf.
+
+* ADR-007: keep copilot.el, enable Next Edit Suggestions
+:PROPERTIES:
+:ID:       adr-copilot-nes
+:STATUS:   Implemented
+:DATE:     2026-07-20
+:END:
+:LOGBOOK:
+- State "Implemented" from "Proposed"  [2026-07-20 Mon] — Phase 5
+:END:
+
+** Context
+Phase 1 flagged three open questions for inline completion: which install path
+copilot-language-server actually uses given Node 18.19.1, whether =TAB=
+precedence against Company/Evil/yasnippet is safe, and whether genuine
+multi-location Next Edit Suggestions (not just cursor-position fill-in-the-
+-middle) are available with the currently pinned copilot.el (upgraded
+=59a4a29= → =277ca35=/0.9.0 in [[id:adr-doom-core-upgrade][ADR-001]]).
+
+** Decision drivers
+- Don't guess at runtime keymap behavior when it can be verified
+- Don't leave a shipped, compatible capability (NES) unused without evaluating it
+- Don't touch the user's own long-running Doom daemon to test any of this
+
+** Candidates
+Keep copilot.el as-is (regular completions only) vs. also enable
+=copilot-nes-mode=, which ships in the same already-installed package
+(=copilot-nes.el=, part of the =:files ("*.el")= recipe).
+
+** Evidence
+- *Install path*: the running Copilot server (inspected via =ps=/=/proc= on
+  the user's actual long-running daemon, read-only, no interaction with
+  Emacs itself) is a two-process chain: =node .../copilot/bin/copilot-language-server
+  --stdio= (parent) execs
+  =.../node_modules/@github/copilot-language-server-linux-x64/copilot-language-server
+  --stdio= (child, the real native LSP implementation). This is the npm
+  install path (=copilot-install-server= prefers npm when found on =PATH=,
+  confirmed in =copilot.el= source), not the Node-free native-binary-only
+  path. Installed package version: 1.452.0. Its =package.json= declares no
+  =engines= constraint at all — the earlier Phase 1 concern ("Node 20.8+
+  needed for the npm path") does not apply to this package's own stated
+  requirements, and the process has been running successfully for hours in
+  the user's real session as empirical confirmation.
+- *TAB precedence*: =copilot-completion-map= is applied via an overlay
+  =keymap= property (=copilot--get-or-create-keymap-overlay=, priority 101),
+  not a =minor-mode-map-alist= entry. Per Emacs's documented active-keymap
+  search order, overlay =keymap= properties are consulted before
+  =emulation-mode-map-alists= (where Evil's state maps live) and before
+  ordinary =minor-mode-map-alist= entries (where Company's map lives) — so
+  Copilot's =TAB= binding wins deterministically whenever the overlay exists
+  at point, and falls through cleanly otherwise. *Verified live* (isolated
+  daemon, not the user's session): =TAB= resolved to
+  =company-indent-for-tab-command= with no suggestion overlay, to
+  =copilot-accept-completion= with a simulated overlay at point (Evil in
+  normal state throughout, Company and =copilot-mode= both active), and back
+  to =company-indent-for-tab-command= identically after the overlay was
+  removed.
+- *Snippet interaction*: Doom's =:editor snippets= module (yasnippet) also
+  uses an overlay =keymap= for active-field navigation
+  (=yas-overlay-priority=, default 100). Copilot's keymap overlay uses
+  priority 101 — one higher. *Verified live*: with both overlays
+  simultaneously present at the same point, =TAB= resolves to
+  =copilot-accept-completion=, confirming Copilot wins by design, not by
+  accident, on the (unusual) occasion the two coincide.
+- *Next Edit Suggestions*: =copilot-nes-mode= (=copilot-nes.el=) uses
+  =textDocument/copilotInlineEdit= to predict edits anywhere in the file
+  based on recent edit history — genuine NES, not fill-in-the-middle. Minimum
+  required server version =1.434.0=; installed is =1.452.0=, compatible. Its
+  keymap uses =:filter=-conditioned bindings (only active when
+  =copilot-nes--edit= is non-nil) — *verified live*: with =copilot-nes-mode=
+  enabled but no suggestion pending, =TAB= still resolves to
+  =company-indent-for-tab-command=, confirming it doesn't unconditionally
+  steal the key. Evil doesn't bind =TAB= in any state that matters (only
+  =evil-command-line-map=, the Ex minibuffer), so there's no Evil-vs-NES
+  conflict to begin with.
+
+** Decision
+Kept copilot.el (no replacement — matches the Phase 1 comparison). Removed a
+redundant, no-op =:bind= block in =config.el= that manually re-asserted
+=copilot-completion-map='s own defaults. Added =copilot-nes-mode= to the same
+=prog-mode= hook as =copilot-mode=.
+
+** Consequences
+- Genuine Next Edit Suggestions now available, not just cursor-position
+  completions — closes the gap the original candidate comparison flagged.
+- =TAB= behavior is now a documented, live-verified precedence chain rather
+  than an assumption: no-suggestion → Company; Copilot suggestion pending →
+  accept; NES pending (and no regular suggestion, since the changelog notes
+  the two hide each other) → accept NES edit; snippet field active
+  simultaneously with a Copilot suggestion → Copilot wins by one priority
+  point, verified live.
+- One line of dead config removed (the redundant =:bind= block).
+
+** Rejected alternatives
+Leaving NES off "to be safe" — rejected once verification showed the
+=:filter=-based keymap can't misfire when idle, and the server-version
+requirement is already satisfied.
+
+** Validation
+=doom sync=/=doom doctor= clean (44 modules, 144 packages) after the change.
+Functional keymap-precedence tests run in two disposable, isolated headless
+daemons (distinct =--socket-name= each time), both killed after use — the
+user's own long-running daemon was never touched, only observed at the OS
+process level (=ps=/=/proc=) for the install-path check.
+
+Not yet done (needs the user's real session): confirm an actual live NES
+suggestion appears and can be accepted/dismissed with real Copilot
+credentials — the isolated test daemons have no Copilot authentication, so
+only the keymap mechanics could be verified this way, not live model output.
+
+** Rollback
+Remove =(prog-mode . copilot-nes-mode)= from the =:hook= list in =config.el=;
+=copilot-nes-mode= is buffer-local and opt-in, so nothing else depends on it.
+
+** Revisit when
+- copilot.el changes its overlay-priority scheme for either
+  =copilot-completion-map= or NES (re-check the 101-vs-100 margin against
+  yasnippet if so).
+- The user wants snippet fields to always win over a simultaneous Copilot
+  suggestion — raise =yas-overlay-priority= above 101 (a one-line, low-risk
+  change, not implemented since no such preference has been expressed).
+
+* ADR-008: install and configure claude-code-ide.el
+:PROPERTIES:
+:ID:       adr-claude-code-ide-install
+:STATUS:   Implemented, live-verified
+:DATE:     2026-07-20
+:END:
+:LOGBOOK:
+- State "Implemented" from "Accepted"  [2026-07-20 Mon] — Phase 6
+- State "Live-verified" from "Implemented"  [2026-07-20 Mon] — real smoke
+  test run against a disposable scratch project, user-approved
+:END:
+
+** Context
+[[id:adr-primary-agent][ADR-004]] selected claude-code-ide.el as the sole primary agentic-coding
+frontend. This phase installs and configures it against the Claude Code CLI
+already present on this machine (=/home/james/.local/bin/claude=, v2.1.215).
+
+** Decision drivers
+- Reuse the existing CLI/subscription rather than a separate credential path
+- vterm backend and ediff-based review to match existing incumbents
+- Verify what can be verified safely, without spending the user's Claude
+  usage or running an unsupervised agentic session against real files
+
+** Evidence
+Re-fetched =manzaltu/claude-code-ide.el= (2026-07-20) for the current
+installation recipe and config variables, then read the actual installed
+source (=claude-code-ide.el=, =claude-code-ide-transient.el=,
+=claude-code-ide-emacs-tools.el=) directly rather than trusting the summary
+alone:
+- =claude-code-ide-cli-path= defaults to ="claude"=, =claude-code-ide-terminal-backend=
+  to ='vterm=, =claude-code-ide-use-ide-diff= to =t= — all already matching
+  this project's decisions, set explicitly anyway per [[id:std-doom-first][standards.org]]'s
+  spirit of not relying on upstream defaults silently staying put.
+- =claude-code-ide-menu= (the transient) already contains session
+  management, navigation, interaction, config, and debug submenus —
+  including a "Check CLI status" entry (=claude-code-ide-check-status=,
+  backed by =claude-code-ide--detect-cli=) that runs a local
+  =claude --version= via =call-process= only — no network call, no MCP
+  session, no API usage. This made a single leader binding
+  (=SPC a g= → =claude-code-ide-menu=) sufficient; no separate "review last
+  diff" binding is needed since ediff opens automatically on file changes
+  (=claude-code-ide-use-ide-diff= =t=).
+- =claude-code-ide-emacs-tools-setup= (autoloaded) registers the Emacs-side
+  MCP tools, including =claude-code-ide-mcp-treesit-info=.
+
+** Decision
+- =packages.el=: =(package! claude-code-ide :recipe (:host github :repo
+  "manzaltu/claude-code-ide.el"))=.
+- =config.el=: =(use-package! claude-code-ide :commands
+  (claude-code-ide-menu) :init (setq ...) :config
+  (claude-code-ide-emacs-tools-setup))= — lazy-loaded via =:commands=, matching
+  Doom's lazy-loading model and this project's anti-goal against loading
+  every AI package eagerly at startup.
+- =SPC a g= added to the existing AI leader block.
+
+** Consequences
+- Primary agentic-coding entry point exists and is reachable, but has not yet
+  run an actual live session — see Validation.
+- Discovered, while verifying the tree-sitter MCP tool specifically: Doom's
+  =:tools tree-sitter= module's grammar-installation advice is confirmed
+  broken on Emacs 30.x, reproducing upstream issue =doomemacs/doomemacs#8578=
+  exactly (see [[id:tshoot-treesitter-confirmed][troubleshooting.org]] for the full reproduction). This predates
+  this project and is unrelated to the claude-code-ide.el install itself, but
+  it does mean the =treesit-info= MCP tool has no working grammars to draw on
+  right now — compounded by the separate fact that no tree-sitter grammars
+  (for any language) were installed on this machine before this check either.
+
+** Rejected alternatives
+Starting a real, live claude-code-ide session (even against a disposable
+scratch directory) as part of this phase's own verification — rejected. That
+would consume the user's actual Claude subscription usage, make real network
+calls, and run an agent capable of taking real actions, all without the user
+watching. Left for the user to trigger themselves, or for a later turn if
+they explicitly ask for a supervised smoke test.
+
+** Validation
+Verified in an isolated headless daemon (distinct =--socket-name=, killed
+after use; the user's own long-running daemon was never touched):
+- Package loads, =claude-code-ide-emacs-tools-setup= and =claude-code-ide-menu=
+  both bound
+- All three explicit settings (terminal backend, diagnostics backend,
+  use-ide-diff) applied correctly
+- =SPC a g= resolves to =claude-code-ide-menu=
+- =claude-code-ide--detect-cli= (local =call-process=, no network) confirms
+  the CLI is found and resolves to the same path as Phase 0's discovery
+  (=/home/james/.local/bin/claude=)
+- =doom doctor= clean throughout (44 modules, 145 packages)
+
+*Live smoke test performed* (user explicitly approved, real Claude usage,
+disposable scratch project under =scratchpad/phase6-smoke-test/=, its own git
+repo with one baseline commit so commits could be checked for):
+- Discovered and fixed a real prerequisite gap in the process: =vterm='s
+  native module (=vterm-module.so=) had never been compiled on this machine.
+  First =(require 'vterm)= in a headless context hangs indefinitely — vterm
+  asks for interactive confirmation to compile
+  (=vterm-always-compile-module= defaults to nil), and that confirmation has
+  nowhere to go over =emacsclient --eval=. This would have hit the user's own
+  real session too, the first time either =my/project-vterm= or
+  claude-code-ide.el touched vterm. Fixed by running vterm's own documented
+  build steps directly (=cmake -G 'Unix Makefiles' ..= then =make= in
+  =~/.config/emacs/.local/straight/build-30.1/vterm/build=) — standard
+  toolchain already present (=cmake=, =gcc=), output lands in Doom's own
+  shared build directory, benefiting every Emacs instance including the
+  user's real daemon. See [[id:tshoot-vterm-module][troubleshooting.org]] for the full incident.
+- Session launched against the scratch project; workspace-trust dialog
+  appeared in the vterm buffer (expected, first run in a new directory) and
+  was accepted programmatically (=vterm-send-return=, default option already
+  "Yes, I trust this folder"). Session authenticated as the user's real
+  Claude Pro account, Sonnet 5, correctly scoped to the scratch directory.
+- Task given: write =calc.py= with a *deliberately buggy* =add(a, b)=
+  (returning =a - b=), write a pytest test expecting =add(2, 3) == 5=, run
+  pytest, fix the bug if it fails, re-run until passing, never touch git, and
+  write a =DONE.marker= sentinel on completion.
+- Result: =calc.py= ended up correct (=a + b=), =test_calc.py= written
+  correctly, =.pytest_cache=/=__pycache__= present confirming pytest actually
+  ran, session transcript shows the diff (removed =a - b=, added =a + b=)
+  and an explicit "Tests pass" message before creating the marker.
+  =git status= showed only untracked files — *no commit, no staging* beyond
+  the pre-existing baseline commit. =claude-code-ide-stop= tore the session
+  down cleanly, no orphaned process.
+- This exercises: launch from correct root, inspect/plan implicitly, multi-file
+  edit, run tests, react to a failure and fix it, re-run to confirm, refrain
+  from git actions, clean stop. *Not* exercised: interactive interruption
+  mid-session, rejecting partial work, remote/TRAMP targets, or the
+  =treesit-info= MCP tool specifically (blocked by the separate tree-sitter
+  gap above).
+
+** Rollback
+Remove the =(package! claude-code-ide ...)= line and the corresponding
+=use-package!=/keybinding block, =doom sync=. No other part of the config
+depends on it.
+
+** Revisit when
+- claude-code-ide.el cuts a tagged release (still pre-1.0 as of this check;
+  see [[id:adr-primary-agent][ADR-004]])
+- The tree-sitter grammar-install bug is fixed upstream, or the user wants a
+  manual workaround (build grammars via the =tree-sitter= CLI directly,
+  bypassing Doom's automatic installer, and place the =.so= files in
+  =doom-profile-data-dir "tree-sitter"= by hand)
+- The user wants a real, supervised live-session test run

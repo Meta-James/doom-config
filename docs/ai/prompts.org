@@ -1,0 +1,46 @@
+#+TITLE: AI Subsystem — Prompt, Memory, and Skill Management
+#+AUTHOR: James Cook
+#+STARTUP: overview
+:PROPERTIES:
+:ID:       ai-prompts
+:END:
+
+* Policy
+:PROPERTIES:
+:ID:       prompts-policy
+:END:
+
+- =CLAUDE.md= and =AGENTS.md= are concise entry points only — target under 200
+  lines each, per Claude Code's own guidance (verified against
+  =code.claude.com/docs/en/memory=, fetched 2026-07-20). They point at this Org
+  tree; they do not duplicate it.
+- =CLAUDE.md= imports =AGENTS.md= via =@AGENTS.md= so any future non-Claude agent
+  reads the same shared instructions without duplication, with Claude-specific
+  notes appended below the import.
+- =.claude/rules/*.md= holds modular, topic-scoped rules
+  (=doom-emacs.md=, =security.md=, =documentation.md=) so they load only when
+  relevant rather than bloating the always-loaded =CLAUDE.md=.
+- Canonical long-form design (architecture, decisions, roadmap) stays in this Org
+  tree, never duplicated into agent memory files.
+- Auto memory (Claude Code's own learned-notes system) is left on its default
+  behavior — it's session-learned, not something this project curates by hand.
+
+* Reusable prompt assets
+:PROPERTIES:
+:ID:       prompts-assets
+:END:
+
+=prompts/= holds executable prompt assets versioned with the repo. The original
+Phase 1 planning prompt lives at =prompts/phase-01-ai-integration.md= — moved
+there from the repo root during Phase 3 (this phase), matching the structure this
+prompt itself specified.
+
+* Context-loading policy
+:PROPERTIES:
+:ID:       prompts-context-loading
+:END:
+
+Don't load large architecture documents into every session unless the task
+actually requires them. An agent working on, say, the Python LSP setup should not
+need the full AI-subsystem architecture in context. Prefer linking
+(=id:=-style Org links, or a =CLAUDE.md= pointer) over inlining.
