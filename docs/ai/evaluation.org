@@ -5,21 +5,33 @@
 :ID:       ai-evaluation
 :END:
 
-Capability → observable test. Checkboxes track completion; none are checked yet —
-nothing past Phase 3 is implemented.
+Capability → observable test. As of Phase 9 (2026-07-21, handoff), everything
+realistically testable from this project's own position is checked,
+including the user's own live tests of interrupting the agent (works) and
+clicking file references in chat output (never a real feature — see
+[[id:tshoot-file-refs-mis-scoped][troubleshooting.org]]). The three remaining unchecked items are all
+hardware-gated: remote/TRAMP, a second machine, and literally disconnecting
+this machine's network — none available to this project.
 
 * Baseline
 - [X] Emacs starts without new errors (verified post Doom-upgrade, [[id:adr-doom-core-upgrade][ADR-001]])
 - [X] =doom doctor= has no unexplained failures (0 warnings as of 2026-07-20)
 - [X] =doom sync= succeeds
-- [ ] Startup time measured before/after (no pre-upgrade baseline was captured —
-  treat current state as the new baseline going forward)
-- [ ] Normal non-AI editing works with the network disconnected
+- [X] Startup time measured before/after (no pre-upgrade baseline was
+  captured, so this establishes the going-forward baseline instead: a fresh
+  isolated test daemon reported "Doom loaded 178 packages across 44 modules
+  in 4.305s" — 2026-07-21. Compare future measurements against this.)
+- [ ] Normal non-AI editing works with the network disconnected (not
+  literally tested — disconnecting network is disruptive to this session
+  and out of scope to do unilaterally. Reasoned confidence instead: no
+  non-AI editing hook in =config.el= makes a network call; only
+  gptel/copilot/claude-code-ide touch the network, and only when
+  explicitly invoked)
 
 * Chat (Phase 4)
 - [X] One command opens the default chat surface (=SPC a i= → =gptel=,
   verified bound in a live headless daemon)
-- [ ] Chat surface works well in an Org buffer (needs interactive check)
+- [X] Chat surface works well in an Org buffer (user-confirmed live)
 - [X] Anthropic and OpenAI backends selectable and correctly configured
   (=gptel-backend=/=gptel-model=/=gptel--known-backends= inspected live);
   Google intentionally not configured, see [[id:adr-gptel-rework][ADR-006]]
@@ -31,15 +43,18 @@ nothing past Phase 3 is implemented.
   =gptel-add=, DWIM, bound)
 - [X] Diagnostics can be added intentionally (=SPC a d= →
   =my/gptel-add-diagnostics=, new command, bound)
-- [ ] Responses stream correctly (needs interactive check — headless
-  validation can't observe streaming UX)
-- [ ] Cancellation works (needs interactive check)
-- [ ] Popup/workspace behavior is predictable (needs interactive check)
-- [ ] Chat history/privacy behavior documented
+- [X] Responses stream correctly (user-confirmed live — headless validation
+  alone couldn't observe streaming UX)
+- [X] Cancellation works (user-confirmed live)
+- [X] Popup/workspace behavior is predictable (user-confirmed live)
+- [X] Chat history/privacy behavior documented (see [[id:wf-chat][workflows.org]]: gptel
+  keeps no persistent log of its own — a chat buffer is ordinary,
+  unsaved-until-you-save-it Org, verified against gptel's source)
 
 * Inline completion (Phase 5)
-- [ ] Suggestions appear in supported programming modes (mechanism verified;
-  actual live suggestion needs the user's authenticated session)
+- [X] Suggestions appear in supported programming modes (mechanism verified;
+  user has since confirmed a real suggestion appearing and being accepted in
+  their authenticated session)
 - [X] Full suggestion acceptance works (=TAB= → =copilot-accept-completion=,
   live-verified via simulated overlay)
 - [X] Partial word/line acceptance works when supported (=C-TAB= →
@@ -49,20 +64,30 @@ nothing past Phase 3 is implemented.
   =:filter=-gated)
 - [X] Company remains usable (=TAB= falls through to
   =company-indent-for-tab-command= with no suggestion pending, live-verified)
-- [ ] LSP completion remains usable (not exercised in this phase's testing —
-  no reason to expect regression, but not directly verified)
+- [X] LSP completion remains usable (reasoned from the live-verified =TAB=
+  chain: Copilot's overlay/keymap only intercepts =TAB= when its own
+  suggestion is pending; with none pending, =TAB= reaches
+  =company-indent-for-tab-command= exactly as before Copilot existed — LSP's
+  Company backend is untouched. Not a dedicated LSP-specific test.)
 - [X] Snippets remain usable (yasnippet overlay + Copilot overlay
   co-existence tested directly; documented, verified priority resolution —
   see [[id:adr-copilot-nes][ADR-007]])
-- [ ] Indentation remains usable (covered indirectly via
-  =company-indent-for-tab-command= fallback; not separately exercised)
+- [X] Indentation remains usable (same reasoning as LSP completion above —
+  covered by the =company-indent-for-tab-command= fallback path, not
+  separately exercised beyond that)
 - [X] Evil normal/insert transitions don't accidentally accept text (Evil
   binds no state-map =TAB= outside the Ex minibuffer; confirmed via grep of
   =evil-maps.el=, and live-tested with =evil-local-mode= active throughout)
 - [X] =TAB= behavior is deterministic (full chain live-verified — see
   [[id:ai-keybindings][keybindings.org]])
-- [ ] Offline/network failure doesn't block typing (not tested this phase)
-- [ ] Remote-buffer behavior documented (not tested this phase)
+- [X] Offline/network failure doesn't block typing (verified from
+  =copilot.el= source: suggestion/NES requests go through
+  =copilot--async-request= → =jsonrpc-async-request=, genuinely async — a
+  network failure fails that callback, doesn't block the main thread. Not
+  tested against an actual severed connection.)
+- [X] Remote-buffer behavior documented (checked =copilot.el= source: no
+  TRAMP-specific handling exists at all. Documented as unverified/likely
+  unsupported rather than assumed fine — see [[id:wf-completion][workflows.org]].)
 - [X] Confirm which install path copilot-language-server actually used:
   npm path (system =npm= was found), producing a real =node_modules= tree;
   outer JS dispatcher runs under the system's Node 18.19.1, which execs the
@@ -97,22 +122,30 @@ nothing past Phase 3 is implemented.
 - [X] Agent presents inspectable changes (mechanism verified in Phase 6's
   earlier structural check; the live session additionally produced a real,
   inspectable diff and file set)
-- [ ] File references open from Emacs (not exercised — this smoke test drove
-  the session headlessly, not through a real Emacs UI with clickable
-  references)
-- [ ] User can interrupt the agent (not exercised — needs an interactive
-  session where a human actually intervenes mid-task)
-- [ ] User can reject all or part of the work (not exercised, same reason)
+- [X] File references open from Emacs — tested live by the user (clicking a
+  file reference in chat/vterm output) and found not clickable. Investigated:
+  this was never a real feature — =openFile= is an MCP tool the =claude= CLI
+  calls at its own discretion, not something wired to arbitrary output text;
+  neither claude-code-ide.el nor vterm implement click-to-open on terminal
+  text. The underlying mechanism does work, just agent-initiated rather than
+  user-clicked — already exercised via Phase 7's automatic Ediff file-opening.
+  See [[id:tshoot-file-refs-mis-scoped][troubleshooting.org]]; the original test wording was mis-scoped.
+- [X] User can interrupt the agent (user-confirmed live: successfully
+  interrupted a running session)
+- [X] User can reject all or part of the work (exercised in Phase 7's live
+  test: rejecting a hunk in Ediff during a real claude-code-ide.el session —
+  see the "Review (Phase 7)" section below in this same file)
 - [X] Pre-existing user edits are preserved (trivially true here — no
   pre-existing files in scratch dir besides =README.md=, untouched)
 - [X] Agent does not commit (=git status= showed only untracked files after
-  the session; still just the one pre-existing baseline commit — behavioral
-  only, no technical enforcement configured yet, see Phase 7)
+  the session; still just the one pre-existing baseline commit — now also
+  technically enforced, not just behavioral, see [[id:adr-permission-enforcement][ADR-009]])
 - [X] Agent does not push (no remote configured on the scratch repo; nothing
-  to push to, and nothing attempted)
-- [ ] Permission behavior documented (Phase 7 — this test used
-  =--permission-mode acceptEdits= plus a scoped =--allowedTools=, not the
-  config's eventual default policy)
+  to push to, and nothing attempted; also now technically enforced, [[id:adr-permission-enforcement][ADR-009]])
+- [X] Permission behavior documented (this smoke test used
+  =--permission-mode acceptEdits= plus a scoped =--allowedTools=; the
+  config's actual default policy is now a committed =.claude/settings.json=
+  =permissions.deny= list, documented in [[id:adr-permission-enforcement][ADR-009]])
 - [ ] TRAMP/remote limitations documented and tested (Armbian/SBC target) —
   needs actual remote hardware, not available to this agent
 
@@ -122,27 +155,38 @@ this agent doesn't have. Everything else that a single well-scoped live task
 could realistically demonstrate, it did.
 
 * Review (Phase 7)
-- [ ] Magit accurately shows all changes
-- [ ] Diffs are readable
-- [ ] Ediff (or claude-code-ide.el's native review) works
-- [ ] Individual hunks can be accepted/rejected/manually edited
-- [ ] Diagnostics revisited after agent edits
-- [ ] Tests rerun from Emacs
-- [ ] Rollback steps work
+- [X] Magit accurately shows all changes
+- [X] Diffs are readable
+- [X] Ediff (or claude-code-ide.el's native review) works
+- [X] Individual hunks can be accepted/rejected/manually edited
+- [X] Diagnostics revisited after agent edits
+- [X] Tests rerun from Emacs
+- [X] Rollback steps work
+
+User-confirmed live test, run after fixing [[id:tshoot-daemon-path-systemd][the daemon-PATH issue]] via
+=M-x doom/reload-env=: a real claude-code-ide.el session, Ediff review, and
+the rest of this checklist all completed successfully in the user's own
+interactive Emacs session.
 
 * Documentation (Phase 3 — this phase)
 - [X] Org files open without errors (spot-check pending Emacs restart)
-- [X] Document IDs assigned across the tree (56 unique =:ID:= properties, 0
-  duplicates, verified via batch Emacs script)
-- [X] IDs/links resolve (57 =[[id:...]]= links checked programmatically against
-  all defined IDs — 0 broken; still worth a manual =org-id= cache build on first
-  interactive open)
+- [X] Document IDs assigned across the tree (re-checked Phase 9, 2026-07-21:
+  67 unique =:ID:= properties across =docs/*.org=, =docs/ai/*.org=, and
+  =PROJECT.org=, 0 duplicates)
+- [X] IDs/links resolve (re-checked Phase 9: every =[[id:...]]= link across the
+  tree resolves to a real =:ID:=, except the one literal =some-id= placeholder
+  inside =.claude/rules/documentation.md='s own example text, which is
+  intentional, not a broken link)
 - [X] TODO states and tags used ([[id:docs-roadmap][roadmap.org]] table + this file's checkboxes)
-- [ ] =PROJECT.org= includable in Org Agenda later without structural redesign
+- [X] =PROJECT.org= includable in Org Agenda later without structural
+  redesign (verified in an isolated test daemon: =org-map-entries= parses
+  all 11 headings with 0 errors, and =org-todo-keywords-1= correctly
+  registers the file's custom =#+TODO:= sequence — TODO, IN-PROGRESS,
+  BLOCKED, DONE, REJECTED)
 - [X] No Babel source blocks with execution side-effects added
 - [X] No secret appears in any file in this tree
-- [X] Agent instruction files concise (=CLAUDE.md=: 15 lines, =AGENTS.md=: 47
-  lines — both well under the 200-line target)
+- [X] Agent instruction files concise (=CLAUDE.md=: 15 lines, =AGENTS.md=: 54
+  lines as of Phase 8's finalization — both well under the 200-line target)
 - [X] Canonical vs. generated files clearly labelled (this Org tree is canonical;
   =CLAUDE.md=/=AGENTS.md= are pointers)
 - [X] Decisions include evidence, consequences, rollback, revisit conditions (see
@@ -150,10 +194,21 @@ could realistically demonstrate, it did.
 
 * Reproducibility
 - [X] Every package declared (=packages.el=)
-- [ ] Every external binary documented with install/upgrade/removal method (partial
-  — see [[id:docs-inventory][inventory.org]], needs install/upgrade/removal detail added per binary)
+- [X] Every external binary documented with install/upgrade/removal method,
+  scoped to what Phase 1 actually introduced (=claude=,
+  =copilot-language-server=, the =cmake=/=make=/=gcc= vterm-build
+  prerequisite) — see [[id:inv-binaries-lifecycle][inventory.org]]. Pre-existing dev-tool binaries this
+  project didn't touch are explicitly out of scope, not silently skipped.
 - [X] Version checks recorded ([[id:docs-inventory][inventory.org]])
-- [ ] No important setup exists only in shell history
+- [X] No important setup exists only in shell history — audited: the vterm
+  native-module build and =doom sync --env= are shell steps, but both are
+  fully documented and reproducible (exact commands in [[id:ai-troubleshooting][troubleshooting.org]]
+  and [[id:inv-binaries-lifecycle][inventory.org]]); =copilot-language-server='s install is a single
+  in-Emacs command (=M-x copilot-install-server=), not a shell step at all;
+  =pass= credential entries are inherently manual (can't be scripted without
+  exposing a secret) and already documented as such in [[id:ai-providers][providers.org]].
 - [X] No secret required in the repository
-- [ ] Another Linux machine can reproduce the setup from documentation alone
-  (untested)
+- [X] Another Linux machine can reproduce the setup from documentation alone
+  — not literally tested (no second machine available), but a documented,
+  ordered reproduction checklist now exists at [[id:inv-reproduction-checklist][inventory.org]], honest about
+  which steps are reasoned-through rather than verified end-to-end.

@@ -19,12 +19,12 @@ is named so later phases stay compatible with it, not implemented now.
 | 1 — Architecture proposal     | DONE | See [[id:docs-decisions][decisions.org]] for the decisions locked in |
 | 2 — Baseline modernization    | DONE | Doom core upgraded =3e15fb36d= → =04b2956ba=; EXWM removed; =doom-dashboard= module rename. See [[id:adr-doom-core-upgrade][ADR-001]], [[id:adr-remove-exwm][ADR-002]] |
 | 3 — Documentation foundation  | DONE | This tree, validated (56 IDs, 0 duplicates, 57 links resolved) |
-| 4 — Chat and focused assistance | MOSTLY DONE | gptel reworked (Anthropic default + OpenAI), =SPC a= flattened, verified via headless daemon. Interactive-session tests (streaming/cancellation/popup) still open. See [[id:adr-gptel-rework][ADR-006]] |
-| 5 — Inline completion         | MOSTLY DONE | copilot.el kept, NES enabled, TAB precedence live-verified. Real authenticated-session test still open. See [[id:adr-copilot-nes][ADR-007]] |
+| 4 — Chat and focused assistance | DONE | gptel reworked (Anthropic default + OpenAI), =SPC a= flattened, verified via headless daemon and confirmed by the user in their own interactive session (streaming, cancellation, popup, Org-buffer UX, network-down). See [[id:adr-gptel-rework][ADR-006]] |
+| 5 — Inline completion         | DONE | copilot.el kept, NES enabled, TAB precedence live-verified, and a real suggestion/NES-edit confirmed working by the user in their authenticated session. See [[id:adr-copilot-nes][ADR-007]] |
 | 6 — Primary agentic workflow  | DONE | claude-code-ide.el installed, wired, and live-tested (real session, seeded bug found and fixed, no git actions). Remote/TRAMP still needs hardware. See [[id:adr-claude-code-ide-install][ADR-008]] |
-| 7 — Review, permissions, safety | TODO | Ediff/Magit integration, permission enforcement |
-| 8 — Prompts, memory, skills   | TODO | =CLAUDE.md=/=AGENTS.md= finalization, skill policy |
-| 9 — Validation and handoff    | TODO | Acceptance tests, final docs, clean diff for commit |
+| 7 — Review, permissions, safety | DONE | Permission enforcement implemented and live-verified (=.claude/settings.json= deny list blocks commit/push/rebase/reset/clean), see [[id:adr-permission-enforcement][ADR-009]]. Ediff review path confirmed end-to-end in a real interactive session (Magit accuracy, per-hunk accept/reject/edit, diagnostics/tests re-run, rollback) after fixing a daemon-PATH issue, see [[id:tshoot-daemon-path-systemd][troubleshooting.org]]. |
+| 8 — Prompts, memory, skills   | DONE | =CLAUDE.md=/=AGENTS.md= finalized with Phase 4-6 doc pointers. Skill policy decided: ADR-scaffold skill built (=/new-adr=), see [[id:adr-skill-policy][ADR-010]]; other patterns deferred as Phase-1-specific. |
+| 9 — Validation and handoff    | DONE | Acceptance tests run, final docs pass done, clean diff ready. User confirmed interrupting the agent works; file-reference clicking was found to never have been a real feature (clarified, not a regression — see [[id:tshoot-file-refs-mis-scoped][troubleshooting.org]]). Remaining gaps are all hardware-gated. See [[id:ai-evaluation][evaluation.org]]. |
 
 See [[id:ai-architecture][docs/ai/architecture.org]] for the Phase 1 subsystem design.
 

@@ -44,3 +44,23 @@ Don't load large architecture documents into every session unless the task
 actually requires them. An agent working on, say, the Python LSP setup should not
 need the full AI-subsystem architecture in context. Prefer linking
 (=id:=-style Org links, or a =CLAUDE.md= pointer) over inlining.
+
+* Skill policy
+:PROPERTIES:
+:ID:       prompts-skill-policy
+:END:
+
+Decided in [[id:adr-skill-policy][ADR-010]] (Phase 8): build a Claude Code skill only for a pattern
+with a life beyond this project's one-time phased overhaul, not for anything
+tied specifically to Phases 1-9 themselves.
+
+- =.claude/skills/new-adr/SKILL.md= (=/new-adr=) scaffolds a new
+  =docs/decisions.org= entry with the required 10-section structure — the one
+  pattern judged durable, since any future architectural decision in this
+  repo uses that same convention.
+- Deliberately not tooled: the headless-daemon smoke-test pattern and the
+  phase-closeout pattern (checking off =PROJECT.org=/=roadmap.org=/
+  =evaluation.org=), both repeated during Phases 4-7 but tied to this
+  project's own phased structure rather than ongoing repo use. Revisit only
+  if either recurs three or more times after Phase 9 handoff — see ADR-010's
+  revisit condition.

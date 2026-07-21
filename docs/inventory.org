@@ -94,7 +94,8 @@ summary, not a duplicate to keep in sync by hand:
 | direnv  | yes     | /usr/bin/direnv                            |
 | pass    | yes     | /usr/bin/pass                              |
 | gpg     | yes     | /usr/bin/gpg, one secret key (created 2026-02-05) |
-| claude  | yes     | ~/.local/bin/claude, CLI version 2.1.215   |
+| claude  | yes     | ~/.local/bin/claude, CLI version 2.1.216 (updated from 2.1.215 mid-project) |
+| cmake, make, gcc | yes | =build-essential= 12.10ubuntu1, =cmake= 3.28.3-1build7 — needed once, to build vterm's native module (see below) |
 | codex   | no      | not installed                              |
 | aider   | no      | not installed                              |
 | gh      | no      | not installed                              |
@@ -111,6 +112,44 @@ Node-version concern doesn't apply to this package as installed, and the
 server has been running successfully for hours as empirical confirmation. See
 [[id:adr-copilot-nes][docs/decisions.org ADR-007]].
 
+** Install / upgrade / removal, for binaries this project newly relies on
+:PROPERTIES:
+:ID:       inv-binaries-lifecycle
+:END:
+
+Per [[id:std-binaries][standards.org]] =std-binaries=. Scoped to the binaries Phase 1 actually
+introduced reliance on or newly required — =rg=/=git=/=pyright=/=ruff=/
+=black=/=poetry=/=pyenv=/=direnv=/=pass=/=gpg= all predate this project and
+are pre-existing parts of this machine's Python/dev toolchain, out of scope
+for full lifecycle documentation here (per [[id:std-no-scope-creep][std-no-scope-creep]] — Phase 1 is
+the AI subsystem, not a full machine audit).
+
+| Binary                      | Role                                    | Install                                                                | Upgrade                        | Removal                                        |
+|------------------------------+------------------------------------------+--------------------------------------------------------------------------+----------------------------------+---------------------------------------------------|
+| =claude= (Claude Code CLI)  | Backs claude-code-ide.el's agentic session ([[id:adr-primary-agent][ADR-004]]) | Official native installer (=curl -fsSL https://claude.ai/install.sh \vert bash=); lands in =~/.local/share/claude/versions/<ver>=, symlinked from =~/.local/bin/claude= | Self-updates in place (=claude update=, or automatic) — confirmed two versions present on disk (2.1.215, 2.1.216), so an update already happened mid-project without manual reinstall | Delete =~/.local/share/claude= and the =~/.local/bin/claude= symlink; remove the =claude-code-ide= package declaration from =packages.el= and =doom sync= |
+| =@github/copilot-language-server= (via =node=/=npm=) | LSP-protocol backend for =copilot.el='s suggestions and NES ([[id:adr-copilot-nes][ADR-007]]) | =M-x copilot-install-server= (fully in-Emacs, reproducible — reads source: uses npm when found on =PATH=, else downloads precompiled native binaries directly, no manual shell step either way) | =M-x copilot-install-server= again re-installs current/latest | Delete =copilot-install-dir= (Copilot's own package-managed install dir); remove =copilot= from =packages.el= and =doom sync= |
+| =cmake=, =make=, =gcc= (=build-essential=) | Build toolchain to compile vterm's native module (=vterm-module.so=) — discovered as a genuine missing prerequisite during Phase 6, see [[id:tshoot-vterm-module][troubleshooting.org]] | =sudo apt install build-essential cmake= (already present on this machine when checked; not installed by this project) | Standard =apt= upgrade | Standard =apt remove=; unrelated to whether vterm itself stays installed |
+
+*vterm-module build, done once during Phase 6* (not shell-history-only — the
+exact commands are captured in [[id:tshoot-vterm-module][troubleshooting.org]] and reproducible on any
+machine with the toolchain above):
+#+BEGIN_SRC sh
+cd ~/.config/emacs/.local/straight/build-30.1/vterm
+mkdir -p build && cd build
+cmake -G 'Unix Makefiles' ..
+make
+#+END_SRC
+
+*Doom's envvar file, regenerated once during Phase 7* (also not
+shell-history-only — see [[id:tshoot-daemon-path-systemd][troubleshooting.org]]):
+#+BEGIN_SRC sh
+~/.config/emacs/bin/doom sync --env
+#+END_SRC
+Needed on any machine where Emacs (particularly a daemon) might be launched
+by something other than an interactive login shell (systemd user session, a
+display manager, etc.) — otherwise the daemon's =PATH= may not match the
+user's real shell.
+
 * Credential state
 :PROPERTIES:
 :ID:       inv-credentials
@@ -118,14 +157,15 @@ server has been running successfully for hours as empirical confirmation. See
 
 No secret values recorded here or anywhere in this repo — entry names only.
 
-| Store  | Entries present (2026-07-20) |
+| Store  | Entries present (2026-07-21) |
 |--------+--------------------------------|
-| pass   | =api/openai= only              |
+| pass   | =api/anthropic=, =api/openai= (confirmed via =pass ls=) |
 | gpg    | one ultimate-trust secret key (created 2026-02-05) |
 
-Anthropic and Google entries do not exist yet — required before Phase 4 (gptel
-multi-provider rework). See [[id:ai-providers][providers.org]] for the target credential
-architecture.
+=api/anthropic= was created during Phase 4 (user action) once gptel's
+multi-provider rework needed it. =api/gemini= remains intentionally absent —
+Google was explicitly skipped, see [[id:adr-gptel-rework][ADR-006]]. See [[id:ai-providers][providers.org]] for the full
+credential architecture.
 
 * Known environment issues
 :PROPERTIES:
@@ -140,3 +180,48 @@ architecture.
   including future agent tool calls. Not yet fixed — out of scope for this
   project unless it starts blocking an agent workflow (see
   [[id:ai-troubleshooting][troubleshooting.org]]).
+- The user's real Emacs daemon is launched by the systemd user session, not a
+  login shell, so it inherited systemd's bare =PATH= (missing
+  =~/.local/bin=, where =claude= lives) until Phase 7 fixed it by running
+  =doom sync --env= — see [[id:tshoot-daemon-path-systemd][troubleshooting.org]] and the lifecycle table above.
+  Fixed going forward for any new Emacs start; worth re-running =doom sync
+  --env= (or =M-x doom/reload-env= on an already-running daemon) any time a
+  new binary is added somewhere the daemon's environment wouldn't otherwise
+  pick up.
+
+* Reproduction checklist
+:PROPERTIES:
+:ID:       inv-reproduction-checklist
+:END:
+
+Not literally tested on a second machine (none available to this project) —
+this is a documentation-completeness pass, not an executed test. Given a
+fresh Ubuntu-like machine with Doom Emacs already bootstrapped against this
+=$DOOMDIR=, reaching this config's actual working state requires, in order:
+
+1. =doom sync= (picks up =packages.el=: gptel, copilot, claude-code-ide,
+   perfect-margin).
+2. Install prerequisites this project actually needed: =build-essential=
+   +=cmake= (for vterm's native module — see the lifecycle table above),
+   =npm=/=node= (for =copilot-language-server=, or accept the native-binary
+   fallback), the =claude= CLI (official installer), =pass=+=gpg= with a
+   trusted secret key already set up.
+2. Compile vterm's native module (=cmake= + =make=, see the recipe above) —
+   otherwise the first =(require 'vterm)= blocks on an interactive
+   compile-confirmation prompt with nowhere to go in a headless context (see
+   [[id:tshoot-vterm-module][troubleshooting.org]]).
+3. =M-x copilot-install-server= (in-Emacs, not a shell step).
+4. Create the =api/anthropic= and =api/openai= =pass= entries (manual,
+   deliberately never scriptable — see [[id:ai-providers][providers.org]]).
+5. Log in / authenticate the =claude= CLI itself (its own subscription login,
+   outside this repo's credential system — see [[id:ai-providers][providers.org]]'s two-tier
+   credential model).
+6. Run =doom sync --env= once, so a daemon started by something other than
+   an interactive shell (systemd, a display manager) still gets the right
+   =PATH= — see the "Known environment issues" entry above.
+7. =doom doctor=, confirm clean.
+
+Known gaps in this checklist, honestly: it's reasoned from what this project
+actually did on this one machine, not verified against a second one. Order
+dependencies between steps 2-5 haven't been individually stress-tested (e.g.
+whether =doom sync= must run before or after the =pass= entries exist).

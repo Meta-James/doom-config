@@ -276,3 +276,114 @@ during that call, not a crashed or infinite-looping daemon — kill it, then
 bisect the triggering call's internal steps individually in fresh daemons
 with short timeouts to find which one actually blocks, rather than re-running
 the same monolithic call and waiting out the same timeout repeatedly.
+
+* RESOLVED: real Emacs daemon's =PATH= (systemd-launched) lacked =~/.local/bin=, so =claude= wasn't found
+:PROPERTIES:
+:ID:       tshoot-daemon-path-systemd
+:END:
+:LOGBOOK:
+- Confirmed and fixed [2026-07-21 Tue], during Phase 7, reported directly by
+  the user as "Claude Code CLI not on PATH"
+:END:
+
+Distinct from [[id:tshoot-path-tilde][the literal-tilde =$PATH= issue]] above — this is a different
+mechanism with the same symptom class (a subprocess can't find a binary that
+the user's interactive shell can).
+
+*Diagnosis*: the user's real Emacs daemon (=ps= showed =/usr/bin/emacs
+--daemon=, PPID = =/usr/lib/systemd/systemd --user=, started 2026-07-20
+17:56:39) was launched by the systemd user session, not from a login shell.
+=/proc/<pid>/environ= showed its =PATH= as
+=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin=
+— systemd's bare default, missing =/home/james/.local/bin= entirely (where
+=claude= lives, per [[id:docs-inventory][inventory.org]]/Phase 0 discovery). Any subprocess or
+MCP tool launched from that daemon (including claude-code-ide.el trying to
+find the =claude= CLI) inherits this minimal PATH and fails to find it, even
+though the CLI is perfectly reachable from any interactive shell.
+
+*Why earlier structural verification didn't catch this*: [[id:adr-claude-code-ide-install][ADR-008]]'s Phase 6
+verification tested CLI detection in disposable =emacs --daemon=doom-phaseN-test=
+instances spawned directly from an interactive shell in an agent session —
+those inherit a full, correct =PATH= and passed cleanly. That was real
+verification of the detection *logic*, but not of the user's actual
+long-running daemon's *environment*, which is provisioned differently
+(systemd, not a shell). The gap wasn't a code bug; it was an environment
+difference between the test rig and the real target.
+
+*Root cause, more precisely*: Doom ships a dedicated fix for exactly this
+class of problem — =doom sync --env= scrapes the user's real interactive
+shell environment (via =$SHELL -ic env=) into a profile-scoped file
+(=<profile-dir>/init.d/05-doom-env.load.el=), which Doom's init sequence
+loads automatically on every subsequent =doom sync=/Emacs startup, and which
+can be reloaded into an *already-running* session with =M-x doom/reload-env=
+(no restart needed — see =~/.config/emacs/lisp/lib/config.el=). This had
+simply never been run on this machine: no =05-doom-env.load.el= existed
+anywhere under =~/.config/emacs/.local=. A stray, unrelated =~/.config/emacs/.local/env=
+file did exist (dated 2026-03-24, from some earlier one-off =doom env=
+invocation using an older/different output convention) but nothing loads
+that path — it was inert.
+
+*Fix*:
+#+BEGIN_SRC sh
+~/.config/emacs/bin/doom sync --env
+#+END_SRC
+Regenerated =05-doom-env.load.el= with the current shell's real =PATH=
+(confirmed via =grep= on the generated file: includes
+=/home/james/.local/bin=, and — unlike the stale 2026-03-and file — no
+literal-tilde entry this time). This alone fixes every *future* Emacs start
+(daemon or otherwise). To apply it to the *already-running* daemon without
+restarting it (preserving open buffers/frames), the user runs =M-x
+doom/reload-env= once in their live session; restarting Emacs works too but
+is unnecessary. The agent deliberately did not run this against the user's
+live daemon itself (via =emacsclient --eval=) — same standing caution as
+everywhere else in this project about not touching the user's real running
+session beyond read-only inspection.
+
+*Takeaway*: a headless/disposable test daemon spawned from an agent's own
+shell is not equivalent to the user's actual long-running daemon if that
+daemon was started by something other than an interactive shell (systemd
+user session, a display manager, =emacs --daemon= in an init script, etc.).
+"CLI detection works" verified in an isolated test daemon is evidence about
+the *code path*, not proof the *user's actual daemon* will behave the same —
+worth checking =ps -o pid,ppid,cmd= for the real daemon's parent and
+=/proc/<pid>/environ= for its actual PATH before treating a structural pass
+as equivalent to a live-environment pass.
+
+* CLARIFIED: "file references open from Emacs" was never a click-a-link feature
+:PROPERTIES:
+:ID:       tshoot-file-refs-mis-scoped
+:END:
+:LOGBOOK:
+- Clarified [2026-07-21 Tue], during Phase 9 acceptance testing — user tried
+  clicking file references in a live claude-code-ide.el session and found
+  nothing was clickable
+:END:
+
+The Phase 9 test plan asked the user to check whether a file reference
+appearing in the agent's chat/vterm output could be clicked to open it in
+Emacs. It couldn't — but source inspection shows this was never a real
+feature to begin with, not a regression or bug:
+
+- =claude-code-ide.el='s =openFile= handler
+  (=claude-code-ide-mcp-handle-open-file= in
+  =claude-code-ide-mcp-handlers.el=, registered against the MCP tool name
+  =openFile=) is an *MCP tool the running =claude= CLI process calls at its
+  own discretion* — Emacs exposes it as a capability the agent can invoke,
+  the agent decides when. There is no code path from "text the agent
+  printed" to "clickable button" anywhere in this package.
+- vterm itself (checked its elisp source) has no OSC-8/hyperlink handling
+  that would make arbitrary terminal text clickable either. Nothing on
+  either side of the integration implements the behavior the original
+  Phase 6 acceptance-test wording assumed.
+- The underlying mechanism *does* work, just not via clicking: it's the same
+  =find-file= plumbing behind claude-code-ide.el's automatic Ediff diff view
+  (=claude-code-ide-use-ide-diff=), already live-verified in Phase 7 — when
+  the agent edits a file, Emacs opens it for the diff review, driven by the
+  agent's own tool call, not a user click.
+
+*Takeaway*: the original acceptance-test wording ("file references open from
+Emacs") conflated two different things — a user-facing clickable-link
+affordance (doesn't exist) and an agent-initiated file-open capability (does
+exist, already exercised via Ediff). Write acceptance criteria against a
+verified mechanism, not an assumed one — this one should have been checked
+against source before being handed to the user to test by hand.

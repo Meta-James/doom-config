@@ -630,6 +630,11 @@ alone:
   it does mean the =treesit-info= MCP tool has no working grammars to draw on
   right now — compounded by the separate fact that no tree-sitter grammars
   (for any language) were installed on this machine before this check either.
+- CLI-detection claim below narrower than stated at the time: verified in
+  disposable test daemons spawned from an interactive shell, which isn't
+  equivalent to the user's actual systemd-launched daemon and its own,
+  separately-provisioned =PATH=. Found and fixed in Phase 7, see
+  [[id:tshoot-daemon-path-systemd][troubleshooting.org]].
 
 ** Rejected alternatives
 Starting a real, live claude-code-ide session (even against a disposable
@@ -704,3 +709,203 @@ depends on it.
   bypassing Doom's automatic installer, and place the =.so= files in
   =doom-profile-data-dir "tree-sitter"= by hand)
 - The user wants a real, supervised live-session test run
+
+* ADR-009: Technical enforcement of no-commit/no-push via Claude Code permissions
+:PROPERTIES:
+:ID:       adr-permission-enforcement
+:STATUS:   Accepted, implemented, live-verified
+:DATE:     2026-07-20
+:END:
+
+** Context
+AGENTS.md and [[id:std-no-commit][standards.org]]'s =std-no-commit= already state, as a hard
+instructional rule, that no agent working in this repo may commit, push,
+amend, rebase, reset, clean, or otherwise rewrite Git history without
+explicit, in-the-moment permission — the user remains responsible for
+commits and pushes, always ([[id:std-human-authority][std-human-authority]]). Until now this was
+*instructional only*. [[id:ai-architecture][docs/ai/architecture.org]] flagged this gap directly:
+"Enforcement should be technical (Claude Code permission settings/hooks)
+where available, not merely instructional." The Phase 6 live smoke test
+([[id:adr-claude-code-ide-install][ADR-008]]) found the agent behaved correctly, but noted explicitly that this
+was "behavioral only, no technical enforcement configured yet." This ADR
+closes that gap for Phase 7.
+
+** Decision drivers
+- The rule should hold regardless of which front end drives the =claude= CLI
+  in this repo — a direct terminal session, or claude-code-ide.el launched
+  from Emacs ([[id:adr-primary-agent][ADR-004]]) — both invoke the same binary against the same
+  project directory.
+- =std-human-authority= implies the agent should never run these commands at
+  all, not that it may run them after an in-session approval — the human
+  runs them directly via their own git/Magit.
+- Match the written rule's scope exactly; don't invent a broader security
+  posture nobody asked for ([[id:std-no-scope-creep][std-no-scope-creep]]).
+
+** Candidates
+| Candidate | Fate |
+|-----------+------------------------------------------------------------|
+| =permissions.deny= in a committed =.claude/settings.json= | Accepted |
+| =permissions.ask= (prompt-through) for the same commands | Rejected — lets the agent execute after approval, which is the wrong shape per =std-human-authority= |
+| =deny= plus a =PreToolUse= hook for audit logging | Rejected for now — =deny= alone already fully blocks execution with no prompt and no side effect; a hook only adds an audit trail, which nothing in the standards docs currently asks for. Easy to add later if wanted. |
+| Put the rule in =.claude/settings.local.json= instead | Rejected — that file is personal/uncommitted (holds ad hoc tool-approval history built up per-machine), not durable project policy; the enforcement needs to travel with the repo |
+
+** Evidence
+- =.claude/settings.local.json= exists but is untracked (=git ls-files
+  .claude/= showed only the =rules/*.md= files tracked before this change) —
+  confirms it's the wrong location for committed policy.
+- Confirmed via the current Claude Code permission-rule syntax: =Bash(<prefix>
+  *)= matches the literal prefix and anything after, including the bare
+  prefix with no trailing arguments (e.g. =Bash(git *)= matches =git=,
+  =git status=, =git commit=, etc.) — used to scope each deny rule to exactly
+  one subcommand plus all its arguments/flags.
+- Live-verified in this session: =git commit --dry-run -m "permission-test"=
+  (a no-side-effect command matching the =Bash(git commit *)= deny rule) was
+  refused outright — no permission prompt, no execution. Ordinary read-only
+  commands (=git status=, =git log=, =git diff --stat=) ran unaffected
+  immediately afterward.
+
+** Decision
+New, committed =.claude/settings.json=:
+#+begin_src json
+{
+  "permissions": {
+    "deny": [
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git rebase *)",
+      "Bash(git reset *)",
+      "Bash(git clean *)"
+    ]
+  }
+}
+#+end_src
+Scoped to exactly the five subcommands AGENTS.md names (commit including
+=--amend=, push including =--force=/=--force-with-lease=, rebase, reset,
+clean). Plain =git status=/=diff=/=log=/=add=/=stash= etc. are untouched.
+
+** Consequences
+- Both this direct CLI session and any future claude-code-ide.el session in
+  this repo are technically blocked from these five subcommands, not just
+  instructed against them.
+- The deny list is a prefix match against the literal command string, not a
+  full sandbox — a command that reaches =git commit= indirectly (e.g. wrapped
+  inside another interpreter invocation rather than a plain =Bash= tool call)
+  is not guaranteed to be caught. This is a known limitation of the
+  mechanism, not a gap specific to this config; matches the "technical where
+  available" framing in architecture.org rather than a claim of total
+  enforcement.
+- =docs/ai/architecture.org=, =docs/standards.org= (=std-no-commit=), and
+  =.claude/rules/security.md= updated to cross-reference this ADR so the
+  instructional rule and its technical backstop stay linked.
+
+** Rejected alternatives
+See Candidates table above.
+
+** Validation
+- =jq -e '.permissions.deny[]' .claude/settings.json= — valid JSON, all five
+  rules present.
+- =git commit --dry-run -m "permission-test"= — denied outright, no prompt.
+- =git status=/=git log --oneline -3=/=git diff --stat= — all ran normally,
+  confirming the deny list doesn't over-match read-only operations.
+
+** Rollback
+Delete =.claude/settings.json= (or remove the =permissions.deny= block). No
+other config depends on it; the instructional rule in AGENTS.md/
+standards.org/security.md remains in force on its own regardless.
+
+** Revisit when
+- The user wants an audit trail of blocked attempts (add a =PreToolUse= hook
+  alongside the existing deny rules).
+- A legitimate workflow needs one of these five subcommands run by the agent
+  under explicit, in-the-moment approval — if that ever happens, the fix is
+  a scoped, temporary edit to this file for that session, not a standing
+  =ask= rule.
+- Claude Code's permission-rule syntax changes in a way that could silently
+  narrow or widen what these patterns match.
+
+* ADR-010: Skill policy — scaffold ADR-writing only, defer the rest
+:PROPERTIES:
+:ID:       adr-skill-policy
+:STATUS:   Accepted, implemented
+:DATE:     2026-07-21
+:END:
+
+** Context
+[[id:ai-prompts][docs/ai/prompts.org]] is titled "Prompt, Memory, and *Skill* Management" but had
+no skill section yet — Phase 8 ([[id:docs-roadmap][roadmap.org]]) explicitly asks to "decide on a
+skill policy if repeatable workflows emerge." Looking back across Phases 4-7,
+three patterns were repeated by hand rather than tooled:
+1. Writing ADR entries (the 10-section structure in
+   =.claude/rules/documentation.md=) — done for ADR-006 through ADR-009, four
+   times.
+2. The disposable headless-daemon smoke-test pattern (=emacs
+   --daemon=doom-phaseN-test=, eval, verify, tear down) — Phases 4, 5, 6.
+3. The phase-closeout pattern (check a =PROJECT.org= box, update the
+   =docs/roadmap.org= table row, cross-reference =docs/ai/evaluation.org='s
+   checklist) — Phases 4, 5, 6, 7.
+
+** Decision drivers
+- =docs/decisions.org='s ADR convention is durable — it's meant to record
+  *any* future architectural decision in this repo, not just Phase 1 ones, so
+  tooling that keeps its structure consistent has value well past handoff.
+- The headless-daemon-test and phase-closeout patterns are specific to this
+  one-time, phased overhaul; [[id:docs-roadmap][roadmap.org]] shows Phase 9 (validation and
+  handoff) as the last phase, after which this repo returns to being a
+  regular, non-phased personal config. Building tooling for patterns unlikely
+  to recur at the same frequency violates [[id:std-no-scope-creep][std-no-scope-creep]].
+- User confirmed this trade-off directly rather than the agent inferring it.
+
+** Candidates
+| Candidate | Fate |
+|-----------+------------------------------------------------------------|
+| No skill at all; just document the policy | Rejected — leaves the one genuinely durable pattern (ADR-writing) unsupported |
+| Skill for all three repeated patterns | Rejected — over-builds for two patterns tied to a one-time phased project, not ongoing repo use |
+| Skill for ADR-writing only | *Accepted* — matches the one pattern with a life past Phase 1 |
+
+** Evidence
+- =grep -n "^\* ADR-" docs/decisions.org= confirms four hand-written ADRs
+  (006-009) all independently reproducing the same 10-section shape.
+- =docs/roadmap.org='s Phase 1 table lists Phase 9 as the final phase; no
+  future phase is named that would repeat the headless-daemon-test or
+  phase-closeout patterns at comparable frequency.
+
+** Decision
+Added =.claude/skills/new-adr/SKILL.md= — a project-scoped Claude Code skill
+(invoked as =/new-adr=) that scaffolds the next ADR number, a descriptive
+kebab-case =:ID:=, and all 10 required sections into =docs/decisions.org=,
+matching the exact structure and cross-linking conventions this file and
+=.claude/rules/documentation.md= already require. No skill built for the
+other two patterns.
+
+** Consequences
+- Future architectural decisions in this repo (Phase 1 or beyond) get
+  consistent structure without hand-copying an existing entry as a template.
+- The skill needs updating if the required ADR structure itself changes.
+- No tooling exists yet for the headless-daemon-test or phase-closeout
+  patterns; if either recurs, it'll again be done by hand until/unless the
+  Revisit condition below triggers.
+
+** Rejected alternatives
+See Candidates table above.
+
+** Validation
+- Frontmatter of =.claude/skills/new-adr/SKILL.md= parsed as well-formed
+  (=name=/=description= keys present, YAML block correctly delimited).
+- *Not yet live-verified*: invoking =/new-adr= requires a fresh session (new
+  skills aren't picked up mid-session, same watcher caveat as
+  =.claude/settings.json= hooks — see [[id:adr-permission-enforcement][ADR-009]]'s validation notes on that
+  mechanism). Structural review of the instructions against ADR-008/ADR-009's
+  actual shape is the check available in this session.
+
+** Rollback
+Delete =.claude/skills/new-adr/=. Nothing else in this repo depends on it;
+ADRs can still be written by hand per =.claude/rules/documentation.md=.
+
+** Revisit when
+- The headless-daemon-test or phase-closeout pattern recurs three or more
+  times after Phase 9 handoff — build a skill for whichever one actually
+  repeats, not both preemptively.
+- A future session confirms =/new-adr= live end-to-end and finds the
+  scaffolded structure needs adjustment.
+- Claude Code's skill format (frontmatter schema, =SKILL.md= discovery rules)
+  changes in a way that could break this skill silently.

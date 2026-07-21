@@ -21,7 +21,9 @@ changes, don't re-derive architecture from scratch. `docs/roadmap.org` and
 - Never commit. Never push. Never amend/rebase/reset/clean/rewrite history
   without explicit in-the-moment permission. Read-only git commands and diffs
   are fine. At a stable checkpoint, say the tree is ready for the user to review
-  and commit — don't do it yourself.
+  and commit — don't do it yourself. Enforced technically for Claude Code via
+  `.claude/settings.json`, not just stated here — see `docs/decisions.org`
+  ADR-009.
 - Never hardcode, print, log, or commit secret values. Credential entry *names*
   are fine to reference; values never are. See `docs/ai/providers.org` for the
   credential architecture.
@@ -45,3 +47,8 @@ changes, don't re-derive architecture from scratch. `docs/roadmap.org` and
 - `docs/decisions.org` — why things are the way they are, and when to revisit
 - `docs/ai/troubleshooting.org` — known issues and their fixes, before treating a
   symptom as new
+- `docs/ai/architecture.org` — how chat, completion, agentic coding, and review
+  fit together, and where enforcement is technical vs. instructional
+- `docs/ai/workflows.org` — the one default, documented workflow per
+  responsibility (chat, focused transform, completion, agentic coding, review),
+  with the actual keybindings in `docs/ai/keybindings.org`

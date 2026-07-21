@@ -54,7 +54,8 @@ CLOSED: [2026-07-20 Mon]
 - [X] .claude/rules/documentation.md
 - [X] prompts/phase-01-ai-integration.md (moved from repo root)
 
-** IN-PROGRESS Phase 4 — Chat and focused assistance
+** DONE Phase 4 — Chat and focused assistance
+CLOSED: [2026-07-20 Mon]
 :PROPERTIES:
 :EFFORT:   2h
 :END:
@@ -70,9 +71,9 @@ CLOSED: [2026-07-20 Mon]
   dead-code bug in the original reclamation ([[file:docs/ai/troubleshooting.org][troubleshooting.org]])
 - [X] Verify backend/model/credential/keybinding wiring via isolated headless
   daemon
-- [ ] Test in the user's own interactive session: streaming, cancellation,
-  popup behavior, Org-buffer chat UX, network-down behavior (needs Emacs
-  restart — see [[file:docs/decisions.org][decisions.org]] "Known gaps after Phase 4")
+- [X] Test in the user's own interactive session: streaming, cancellation,
+  popup behavior, Org-buffer chat UX, network-down behavior — user confirmed
+  all working
 
 ** DONE Phase 5 — Inline completion
 CLOSED: [2026-07-20 Mon]
@@ -89,8 +90,8 @@ CLOSED: [2026-07-20 Mon]
   compatible (min server 1.434.0, installed 1.452.0), enabled, keymap
   fallthrough verified
 - [X] Removed a redundant no-op =:bind= block in =config.el=
-- [ ] Still needs the user's own interactive/authenticated session: an actual
-  live suggestion/NES-edit appearing and being accepted against real output
+- [X] User's own interactive/authenticated session: a live suggestion/NES-edit
+  appeared and was accepted — user confirmed it worked nicely
 
 ** DONE Phase 6 — Primary agentic workflow
 CLOSED: [2026-07-20 Mon]
@@ -111,25 +112,60 @@ CLOSED: [2026-07-20 Mon]
 - [ ] Remote/TRAMP test against an Armbian/SBC target — needs actual remote
   hardware not available to this agent; only genuinely deferred item
 
-** TODO Phase 7 — Review, permissions, safety
+** DONE Phase 7 — Review, permissions, safety
+CLOSED: [2026-07-21 Tue]
 :PROPERTIES:
 :EFFORT:   1h
 :END:
-- [ ] Confirm Ediff review path end-to-end
-- [ ] Look for Claude Code permission/hook mechanisms to enforce no-commit/no-push
-  technically
+- [X] Confirm Ediff review path end-to-end — user ran the live test script
+  (real session, multi-hunk diff, Ediff accept/reject/edit, Magit accuracy,
+  diagnostics and tests re-run from Emacs, rollback) after fixing the
+  daemon-PATH issue found along the way ([[id:tshoot-daemon-path-systemd][troubleshooting.org]]) via =M-x
+  doom/reload-env=. See [[file:docs/ai/evaluation.org][evaluation.org]] "Review (Phase 7)" checklist, all
+  checked.
+- [X] Look for Claude Code permission/hook mechanisms to enforce no-commit/no-push
+  technically — implemented via a committed =.claude/settings.json=
+  =permissions.deny= list blocking =git commit=/=push=/=rebase=/=reset=/=clean=
+  outright, live-verified. See [[id:adr-permission-enforcement][ADR-009]] in [[file:docs/decisions.org][decisions.org]].
 
-** TODO Phase 8 — Prompts, memory, skills
+** DONE Phase 8 — Prompts, memory, skills
+CLOSED: [2026-07-21 Tue]
 :PROPERTIES:
 :EFFORT:   1h
 :END:
-- [ ] Finalize =CLAUDE.md=/=AGENTS.md= once Phase 4-6 commands exist to document
-- [ ] Decide on a skill policy if repeatable workflows emerge
+- [X] Finalize =CLAUDE.md=/=AGENTS.md= once Phase 4-6 commands exist to
+  document — added =docs/ai/architecture.org=/=workflows.org= pointers and an
+  ADR-009 cross-reference to =AGENTS.md='s "Where to look first"/Hard rules;
+  both files stay well under the 200-line policy (54 + 15 lines). =CLAUDE.md=
+  needed no changes.
+- [X] Decide on a skill policy if repeatable workflows emerge — user chose to
+  build a lightweight ADR-scaffold skill (=.claude/skills/new-adr/=, =/new-adr=)
+  since =decisions.org='s convention outlasts Phase 1; deferred tooling for
+  the headless-daemon-test and phase-closeout patterns as Phase-1-specific.
+  See [[id:adr-skill-policy][ADR-010]] in [[file:docs/decisions.org][decisions.org]] and the new "Skill policy" section in
+  [[file:docs/ai/prompts.org][prompts.org]].
 
-** TODO Phase 9 — Validation and handoff
+** DONE Phase 9 — Validation and handoff
+CLOSED: [2026-07-21 Tue]
 :PROPERTIES:
 :EFFORT:   1h
 :END:
-- [ ] Run all acceptance tests in [[file:docs/ai/evaluation.org][docs/ai/evaluation.org]]
-- [ ] Final docs pass
-- [ ] Clean diff presented for user commit
+- [X] Run all acceptance tests in [[file:docs/ai/evaluation.org][docs/ai/evaluation.org]] — every item
+  realistically testable from this project's own position is now checked
+  (retroactive closures from earlier user confirmations, structural/source-
+  based reasoning where live-testing wasn't feasible, one fresh headless
+  test for Org-Agenda compatibility, and a re-run ID/link integrity check —
+  69 IDs, 0 duplicates, 0 broken links). User then live-tested the last two
+  testable items: interrupting the agent (works) and clicking file
+  references in chat output (never a real feature to begin with — see
+  [[id:tshoot-file-refs-mis-scoped][troubleshooting.org]]). Three items remain unchecked, all genuinely
+  hardware-gated (remote/TRAMP, a second machine, disconnecting this
+  machine's network) — nothing left that's actually actionable.
+- [X] Final docs pass — refreshed several stale claims found along the way
+  (credential-state table, Phase 4/5 "not yet verified" notes that were
+  actually already confirmed, evaluation.org's Phase-3-era intro line),
+  fleshed out =inventory.org='s binary lifecycle/reproduction-checklist
+  gaps, and re-validated ID/link integrity across the whole tree.
+- [X] Clean diff presented for user commit — =git status=/=git diff=
+  reviewed, nothing unintended, no secret values present. Ready for your
+  review.

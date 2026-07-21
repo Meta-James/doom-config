@@ -69,6 +69,10 @@ method, and rollback/removal method.
 - Read-only Git commands and diffs are always fine.
 - At stable checkpoints, state plainly that the tree is ready for the user to
   inspect and commit — don't do it for them.
+- Backed technically, not just instructionally: a committed
+  =.claude/settings.json= =permissions.deny= list blocks =git
+  commit=/=push=/=rebase=/=reset=/=clean= outright for any Claude Code
+  session in this repo. See [[id:adr-permission-enforcement][ADR-009]].
 
 * Credentials
 :PROPERTIES:

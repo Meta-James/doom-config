@@ -60,8 +60,8 @@ Gemini not configured — explicit user decision, not an oversight.
   =api/gemini= pass entry if this is wanted later; the pattern is identical to
   the Anthropic/OpenAI setup above.
 - Streaming visuals, cancellation, popup placement, and Org-buffer chat UX were
-  *not* verified in Phase 4 — those require an interactive session, and Phase 4
-  validation used a headless daemon. See [[id:ai-evaluation][evaluation.org]] for what's still open.
+  not verified during Phase 4 itself (headless daemon only) — since confirmed
+  by the user in their own interactive session; see [[id:ai-evaluation][evaluation.org]].
 - The credential values themselves were never read by the agent doing this
   work beyond confirming they're non-empty strings of plausible length (108
   and 164 characters respectively) — this document intentionally doesn't (and

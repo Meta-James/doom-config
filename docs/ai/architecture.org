@@ -74,9 +74,11 @@ No secondary agentic-coding frontend — see [[id:adr-agent-shell-rejected][ADR-
 - *Provider*: gptel's backend/model choice is explicit via =gptel-menu=; no silent
   fallback between providers.
 - *Review*: agent proposes → Ediff/Magit surfaces the diff → per-hunk accept/reject
-  → nothing is committed by the agent. Enforcement should be technical (Claude
-  Code permission settings/hooks) where available, not merely instructional — see
-  [[id:std-no-commit][standards.org]] and Phase 7 in [[id:docs-roadmap][roadmap.org]].
+  → nothing is committed by the agent. Enforcement is technical, not merely
+  instructional: a committed =.claude/settings.json= =permissions.deny= list
+  blocks =git commit=/=push=/=rebase=/=reset=/=clean= outright for any Claude
+  Code session in this repo — see [[id:adr-permission-enforcement][ADR-009]], [[id:std-no-commit][standards.org]], and Phase 7 in
+  [[id:docs-roadmap][roadmap.org]].
 - *Credentials*: two-tier — the CLI agent uses its own subscription login;
   gptel/API-based tools use per-provider tokens from =pass= via Doom's =:tools
   pass=, never hardcoded. See [[id:ai-providers][providers.org]].

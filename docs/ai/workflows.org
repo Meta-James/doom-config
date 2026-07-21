@@ -20,9 +20,20 @@ is Anthropic (=claude-sonnet-5=); switch provider/model/directive via
 add region/buffer/project-files/diagnostics as background context (no response
 triggered) with =SPC a a=/=SPC a d=. Org-mode is the default gptel buffer mode,
 so chat transcripts are themselves Org and can be saved/linked like any other
-document. Live-verified (headless daemon): backend/model/credentials all wire
-up correctly. Not yet verified: actual streaming/cancellation/popup behavior in
-a real interactive session — see [[id:ai-evaluation][evaluation.org]].
+document. Live-verified, both structurally (headless daemon: backend/model/
+credentials wire up correctly) and interactively (user-confirmed: streaming,
+cancellation, popup behavior, Org-buffer UX, and network-down behavior all
+work) — see [[id:ai-evaluation][evaluation.org]].
+
+*Chat history/privacy*: gptel doesn't maintain its own persistent chat log —
+a chat buffer is an ordinary Org buffer that exists only in Emacs' memory
+until the user explicitly saves it (=C-x C-s= to some file), exactly like any
+other unsaved Org buffer. Nothing is written to disk automatically, and
+nothing syncs anywhere beyond the configured provider (Anthropic/OpenAI) the
+message content is sent to for a response — no separate logging layer this
+project added. If the user wants a durable, searchable chat history, that's a
+deliberate choice (save transcripts under some directory) rather than
+something this config does implicitly.
 
 * Focused transform (implemented — Phase 4)
 :PROPERTIES:
@@ -47,8 +58,24 @@ Company, then ordinary indent/yasnippet behavior. =copilot-nes-mode= is now
 also enabled on =prog-mode=, giving genuine multi-location Next Edit
 Suggestions (=textDocument/copilotInlineEdit=) alongside regular cursor-
 -position completions. Precedence is live-verified (simulated overlay in an
-isolated daemon, not assumed) — see [[id:adr-copilot-nes][ADR-007]] and [[id:ai-keybindings][keybindings.org]] for the
-full chain, including the yasnippet-overlap edge case.
+isolated daemon, not assumed), and the user has since confirmed a real
+suggestion/NES-edit appearing and being accepted in their authenticated
+session — see [[id:adr-copilot-nes][ADR-007]] and [[id:ai-keybindings][keybindings.org]] for the full chain, including the
+yasnippet-overlap edge case.
+
+*Network/offline behavior*: suggestion and NES requests
+(=textDocument/inlineCompletion=, =getPanelCompletions=, etc.) go through
+=copilot--async-request= → =jsonrpc-async-request= — genuinely asynchronous,
+not a blocking call on the main thread. Read directly from source
+(=copilot.el=): a network failure fails that one async callback, it doesn't
+block typing or freeze Emacs. Not separately live-tested against an actual
+severed connection.
+
+*Remote (TRAMP) buffers*: copilot.el's source has no TRAMP-specific handling
+at all (checked — no =tramp=/=remote= references outside an unrelated MCP
+config example). Behavior on a remote-visited buffer is genuinely unverified
+here, not just untested-but-presumed-fine; upstream doesn't appear to have
+designed for it. Treat as unsupported until someone actually tries it.
 
 * Full agentic coding (installed, wired, and live-verified — Phase 6)
 :PROPERTIES:
