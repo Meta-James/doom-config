@@ -171,6 +171,22 @@
 
 (map! :leader :desc "Project vterm" "p t" #'my/project-vterm)
 
+;; vterm doesn't repaint reliably when its window is resized while it's not
+;; the selected window (a known vterm/libvterm bug class — Doom's own core
+;; carries a narrower hack for a different trigger of the same family, see
+;; term/vterm/autoload.el's "Force vterm to redraw" comment). Any
+;; bottom-appearing popup (which-key, vterm popups themselves) reclaims frame
+;; lines from existing windows, so a vterm window elsewhere in the layout
+;; (claude-code-ide's session, my/project-vterm, Doom's built-in terminal
+;; popup) gets resized as a side effect and ends up visually corrupted until
+;; manually resized to force a clean redraw. Freezing vterm windows' height
+;; against automatic layout changes avoids triggering the bug in the first
+;; place. Trade-off accepted: this also blocks Evil's manual window-resize
+;; commands (C-w +/-/</>, C-w =) on vterm windows, not just automatic
+;; rebalancing — acceptable since these windows are rarely resized on
+;; purpose.
+(add-hook! 'vterm-mode-hook (setq-local window-size-fixed 'height))
+
 (after! envrc
   (envrc-global-mode))
 

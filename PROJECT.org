@@ -169,3 +169,26 @@ CLOSED: [2026-07-21 Tue]
 - [X] Clean diff presented for user commit — =git status=/=git diff=
   reviewed, nothing unintended, no secret values present. Ready for your
   review.
+
+* Backlog (untimed, not tied to a phase)
+
+** TODO Migrate claude-code-ide.el's terminal backend from vterm to ghostel
+User intends to eventually switch =claude-code-ide-terminal-backend= from
+='vterm= to ='ghostel= (an embedded-Ghostty backend claude-code-ide.el
+already supports alongside =vterm=/=eat=, see =claude-code-ide.el:226-234=).
+Not implemented yet — =ghostel= isn't installed and its resize/redraw
+behavior is unverified. Interim fix for the vterm resize-repaint bug that
+motivated this is the =window-size-fixed= freeze in =config.el= (2026-08-07,
+see the =vterm-mode-hook= comment there).
+
+Before switching:
+- Confirm =ghostel= is still maintained and =ghostel-exec= is available
+  (package install needs explicit approval per =AGENTS.md=).
+- =my/project-vterm= and Doom's built-in terminal popup (=:term vterm= in
+  =init.el=) are hard-wired to =vterm= directly — decide whether to migrate
+  those too or accept running two terminal packages side by side (cuts
+  against =AGENTS.md='s "one tool per responsibility" rule if left
+  unresolved).
+- Re-evaluate whether the =window-size-fixed= freeze is still needed
+  afterward, or can be scoped down / removed if =ghostel= doesn't share
+  vterm's redraw bug.
