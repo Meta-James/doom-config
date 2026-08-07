@@ -211,7 +211,7 @@ Any future phase wants to reintroduce Embark or another "apps"-style prefix.
 * ADR-004: claude-code-ide.el as the sole primary agentic-coding frontend
 :PROPERTIES:
 :ID:       adr-primary-agent
-:STATUS:   Accepted (not yet implemented)
+:STATUS:   Accepted, implemented, live-verified
 :DATE:     2026-07-20
 :END:
 
@@ -258,8 +258,13 @@ exist — "Aider is popular" is explicitly not sufficient per this project's own
 anti-goals.
 
 ** Validation
-Not yet — implementation is Phase 6. Acceptance criteria are in
-[[id:ai-evaluation][evaluation.org]].
+Phase 6 complete ([[id:project-root][PROJECT.org]]): package installed, CLI detection verified,
+tree-sitter MCP tool confirmed working on this Emacs 30.1 build, and a full
+live workflow (plan → edit → test → diff → no commit) run in the user's own
+session against a disposable scratch project — seeded bug found and fixed,
+tests run, no git actions taken, clean teardown. Only the Remote/TRAMP
+sub-item remains deferred, for lack of hardware, not lack of implementation.
+Acceptance criteria in [[id:ai-evaluation][evaluation.org]].
 
 ** Rollback
 Package removal via =packages.el= + =doom sync= if it doesn't work out; nothing
