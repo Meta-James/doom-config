@@ -99,6 +99,10 @@ summary, not a duplicate to keep in sync by hand:
 | codex   | no      | not installed                              |
 | aider   | no      | not installed                              |
 | gh      | no      | not installed                              |
+| mu / mu4e | yes   | =/usr/bin/mu=, =1.10.8= (apt =maildir-utils=/=mu4e=) — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
+| mbsync (isync) | yes | =/usr/bin/mbsync=, isync =1.4.4-5build3= — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
+| msmtp   | yes     | =/usr/bin/msmtp=, =1.8.24= — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
+| oama    | yes     | ~/.local/bin/oama, =0.22.0 - 2025-08-29=, precompiled release binary (no apt package) — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
 
 Node 18.19.1 initially looked like a possible blocker for
 =copilot-language-server=. Resolved in Phase 5: this install actually uses the
@@ -129,6 +133,10 @@ the AI subsystem, not a full machine audit).
 | =claude= (Claude Code CLI)  | Backs claude-code-ide.el's agentic session ([[id:adr-primary-agent][ADR-004]]) | Official native installer (=curl -fsSL https://claude.ai/install.sh \vert bash=); lands in =~/.local/share/claude/versions/<ver>=, symlinked from =~/.local/bin/claude= | Self-updates in place (=claude update=, or automatic) — confirmed two versions present on disk (2.1.215, 2.1.216), so an update already happened mid-project without manual reinstall | Delete =~/.local/share/claude= and the =~/.local/bin/claude= symlink; remove the =claude-code-ide= package declaration from =packages.el= and =doom sync= |
 | =@github/copilot-language-server= (via =node=/=npm=) | LSP-protocol backend for =copilot.el='s suggestions and NES ([[id:adr-copilot-nes][ADR-007]]) | =M-x copilot-install-server= (fully in-Emacs, reproducible — reads source: uses npm when found on =PATH=, else downloads precompiled native binaries directly, no manual shell step either way) | =M-x copilot-install-server= again re-installs current/latest | Delete =copilot-install-dir= (Copilot's own package-managed install dir); remove =copilot= from =packages.el= and =doom sync= |
 | =cmake=, =make=, =gcc= (=build-essential=) | Build toolchain to compile vterm's native module (=vterm-module.so=) — discovered as a genuine missing prerequisite during Phase 6, see [[id:tshoot-vterm-module][troubleshooting.org]] | =sudo apt install build-essential cmake= (already present on this machine when checked; not installed by this project) | Standard =apt= upgrade | Standard =apt remove=; unrelated to whether vterm itself stays installed |
+| =mu=/=mu4e= | mu4e's indexer + the mu4e elisp package itself (mu4e is *not* straight-managed — deliberately, per the module's own source comment, since it's "prone to breaking updates" and bundled with =mu=) — [[id:adr-email-mu4e][ADR-011]] | =sudo apt install maildir-utils mu4e= — done 2026-07-29 (user's own terminal, sudo denied to the agent by auto-mode's classifier) | Standard =apt= upgrade | Standard =apt remove=; also remove =(mu4e ...)= from =init.el='s =:email= block and =doom sync= |
+| =isync= (=mbsync=) | IMAP sync backend for all 3 mail accounts — [[id:adr-email-mu4e][ADR-011]] | =sudo apt install isync= — done 2026-07-29 | Standard =apt= upgrade | Standard =apt remove=; delete =~/.mbsyncrc= |
+| =msmtp= | SMTP send backend, recommended by the mu4e module over raw =smtpmail= for multi-account setups — [[id:adr-email-mu4e][ADR-011]] | =sudo apt install msmtp= — done 2026-07-29 | Standard =apt= upgrade | Standard =apt remove=; delete =~/.msmtprc= |
+| =oama= | OAuth2 access-token manager for the 2 Gmail accounts' XOAUTH2/OAUTHBEARER refresh cycle, called from =.mbsyncrc=/=.msmtprc= — [[id:adr-email-mu4e][ADR-011]] | Downloaded =oama-0.22.0-Linux-x86_64.tar.gz= from =github.com/pdobsan/oama/releases= (no apt package — this repo's first externally-sourced static binary), extracted =oama= to =~/.local/bin= | Re-download a newer release tarball and overwrite =~/.local/bin/oama= — no auto-update mechanism | Delete =~/.local/bin/oama= and =~/.config/oama/=, =~/.local/state/oama/= |
 
 *vterm-module build, done once during Phase 6* (not shell-history-only — the
 exact commands are captured in [[id:tshoot-vterm-module][troubleshooting.org]] and reproducible on any
@@ -157,15 +165,17 @@ user's real shell.
 
 No secret values recorded here or anywhere in this repo — entry names only.
 
-| Store  | Entries present (2026-07-21) |
+| Store  | Entries present (2026-08-05) |
 |--------+--------------------------------|
-| pass   | =api/anthropic=, =api/openai= (confirmed via =pass ls=) |
-| gpg    | one ultimate-trust secret key (created 2026-02-05) |
+| pass   | =api/anthropic=, =api/openai= (confirmed via =pass ls=, 2026-07-21). Phase 2 ([[id:adr-email-mu4e][ADR-011]]): =mail/oauth2-google-client= *confirmed present* (via =pass ls mail=, 2026-08-05), backing the now fully-implemented =personal=/=ualberta= accounts. =mail/tricca= *still not created* — =jcook@tricca.ca= email is therefore *not implemented*, blocked on circumstances outside the user's control (as of 2026-08-05); work is paused here for other priorities as of 2026-08-07, not actively chased. A manual, never-scripted user action once unblocked |
+| gpg    | one ultimate-trust secret key (created 2026-02-05, ID =859AF991C9EA4396=), reused as oama's GPG backend key rather than minting a second one |
+| oama (GPG-backed, own store at =~/.local/state/oama=) | Holds per-address OAuth2 refresh/access tokens for the 2 Gmail accounts. Authorized 2026-07-29, live-verified 2026-08-05 morning, then *both went invalid the same afternoon* — =oama access <address>= returned =getEmailAuth: InvalidGrant= for both =mrniceguyjames@gmail.com= and =jcook@ualberta.ca=, exactly 7 days after authorization, consistent with a "Testing" consent-screen 7-day refresh-token cap. *2026-08-06:* user re-=authorize=d both and published the OAuth consent screen (Testing → In production, unverified) to fix the root cause; =oama access <address>= confirmed exit 0 for both immediately after. Durability past the old ~7-day mark (~2026-08-13) not yet confirmed by elapsed time — see [[id:adr-email-mu4e][ADR-011]] Validation/Revisit when. Token output never printed at any point in this diagnosis |
 
 =api/anthropic= was created during Phase 4 (user action) once gptel's
 multi-provider rework needed it. =api/gemini= remains intentionally absent —
 Google was explicitly skipped, see [[id:adr-gptel-rework][ADR-006]]. See [[id:ai-providers][providers.org]] for the full
-credential architecture.
+credential architecture, and [[id:adr-email-mu4e][ADR-011]] for the mail-specific
+=pass=/=oama= split.
 
 * Known environment issues
 :PROPERTIES:

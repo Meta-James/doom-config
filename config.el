@@ -338,6 +338,60 @@ region/buffer/project-file context already."
        :desc "Agent (Claude Code)"    "g" #'claude-code-ide-menu
        :desc "Project vterm"          "t" #'my/project-vterm))
 
+;; Email: mu4e (+org +gmail +mbsync). Sync via mbsync (isync), send via
+;; msmtp. Credentials never live here: the plain-password account resolves
+;; via `pass show mail/<label>`, the two Google-backed accounts (one
+;; consumer Gmail, one UAlberta Google Workspace) via `oama access <address>`
+;; (oama manages the XOAUTH2 refresh cycle pass alone can't do).
+;; See docs/decisions.org for the Email ADR and docs/ai/providers.org-style
+;; credential map, and ~/.mbsyncrc / ~/.msmtprc for the actual PassCmd /
+;; passwordeval wiring (outside the repo, chmod 600).
+;; The leader binding is Doom's own default: `SPC o m' / `=mu4e', `SPC o M c'
+;; to compose -- no custom map! needed here.
+(with-eval-after-load 'mu4e
+  (setq sendmail-program (executable-find "msmtp")
+        send-mail-function #'smtpmail-send-it
+        message-sendmail-f-is-evil t
+        message-sendmail-extra-arguments '("--read-envelope-from")
+        message-send-mail-function #'message-send-mail-with-sendmail
+        ;; ualberta.ca is Google Workspace, not @gmail.com/a "gmail" maildir
+        ;; name, so the +gmail flag's address/maildir matching wouldn't catch
+        ;; it on its own -- list it explicitly so it still gets the Gmail
+        ;; IMAP integrations (labels-as-folders, auto-expunge handling).
+        +mu4e-gmail-accounts '(("jcook@ualberta.ca" . "/ualberta"))
+        ;; Background fetch; per-account maildirs are under ~/.mail/<label>/.
+        mu4e-update-interval 60))
+
+(set-email-account! "personal"
+  '((mu4e-sent-folder    . "/personal/[Gmail]/Sent Mail")
+    (mu4e-drafts-folder  . "/personal/[Gmail]/Drafts")
+    (mu4e-trash-folder   . "/personal/[Gmail]/Trash")
+    (mu4e-refile-folder  . "/personal/[Gmail]/All Mail")
+    (smtpmail-smtp-user  . "mrniceguyjames@gmail.com")
+    (user-mail-address   . "mrniceguyjames@gmail.com")
+    (smtpmail-smtp-server . "smtp.gmail.com"))
+  t) ;; default account -- confirm this is the intended default
+
+(set-email-account! "ualberta"
+  '((mu4e-sent-folder    . "/ualberta/[Gmail]/Sent Mail")
+    (mu4e-drafts-folder  . "/ualberta/[Gmail]/Drafts")
+    (mu4e-trash-folder   . "/ualberta/[Gmail]/Trash")
+    (mu4e-refile-folder  . "/ualberta/[Gmail]/All Mail")
+    (smtpmail-smtp-user  . "jcook@ualberta.ca")
+    (user-mail-address   . "jcook@ualberta.ca")
+    (smtpmail-smtp-server . "smtp.gmail.com")))
+
+(set-email-account! "tricca"
+  '((mu4e-sent-folder    . "/tricca/Sent")
+    (mu4e-drafts-folder  . "/tricca/Drafts")
+    (mu4e-trash-folder   . "/tricca/Trash")
+    (mu4e-refile-folder  . "/tricca/Archive")
+    (smtpmail-smtp-user  . "jcook@tricca.ca")
+    (user-mail-address   . "jcook@tricca.ca")
+    (smtpmail-smtp-server . "mail.gandi.net")
+    (smtpmail-smtp-service . 465)
+    (smtpmail-stream-type  . ssl)))
+
 ;; Inline completion: Copilot overlay + Next Edit Suggestions.
 ;; TAB/C-TAB below are copilot.el's own default bindings (`copilot-completion-map'
 ;; and `copilot-nes-mode-map'), not re-bound here -- both are activated via

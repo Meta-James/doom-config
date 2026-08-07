@@ -28,6 +28,35 @@ is named so later phases stay compatible with it, not implemented now.
 
 See [[id:ai-architecture][docs/ai/architecture.org]] for the Phase 1 subsystem design.
 
+* Phase 2 — Email integration (paused — personal/ualberta live, tricca not implemented)
+:PROPERTIES:
+:ID:       roadmap-phase-2
+:END:
+
+Three accounts via Doom's =:email mu4e= module: =mrniceguyjames@gmail.com=
+(consumer Gmail), =jcook@ualberta.ca= (Google Workspace for Education — not
+literally =@gmail.com=, but same OAuth2/oama mechanism), =jcook@tricca.ca=
+(Gandi Mail, plain password). See [[id:adr-email-mu4e][ADR-011]] for the full decision record.
+
+*Status as of 2026-08-07:* =personal= and =ualberta= are fully implemented
+— synced, indexed, and self-send-verified. =jcook@tricca.ca= is *not
+implemented*: scaffolding exists in =config.el=/=~/.mbsyncrc=/=~/.msmtprc=
+but no credential, sync, index, or verification. Blocked throughout on the
+external =mail/tricca= pass-entry circumstance (not an in-repo or
+agent-side blocker). Work is pausing here for now for other priorities,
+not because =tricca= is expected imminently — see [[id:adr-email-mu4e][ADR-011]] Revisit when for
+the exact resume steps.
+
+| Sub-phase                     | Status      | Notes |
+|--------------------------------+-------------+----------------------------------------------------------------|
+| 0 — Architecture and plan      | DONE        | Client/backend/credential decisions locked in, see [[id:adr-email-mu4e][ADR-011]] |
+| 1 — Scaffolding                | IN PROGRESS | =init.el= enabled, =doom sync= clean, =config.el= mu4e section added, =~/.mbsyncrc=/=~/.msmtprc=/=oama= config.yaml scaffolded with placeholders (chmod 600), =oama= binary installed |
+| 2 — System packages             | DONE        | =maildir-utils=/=mu4e=/=isync=/=msmtp= installed (user's terminal, sudo blocked for the agent); =doom doctor= now fully clean, both mail-binary warnings gone |
+| 3 — Credentials                 | DONE for =personal=/=ualberta=; =tricca= not implemented | Google Cloud OAuth2 client registration + consent screen: =mail/oauth2-google-client= pass entry exists, =~/.config/oama/config.yaml= correctly sources it via =client_id_cmd=/=client_secret_cmd= (no raw secret in the file). *Regression found 2026-08-05, resolved 2026-08-06:* both =personal= and =ualberta= refresh tokens went invalid 7 days after their 2026-07-29 authorization (=getEmailAuth: InvalidGrant=), matching ADR-011's "Testing consent-screen caps refresh tokens at 7 days" revisit condition. User re-authorized both and published the OAuth consent screen (Testing → In production, unverified) to fix the root cause; =oama access <address>= confirmed exit 0 for both immediately after, and held stable through a full =ualberta= resync + self-send test on 2026-08-07. *Not yet fully closed:* durability unproven until a token survives past the old ~7-day mark (~2026-08-13) — see [[id:adr-email-mu4e][ADR-011]] Revisit when. =mail/tricca= pass entry *not created* — blocked on circumstances outside the user's control as of 2026-08-05, work paused here for now |
+| 4 — Real account details        | DONE        | Real addresses in place in =config.el=/=.mbsyncrc=/=.msmtprc= (labels =personal=/=ualberta=/=tricca=, default =personal=). Gmail folder names for =personal= and (as of 2026-08-07) =ualberta= confirmed correct against their real IMAP listings, via their completed syncs (see sub-phase 5); =tricca=/Gandi folder names still unconfirmed (sync blocked) |
+| 5 — Sync/index/verification     | DONE for =personal=/=ualberta=; =tricca= blocked | =personal=: =mbsync= run clean, exit 0, real folder structure landed (~22k messages) — this had already happened 2026-07-29 without being recorded here. =ualberta=: *complete as of 2026-08-07* — resumed sync (no timeout wrapper this time) ran past the earlier =OVERQUOTA= interruption with no further errors: =Inbox= 1,023, =[Gmail]/All Mail= 25,499, =[Gmail]/Important= 16,018 (now complete), =[Gmail]/Sent Mail= 5,974, =[Gmail]/Spam= 138, =[Gmail]/Starred= 62, =[Gmail]/Trash= 187, =[Gmail]/Drafts= 31; a follow-up incremental sync ran clean, exit 0, confirming stability. =mu init=/=mu index= done 2026-08-07: 71,371 messages indexed, exit 0, 0 errors, sanity-checked via =mu find=/=mu info=; =tricca= pre-registered as a =my-address= so its later sync won't need a re-init. Self-send test done 2026-08-07 for both Gmail-backed accounts via =msmtp=, round-tripped through =mbsync=/=mu index=/=mu find= successfully. =doom doctor= re-run clean (45 modules, 147 packages). =tricca= sync/index/self-send still blocked on sub-phase 3's separate pass-entry blocker |
+| 6 — Docs closeout                | PARTIAL (paused-for-now closeout, not final) | =docs/inventory.org=/=roadmap.org=/ADR-011 all updated 2026-08-07 with verified (not just written) facts, and ADR-011 =:STATUS:= set to =Accepted, implemented for personal/ualberta — tricca deferred (not implemented)=. This is a deliberate pause point, not the phase's final closeout — moving to full =Accepted, implemented, live-verified= still needs =tricca= implemented and the 7-day token-durability window to pass, see [[id:adr-email-mu4e][ADR-011]] Revisit when |
+
 * Future phases (named, not implemented)
 :PROPERTIES:
 :ID:       roadmap-future
@@ -40,7 +69,6 @@ scheduled or scoped yet.
 - Org Agenda and personal project management
 - Capture and knowledge management
 - Documentation and publishing workflows
-- Email
 - Calendar
 - RSS and communications
 - Terminal and remote-system workflow depth (beyond what Phase 1 tests for

@@ -909,3 +909,378 @@ ADRs can still be written by hand per =.claude/rules/documentation.md=.
   scaffolded structure needs adjustment.
 - Claude Code's skill format (frontmatter schema, =SKILL.md= discovery rules)
   changes in a way that could break this skill silently.
+
+* ADR-011: mu4e for 3-account email, mbsync/msmtp backends, pass+oama credential split
+:PROPERTIES:
+:ID:       adr-email-mu4e
+:STATUS:   Accepted, implemented for personal/ualberta — tricca deferred (not implemented)
+:DATE:     2026-07-29
+:END:
+:LOGBOOK:
+- Note taken on [2026-08-05 Wed] \\
+  Same-day regression: both Gmail-backed refresh tokens (=personal=/=ualberta=,
+  confirmed live-verified this same morning) went invalid by the afternoon —
+  =oama access <address>= now returns =getEmailAuth: InvalidGrant= for both,
+  exactly 7 days after their 2026-07-29 authorization. This is the "Testing
+  consent-screen caps refresh tokens at 7 days" condition this ADR's own
+  Revisit-when section already named as a possibility — now confirmed
+  observed, not hypothetical. Also: =ualberta='s first full =mbsync= hit a
+  separate, unrelated Google IMAP =OVERQUOTA= throttle mid-sync (large
+  first-time pull, ~57k messages across overlapping label-folders). See
+  Validation below for the full timeline. =:STATUS:= still intentionally left
+  at =Proposed=.
+- Note taken on [2026-08-05 Wed] \\
+  Partial-verification pass: Google Cloud OAuth2 client registration + consent
+  screen and =oama authorize= for both Gmail-backed accounts confirmed done
+  and live-verified. =mail/tricca= remains blocked on circumstances outside
+  the user's control — not an agent-side or in-repo blocker. See Validation
+  below; =:STATUS:= intentionally left at =Proposed= until the full
+  verification pass (sub-phase 5) completes.
+- Note taken on [2026-08-06 Thu] \\
+  Root cause addressed: user published the Google Cloud OAuth consent screen
+  (Testing → In production) for the project behind
+  =mail/oauth2-google-client=, then re-ran =oama authorize google <address>=
+  for both =mrniceguyjames@gmail.com= and =jcook@ualberta.ca= (browser/login,
+  user's own action — not scriptable). Chose the "publish, unverified" path
+  rather than full Google app-verification review or falling back to Gmail
+  App Passwords — the 7-day cap is tied to publish status, not verification
+  status, so this resolves it without a verification review this
+  single-user personal app doesn't need. Post-publish, =oama access
+  <address>= confirmed exit 0 for both accounts (token values never printed,
+  per [[id:std-credentials][std-credentials]]). Durability (surviving past the old 7-day mark)
+  not yet confirmed by elapsed time — see Revisit when. =:STATUS:= still
+  intentionally left at =Proposed= until the full
+  verification pass (sub-phase 5) completes.
+- State "Proposed"    from ""              [2026-07-29 Wed]
+:END:
+
+** Context
+[[id:docs-roadmap][roadmap.org]]'s "Future phases (named, not implemented)" list carried a bare
+=- Email= bullet since Phase 1 closeout — unscoped. The user has 3 accounts to
+bring into Doom Emacs. =init.el= already had an inert scaffold
+(=;;(mu4e +org +gmail)=) from an earlier session anticipating this. This ADR
+records the decisions made during plan approval, before implementation
+started.
+
+*Correction during execution (2026-07-29):* the plan was approved assuming
+"2 Gmail + 1 Gandi." Once real addresses were collected, the actual accounts
+are =mrniceguyjames@gmail.com= (consumer Gmail, label =personal=),
+=jcook@ualberta.ca= (Google Workspace for Education, *not* a =@gmail.com=
+address — label =ualberta=), and =jcook@tricca.ca= (confirmed Gandi Mail,
+label =tricca=). This doesn't change any decision below — Google Workspace
+uses the same =imap.gmail.com=/=smtp.gmail.com= servers and the same oama
+=google= service as consumer Gmail, just a second, separate
+=oama authorize google jcook@ualberta.ca= run and (per the module's own
+=+mu4e-gmail-accounts= mechanism, since the address/maildir won't
+auto-match =+gmail='s =gmail.com=/"gmail" pattern) an explicit
+=(setq +mu4e-gmail-accounts '(("jcook@ualberta.ca" . "/ualberta")))= in
+=config.el=. It does add one new risk: =ualberta.ca= is an institutional
+Google Workspace domain, and its admin (university IT) may restrict which
+third-party OAuth apps can request full mail scope against accounts on that
+domain — a distinct failure mode from the personal-account "Testing" consent
+screen risk already tracked below, not yet known to be a problem or not.
+The =mail/<label>= pass entry for the plain-password account is
+=mail/tricca=, not =mail/gandi= (label-consistency, per the "label must
+match everywhere" rule below).
+
+** Decision drivers
+- [[id:std-doom-first][standards.org]]: prefer Doom's own module over a hand-rolled alternative.
+- [[id:std-no-duplication][standards.org]]: one mail client, one credential store — a second tool needs a
+  clearly distinct role the first can't cover, not just popularity.
+- [[id:std-credentials][standards.org]] / [[id:std-binaries][standards.org]]: no hardcoded secrets; any new external
+  binary needs a documented install/upgrade/rollback lifecycle.
+- [[id:std-org-first][standards.org]]: prefer real Org capabilities where composing/reading text is
+  involved.
+- [[id:std-no-scope-creep][standards.org]]: don't build a custom notification system or unified-inbox
+  layer this phase doesn't need yet.
+- User chose OAuth2 over Gmail App Passwords, periodic auto-fetch over
+  manual-only, and separate per-account contexts over a unified inbox
+  (confirmed directly, not inferred).
+- User chose =oama= over =mutt_oauth2.py= for OAuth2 token management
+  (confirmed directly, weighing oama's purpose-built dual mbsync+msmtp
+  integration against its heavier non-apt install path).
+
+** Candidates
+| Decision point       | Candidates considered                    | Fate |
+|-----------------------+-------------------------------------------+---------------------------------------------|
+| Mail client           | mu4e / notmuch / wanderlust                | *mu4e* accepted — natively-integrated Doom module ([[id:std-doom-first][std-doom-first]]); notmuch/wanderlust would be a second, undifferentiated client ([[id:std-no-duplication][std-no-duplication]]) |
+| Sync backend          | mbsync (isync) / offlineimap                | *mbsync* accepted — Doom module's own recommended default, faster than offlineimap per its own README |
+| Send path             | msmtp / raw smtpmail+auth-source            | *msmtp* accepted — module README explicitly recommends it over raw =smtpmail= for multi-account setups (avoids async-process credential-access issues) |
+| Gmail auth            | App Passwords / OAuth2                      | *OAuth2* accepted (user's explicit choice) — App Passwords rejected as the simpler-but-not-preferred alternative, recorded below |
+| OAuth2 token manager  | mutt_oauth2.py / oama                       | *oama* accepted (user's explicit choice) — purpose-built single tool for both mbsync =PassCmd= and msmtp =passwordeval=, transparent background refresh; mutt_oauth2.py rejected despite being apt-adjacent-simpler (ships as a mutt sample script, no compiled binary) |
+| Notifications          | mu4e-alert package / native mu4e support    | *Native =mu4e-notification-support=* accepted — confirmed by reading the module's local source that it's the actual default (older docs' =mu4e-alert= mention is stale/aspirational); adding a package here would be unjustified scope into the still-unscoped future "Notifications and desktop integration" phase |
+| Account views          | Unified inbox / separate per-account contexts | *Separate contexts* accepted (user's explicit choice) — Doom's =set-email-account!= default behavior |
+
+** Evidence
+- =init.el:180-183= (pre-change) confirmed the inert =:email= scaffold already
+  anticipating =mu4e +org +gmail=.
+- Read =~/.config/emacs/sources/doom+/modules/email/mu4e/README.org= in full:
+  confirms =+gmail=/=+mbsync=/=+offlineimap=/=+org= flag semantics, the
+  msmtp-over-smtpmail recommendation, and the =auth-source-pass=-via-=:tools
+  pass +auth= mechanism documented for plain-password SMTP auth.
+- Read the module's =packages.el= (declares =mu4e-compat= and, conditionally,
+  =org-msg= — no =mu4e-alert=) and =config.el= (=mu4e-notification-support= is
+  the module's actual notification mechanism) directly, correcting an
+  assumption the README's structure implied.
+- Read =set-email-account!='s implementation in
+  =~/.config/emacs/sources/doom+/modules/email/mu4e/autoload/email.el=:
+  confirmed its =label= argument becomes the mu4e-context match predicate via
+  =string-prefix-p "/<label>"= against the message's maildir — so the mbsync
+  maildir subfolder name, the =set-email-account!= label, and (for the Gandi
+  account) the =pass= entry suffix must all match exactly, or context
+  switching breaks silently.
+- Confirmed apt candidate versions on this machine (Ubuntu 24.04.4):
+  =isync 1.4.4-5build3= and =msmtp 1.8.24-1build2= — both well above the
+  minimum versions needed for =XOAUTH2=/=OAUTHBEARER= support (isync ≥1.3,
+  msmtp ≥1.8.7).
+- Fetched =github.com/pdobsan/oama='s README and its bundled
+  =configs/msmtp-config-template=: confirmed exact syntax
+  (=auth oauthbearer=, =passwordeval "oama access <address>"= for msmtp;
+  =AuthMechs OAUTHBEARER=, =PassCmd "oama access <address>"= for mbsync — the
+  =access= subcommand is documented as "Get the access token for email"), and
+  confirmed =client_id_cmd=/=client_secret_cmd= can source the Google OAuth
+  client credentials from =pass= rather than storing them in oama's own
+  =config.yaml=.
+- Confirmed via =gh api repos/pdobsan/oama/releases/latest= that a precompiled
+  =oama-0.22.0-Linux-x86_64.tar.gz= static binary exists (no apt package).
+- Confirmed this machine's existing =pass=/=gpg= identity
+  (=gpg --list-secret-keys=: =859AF991C9EA4396=, matching
+  =~/.password-store/.gpg-id=) — reused for oama's GPG backend rather than
+  minting a second key.
+
+** Decision
+- =init.el=: =:email (mu4e +org +gmail +mbsync)=.
+- =packages.el=: no changes (module supplies its own packages).
+- =config.el=: one new flat section (matching the =~66-line gptel block's
+  size/style precedent — a =config/email.el= split is premature per
+  [[id:std-no-scope-creep][std-no-scope-creep]] for a subsystem this new). Sets msmtp as the
+  =sendmail-program=/=send-mail-function= path globally, then three
+  =set-email-account!= blocks (=personal=, =ualberta=, =tricca=) with
+  per-account folders/SMTP settings, plus =mu4e-update-interval 60= for
+  periodic fetch. No custom leader binding added — Doom's default bindings
+  module already provides =SPC o m= / ==mu4e= and =SPC o M c= / =+mu4e/compose=
+  whenever =:email mu4e= is enabled.
+- =~/.mbsyncrc= / =~/.msmtprc= (outside the repo, =chmod 600=): one account
+  block per label. Gmail blocks use =AuthMechs OAUTHBEARER=/=auth oauthbearer=
+  with =PassCmd=/=passwordeval= both calling =oama access <address>=. The
+  tricca block uses plain =PassCmd "pass show mail/tricca"=/
+  =passwordeval "pass show mail/tricca"=.
+- =~/.config/oama/config.yaml= (outside the repo, =chmod 600=): GPG backend
+  pointed at the existing pass/gpg key (=859AF991C9EA4396=); Google
+  =client_id_cmd=/=client_secret_cmd= both call
+  =pass show mail/oauth2-google-client= rather than storing the client secret
+  in oama's own config file — keeping =pass= as the single source of truth
+  for every static secret in this setup, with =oama= layered on top
+  specifically for the OAuth2 refresh lifecycle =pass= alone can't provide.
+  This is the concrete justification for why =oama= doesn't violate
+  [[id:std-no-duplication][std-no-duplication]]: it is not a second, competing secret store — it reads
+  its own app credentials from =pass= and only adds the token-refresh
+  behavior =pass= structurally cannot do.
+- New =mail/<label>= pass-entry naming convention (=mail/tricca=,
+  =mail/oauth2-google-client=), extending the existing =api/<provider>=
+  convention from [[id:adr-gptel-rework][ADR-006]] to a new category.
+
+** Consequences
+- Two distinct credential-retrieval mechanisms now exist side by side for
+  mail (=pass show= directly for Gandi, =oama access= for Gmail) — documented
+  here precisely so a future session doesn't "simplify" them into one
+  mechanism without re-deriving why they differ (OAuth2 is structurally
+  required to have a refresh loop; a plain IMAP/SMTP password is not).
+- =oama= is this repo's first externally-sourced static binary without an apt
+  package — its upgrade path is "download a new release tarball," not
+  =apt upgrade=; documented explicitly in [[id:docs-inventory][inventory.org]]'s binaries table
+  rather than assumed to follow the same lifecycle as =mu=/=isync=/=msmtp=.
+- Gmail's IMAP folder names (=[Gmail]/Sent Mail= etc.) and the exact Gandi
+  folder names (=Sent=/=Drafts=/=Trash=/=Archive= used in =config.el= are
+  placeholders) both need confirming against each account's real folder
+  listing before the =set-email-account!= blocks are correct — flagged as
+  not-yet-verified below, not asserted as fact.
+- A Google Cloud OAuth2 client registration and consent-screen configuration
+  now exists as an out-of-repo dependency this config relies on — if it's
+  deleted or revoked outside this repo's awareness, Gmail sync/send breaks
+  with no local signal until the next =mbsync=/=msmtp= run fails.
+
+** Rejected alternatives
+See Candidates table above. Additionally: =mu4e-alert= was not added as a
+=package!= override — the module's native =mu4e-notification-support= already
+covers desktop notifications, and adding a second notification path here
+would be unjustified scope into the separate, still-unscoped "Notifications
+and desktop integration" future phase.
+
+** Validation
+*Partially verified as of 2026-07-29* — this ADR was written immediately
+after plan approval, then updated as execution progressed:
+- Done: =init.el= updated, =doom sync= run clean (=mu4e-compat=/=org-msg=
+  installed, 181 packages up-to-date). System packages installed
+  (=maildir-utils=, =mu4e=, =isync 1.4.4=, =msmtp 1.8.24=, via the user's own
+  =sudo= — auto-mode's classifier denies unattended =sudo apt-get install= to
+  the agent). =doom doctor= fully clean (both mail-binary warnings gone).
+  =oama 0.22.0= binary installed to =~/.local/bin=. =config.el=,
+  =~/.mbsyncrc=, =~/.msmtprc= all updated with the real accounts (=personal=
+  / =ualberta= / =tricca=, see Context correction above) — all still
+  placeholders only for the folder names that need confirming against each
+  provider's real IMAP listing, not the addresses.
+- *Update 2026-08-05, confirmed done:* Google Cloud OAuth2 client
+  registration and consent screen — verified indirectly (no console access
+  from here) via =pass ls mail= showing =mail/oauth2-google-client= present,
+  =~/.config/oama/config.yaml= sourcing =client_id_cmd=/=client_secret_cmd=
+  from it (no raw secret in the file, no placeholders left), and decisively
+  via =oama access <address>= returning exit 0 for both
+  =mrniceguyjames@gmail.com= and =jcook@ualberta.ca= — a live, successful
+  token fetch/refresh against Google is only possible with a working
+  registered client and completed consent flow. =oama authorize= for both
+  addresses is therefore also confirmed done (token state files present in
+  =~/.local/state/oama/=, and the same live =oama access= check above
+  proves they still work, not just that they once ran). Token output was
+  discarded/never printed at any point in this verification, per
+  [[id:std-credentials][std-credentials]].
+- *Still blocked, not a to-do:* the =mail/tricca= pass entry cannot be
+  created yet due to circumstances outside the user's control (as of
+  2026-08-05). This is an external blocker, not an in-repo or agent-side
+  one — left here as the trail to pick back up from once it clears. Until
+  then, the =tricca= account can't be sync-tested (sub-phase 5).
+- *Discovered 2026-08-05, previously undocumented:* =personal= already had a
+  complete, healthy =mbsync= sync from 2026-07-29 — ~22k messages across its
+  real folder structure (=Inbox=, =Work=, =Receipts=, =IMT=, =Notes=,
+  =Personal=, =[Gmail]/*=), with proper per-folder =.mbsyncstate=/
+  =.uidvalidity= files, and =config.el='s =personal= folder settings already
+  matching that real structure exactly (not placeholders, contrary to what
+  this ADR previously said). Origin unconfirmed — the user wasn't sure how it
+  got there. Re-ran =mbsync personal= 2026-08-05 as a sanity check: clean
+  incremental sync, exit 0, no errors.
+- *2026-08-05, =ualberta= first full sync attempted, partially completed:*
+  =mbsync ualberta= ran for ~75 minutes, correctly landing =INBOX= (partial,
+  see below), =Boomerang*=, =Conversation History=, =[Gmail]/All Mail=
+  (25,483 messages, complete) and =[Gmail]/Drafts= (31, complete), then hit
+  =IMAP error: unexpected BYE response: [OVERQUOTA] Account exceeded command
+  or bandwidth limits= mid-=[Gmail]/Important= (16,015 far-side messages, a
+  mostly-duplicate label-overlay of =All Mail=). =[Gmail]/Sent Mail=/=Spam=/
+  =Starred=/=Trash= never attempted. Separately, the very first =ualberta=
+  sync attempt was itself killed mid-flight by an agent-side =timeout 120=
+  wrapper, producing a =Warning: lost track of 510 pulled message(s)= on the
+  next run — a bookkeeping gap from the interruption, not data loss; no
+  further such warnings on later runs. 41,864 files landed safely on disk
+  from what did complete; nothing corrupted.
+- *2026-08-05, regression — see LOGBOOK:* an exponential-backoff retry loop
+  for the =OVERQUOTA= throttle instead hit a different, terminal failure:
+  =oama access <address>= now returns =getEmailAuth: InvalidGrant= for
+  *both* =mrniceguyjames@gmail.com= and =jcook@ualberta.ca= (confirmed via
+  direct =oama access= calls, DNS ruled out as the cause, reproducible on
+  repeat). Both tokens were authorized 2026-07-29 and failed within the same
+  day as this ADR's own "7-day Testing-mode cap" revisit condition predicts.
+  Sub-phase 3's credentials are therefore *no longer* in the "confirmed done"
+  state recorded earlier in this section as of 2026-08-05 morning — they
+  regressed the same afternoon. =ualberta='s =OVERQUOTA= retry is blocked on
+  this, not on the throttle itself; resume once re-authorized.
+- *2026-08-06, credential regression resolved:* user published the Google
+  Cloud OAuth consent screen for the project behind
+  =mail/oauth2-google-client= (Testing → In production status), then
+  re-ran =oama authorize google <address>= for both
+  =mrniceguyjames@gmail.com= and =jcook@ualberta.ca=. =oama access
+  <address>= confirmed exit 0 for both immediately afterward. Chose to
+  publish unverified rather than pursue Google's full app-verification
+  review (unnecessary for a single-user personal app requesting only
+  restricted, not sensitive+public, scope) or fall back to Gmail App
+  Passwords. This should stop the 7-day expiry going forward since the cap
+  is a Testing-status artifact, not a verification-status one — but that's
+  not yet *proven* by elapsed time; treat as durable only once a token
+  survives past the old ~7-day mark. See Revisit when.
+- *2026-08-07, =ualberta= sync completed:* resumed =mbsync ualberta=
+  (no timeout wrapper this time — earlier lesson learned) picked up cleanly
+  past the =OVERQUOTA= interruption point, reconciled with a =Warning: lost
+  track of 627 pulled message(s)= (same interrupted-run bookkeeping pattern
+  as =personal='s and =ualberta='s earlier warnings — not data loss), and
+  ran to completion with no further errors. Landed: =Inbox= 1,023,
+  =[Gmail]/All Mail= 25,499, =[Gmail]/Important= 16,018 (now complete, was
+  cut off mid-folder before), =[Gmail]/Sent Mail= 5,974, =[Gmail]/Spam= 138,
+  =[Gmail]/Starred= 62, =[Gmail]/Trash= 187 (these four never attempted
+  before), =[Gmail]/Drafts= 31, plus =Boomerang*=/=Conversation
+  History=/=work-receipt=. A follow-up incremental =mbsync ualberta= ran
+  clean, exit 0, no warnings — confirms both the sync and the
+  re-authorized/published OAuth token are stable, not a one-off. This is
+  also multi-hour positive evidence toward the "does the published-app
+  token survive past 7 days" open question (see Revisit when), though not
+  yet the full 7 days.
+- *2026-08-07, =mu init=/=mu index= done:* =mu init --maildir=~/.mail
+  --my-address=<all 3 addresses>= (registering all three now, including
+  =tricca=, so its later sync won't need a re-init), then =mu index=: exit
+  0, 71,371 messages checked/indexed, 0 errors, ~3m6s. Sanity-checked via
+  =mu find= (empty query returns all 71,371; a targeted
+  =maildir:/personal/Inbox= query returns real results; =mu info= confirms
+  =messages in store: 71371=). =tricca= contributes 0 messages for now
+  (empty maildir, sync still blocked) and will pick up automatically once
+  it syncs and re-indexes.
+- *2026-08-07, self-send test done for =personal=/=ualberta=:* sent a real
+  test message via =msmtp -a personal=/=-a ualberta= to each account's own
+  address, re-ran =mbsync personal ualberta= + =mu index=, and confirmed
+  both landed (three copies each — Inbox plus label-overlay folders — found
+  via a =date:today..now= query; the initial =subject:"..."= phrase query
+  had a mu parser quirk and is not evidence of failure). Confirms the full
+  round trip — =msmtp= send → Gmail delivery → =mbsync= pull → =mu index= →
+  =mu find= query — works end-to-end for both Gmail-backed accounts.
+  =doom doctor= re-run clean afterward (45 modules, 147 packages, no
+  irregularities).
+- Not yet done: confirm the new OAuth tokens survive past the full 7 days
+  without re-=InvalidGrant=-ing (needs elapsed time only, ~2026-08-13);
+  Gmail/Gandi folder-name confirmation and self-send test for =tricca=
+  against its real IMAP listing (=personal='s and =ualberta='s are
+  confirmed correct, see above) — blocked on the separate =mail/tricca=
+  pass-entry blocker, not actionable from here.
+- *2026-08-07, closeout decision:* work on this phase is pausing here for
+  now (other priorities), with two items deliberately left open rather than
+  chased to completion: =tricca= (=jcook@tricca.ca=, Gandi) is *not
+  implemented* — blocked throughout on the external =mail/tricca= pass-entry
+  circumstance, never an in-repo or agent-side gap; and 7-day OAuth-token
+  durability past the Testing-mode cap is evidenced but not yet proven by a
+  full week elapsed. =:STATUS:= updated to reflect this honestly: accepted
+  and implemented for =personal=/=ualberta= (both fully synced, indexed,
+  and self-send-verified), =tricca= explicitly deferred/not implemented.
+  This is *not* the =Accepted, implemented, live-verified= status the
+  plan's full checklist calls for — that still needs =tricca= and the
+  durability window — see Revisit when for what resumes this.
+
+** Rollback
+=git diff init.el config.el= shows the full in-repo change; revert both files
+and =doom sync= to return =:email= to fully commented-out. Outside the repo:
+delete =~/.mbsyncrc=, =~/.msmtprc=, =~/.config/oama/=, =~/.mail/=, and remove
+=~/.local/bin/oama=; revoke the Google OAuth2 client at
+console.cloud.google.com if abandoning OAuth2 entirely; =pass rm= any
+=mail/*= entries created.
+
+** Revisit when
+- *Triggered 2026-08-05, addressed 2026-08-06:* Google's "Testing"
+  consent-screen publish status was hypothesized to cap Gmail refresh tokens
+  at 7 days — observed directly (both =personal= and =ualberta= tokens,
+  authorized 2026-07-29, failed with =InvalidGrant= the same calendar week).
+  User re-authorized both immediately, then published the consent screen to
+  In production (unverified) to fix the root cause rather than accept
+  weekly re-authorization or fall back to Gmail App Passwords — see
+  Validation. *Not yet fully closed:* this bullet stays open until a token
+  is observed surviving past the old ~7-day mark (i.e. past
+  2026-08-13) without =InvalidGrant=-ing again; if it recurs even after
+  publishing, the two remaining options above (accept periodic
+  re-authorization, or Gmail App Passwords) are still live.
+- *=jcook@tricca.ca= (Gandi) email is not implemented, as of 2026-08-07,
+  and work on it is paused for now (other priorities), not actively
+  blocked-and-waiting.* =personal=/=ualberta= are fully live; =tricca= has
+  =config.el=/=~/.msmtprc=/=~/.mbsyncrc= scaffolding in place but no
+  credential, no sync, no index, no self-send verification. Resume once the
+  =mail/tricca= external blocker clears (circumstances outside the user's
+  control as of 2026-08-05, unspecified here): create the =mail/tricca=
+  pass entry (user action, never agent-created), then run sub-phase 5
+  (=mbsync=/=mu index=/self-send test) for that account — =mu init= itself
+  doesn't need repeating, =tricca= was already registered as a =my-address=
+  on 2026-08-07.
+- =ualberta='s =[Gmail]/Important=/=Starred= label-overlay folders keep
+  causing =OVERQUOTA= throttling on large first syncs — consider narrowing
+  =~/.mbsyncrc='s =Patterns *= for that channel to exclude them (mostly
+  duplicate content vs =All Mail=) if this recurs on retry.
+- The verification pass (see plan) completes — update =:STATUS:= and add a
+  =:LOGBOOK:= entry rather than silently editing it.
+- A fourth mail account, or a provider needing yet another auth mechanism, is
+  added — check whether the =pass=-vs-=oama= split still cleanly covers it
+  before assuming it does.
+- Email config in =config.el= grows non-trivial helper functions (custom
+  filing/capture automation) comparable to what justified splitting AI docs
+  into =docs/ai/*.org= — revisit the flat-file-vs-=config/email.el= choice
+  then, not preemptively.
