@@ -103,6 +103,8 @@ summary, not a duplicate to keep in sync by hand:
 | mbsync (isync) | yes | =/usr/bin/mbsync=, isync =1.4.4-5build3= — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
 | msmtp   | yes     | =/usr/bin/msmtp=, =1.8.24= — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
 | oama    | yes     | ~/.local/bin/oama, =0.22.0 - 2025-08-29=, precompiled release binary (no apt package) — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
+| mpv     | yes     | =/usr/bin/mpv=, =0.37.0-1ubuntu4= (apt) — Phase 3, [[id:adr-rss-elfeed][ADR-012]] |
+| yt-dlp  | yes     | =/usr/bin/yt-dlp=, =2024.04.09-1= (apt) — Phase 3, [[id:adr-rss-elfeed][ADR-012]] |
 
 Node 18.19.1 initially looked like a possible blocker for
 =copilot-language-server=. Resolved in Phase 5: this install actually uses the
@@ -137,6 +139,8 @@ the AI subsystem, not a full machine audit).
 | =isync= (=mbsync=) | IMAP sync backend for all 3 mail accounts — [[id:adr-email-mu4e][ADR-011]] | =sudo apt install isync= — done 2026-07-29 | Standard =apt= upgrade | Standard =apt remove=; delete =~/.mbsyncrc= |
 | =msmtp= | SMTP send backend, recommended by the mu4e module over raw =smtpmail= for multi-account setups — [[id:adr-email-mu4e][ADR-011]] | =sudo apt install msmtp= — done 2026-07-29 | Standard =apt= upgrade | Standard =apt remove=; delete =~/.msmtprc= |
 | =oama= | OAuth2 access-token manager for the 2 Gmail accounts' XOAUTH2/OAUTHBEARER refresh cycle, called from =.mbsyncrc=/=.msmtprc= — [[id:adr-email-mu4e][ADR-011]] | Downloaded =oama-0.22.0-Linux-x86_64.tar.gz= from =github.com/pdobsan/oama/releases= (no apt package — this repo's first externally-sourced static binary), extracted =oama= to =~/.local/bin= | Re-download a newer release tarball and overwrite =~/.local/bin/oama= — no auto-update mechanism | Delete =~/.local/bin/oama= and =~/.config/oama/=, =~/.local/state/oama/= |
+| =mpv= | Video player backing elfeed-tube's live-transcript/follow-along feature (=+youtube= flag) — [[id:adr-rss-elfeed][ADR-012]] | =sudo apt install mpv= — done 2026-08-10 (user's own terminal; =sudo= via the =!= session-shell prefix has no TTY for the password prompt, same constraint as Phase 2's mail binaries) | Standard =apt= upgrade | Standard =apt remove=; elfeed-tube's mpv-follow keybindings go inert but elfeed itself is unaffected |
+| =yt-dlp= | Video/transcript fetch backend elfeed-tube-mpv calls into, alongside =mpv= — [[id:adr-rss-elfeed][ADR-012]] | =sudo apt install yt-dlp= — done 2026-08-10 (same install run as =mpv=, same constraint) | Standard =apt= upgrade | Standard =apt remove=; same effect as removing =mpv= above |
 
 *vterm-module build, done once during Phase 6* (not shell-history-only — the
 exact commands are captured in [[id:tshoot-vterm-module][troubleshooting.org]] and reproducible on any

@@ -57,6 +57,26 @@ the exact resume steps.
 | 5 — Sync/index/verification     | DONE for =personal=/=ualberta=; =tricca= blocked | =personal=: =mbsync= run clean, exit 0, real folder structure landed (~22k messages) — this had already happened 2026-07-29 without being recorded here. =ualberta=: *complete as of 2026-08-07* — resumed sync (no timeout wrapper this time) ran past the earlier =OVERQUOTA= interruption with no further errors: =Inbox= 1,023, =[Gmail]/All Mail= 25,499, =[Gmail]/Important= 16,018 (now complete), =[Gmail]/Sent Mail= 5,974, =[Gmail]/Spam= 138, =[Gmail]/Starred= 62, =[Gmail]/Trash= 187, =[Gmail]/Drafts= 31; a follow-up incremental sync ran clean, exit 0, confirming stability. =mu init=/=mu index= done 2026-08-07: 71,371 messages indexed, exit 0, 0 errors, sanity-checked via =mu find=/=mu info=; =tricca= pre-registered as a =my-address= so its later sync won't need a re-init. Self-send test done 2026-08-07 for both Gmail-backed accounts via =msmtp=, round-tripped through =mbsync=/=mu index=/=mu find= successfully. =doom doctor= re-run clean (45 modules, 147 packages). =tricca= sync/index/self-send still blocked on sub-phase 3's separate pass-entry blocker |
 | 6 — Docs closeout                | PARTIAL (paused-for-now closeout, not final) | =docs/inventory.org=/=roadmap.org=/ADR-011 all updated 2026-08-07 with verified (not just written) facts, and ADR-011 =:STATUS:= set to =Accepted, implemented for personal/ualberta — tricca deferred (not implemented)=. This is a deliberate pause point, not the phase's final closeout — moving to full =Accepted, implemented, live-verified= still needs =tricca= implemented and the 7-day token-durability window to pass, see [[id:adr-email-mu4e][ADR-011]] Revisit when |
 
+* Phase 3 — RSS integration (implemented — mpv/yt-dlp install pending)
+:PROPERTIES:
+:ID:       roadmap-phase-3
+:END:
+
+=:app rss +org +youtube= (elfeed/elfeed-org/elfeed-tube). Split out of the old
+bundled "RSS and communications" Future-phases bullet — RSS only;
+communications tooling (IRC, social feeds) moved back to a separate,
+still-unscoped bullet below. See [[id:adr-rss-elfeed][ADR-012]] for the full decision record.
+
+*Status as of 2026-08-10:* config implemented — =init.el=, =config.el=
+(=SPC o r= leader binding, auto-update on open), =~/org/elfeed.org= scaffolded
+with just the required root structure (no real feeds yet, user adds later).
+=doom sync= clean (188 packages). User installed =mpv=/=yt-dlp= via their own
+terminal (agent has no passwordless =sudo=, same as [[id:adr-email-mu4e][ADR-011]]'s
+precedent); =doom doctor= re-run fully clean afterward — 46 modules,
+151 packages, zero warnings. Both binaries recorded in [[id:docs-inventory][inventory.org]]. Not
+yet live-verified in the user's own interactive session (opening =SPC o r=,
+auto-update firing, elfeed-tube transcript/follow-along).
+
 * Future phases (named, not implemented)
 :PROPERTIES:
 :ID:       roadmap-future
@@ -70,7 +90,9 @@ scheduled or scoped yet.
 - Capture and knowledge management
 - Documentation and publishing workflows
 - Calendar
-- RSS and communications
+- Communications (IRC, social feeds, etc.) — split out from the old bundled
+  "RSS and communications" bullet once RSS itself was scoped; see Phase 3
+  above and [[id:adr-rss-elfeed][ADR-012]]'s Context.
 - Terminal and remote-system workflow depth (beyond what Phase 1 tests for
   TRAMP/SBC targets)
 - File and media management

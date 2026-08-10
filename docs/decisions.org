@@ -1289,3 +1289,154 @@ console.cloud.google.com if abandoning OAuth2 entirely; =pass rm= any
   filing/capture automation) comparable to what justified splitting AI docs
   into =docs/ai/*.org= — revisit the flat-file-vs-=config/email.el= choice
   then, not preemptively.
+
+* ADR-012: elfeed (=:app rss +org +youtube=) for RSS integration
+:PROPERTIES:
+:ID:       adr-rss-elfeed
+:STATUS:   Accepted, implemented — not yet live-verified
+:DATE:     2026-08-10
+:END:
+:LOGBOOK:
+- Note taken on [2026-08-10] \\
+  User installed =mpv=/=yt-dlp= via their own terminal (=sudo= through the
+  =!= session-shell prefix has no TTY for the password prompt — same
+  constraint as [[id:adr-email-mu4e][ADR-011]]'s mail-binary installs). =doom doctor= re-run:
+  fully clean, 46 modules, 151 packages, zero warnings — the two expected
+  warnings from the initial implementation are gone. =:STATUS:= moved from
+  "implemented — mpv/yt-dlp install pending" to "implemented — not yet
+  live-verified"; still short of =live-verified= until =SPC o r=,
+  auto-update, and elfeed-tube transcript/follow-along are confirmed working
+  in the user's own interactive session.
+:END:
+
+** Context
+[[id:docs-roadmap][roadmap.org]]'s "Future phases (named, not implemented)" list carried a bare
+=- RSS and communications= bullet since Phase 1 closeout — unscoped, and
+bundling two materially different tool categories (passive feed-reading vs.
+synchronous/social messaging) under one name. This ADR records the decisions
+made in conversation (a structured grill, same format as [[id:adr-email-mu4e][ADR-011]]) before
+implementation, and the implementation itself.
+
+** Decision drivers
+- [[id:std-doom-first][standards.org]]: prefer Doom's own module over a hand-rolled alternative —
+  =:app rss= already exists, commented out, in =init.el=.
+- [[id:std-org-first][standards.org]]: prefer real Org capabilities where composing/managing
+  structured text is involved.
+- [[id:std-no-scope-creep][standards.org]]: don't bundle unrelated tool categories into one phase just
+  because a roadmap bullet named them together.
+- Discoverability: [[id:adr-ai-leader-namespace][ADR-003]] established this repo's preference for a
+  reachable leader binding over =M-x=-only access for anything used
+  regularly.
+- User confirmed directly (not inferred): RSS-only scope, =+org= for feed
+  management, =+youtube= included, install =mpv= now rather than defer,
+  =SPC o r= as the leader binding, auto-update on open, and scaffold
+  =elfeed.org= with just the required root structure (real feeds added
+  later by the user).
+
+** Candidates
+| Decision point                  | Candidates considered                        | Fate |
+|----------------------------------+-----------------------------------------------+------------------------------------------------------------------|
+| Scope                           | RSS + IRC/social bundled / RSS only            | *RSS only* accepted — IRC/Twitter are a distinct tool category; split back out to its own unscoped roadmap bullet ([[id:std-no-scope-creep][std-no-scope-creep]]) |
+| Feed management                 | =+org= (elfeed-org, Org outline) / plain =elfeed-feeds= Elisp list | *=+org=* accepted — consistent with this repo's Org-as-canonical-format convention ([[id:std-org-first][std-org-first]]); scales better than a flat list once tagged/categorized |
+| YouTube integration             | =+youtube= (elfeed-tube) / skip                | *=+youtube=* accepted (user's explicit choice) — transcript fetching + mpv follow-along |
+| =mpv= install timing            | Install now / defer until actually used        | *Install now* accepted (user's explicit choice, approved as a system-package install per =AGENTS.md=) |
+| Entry point                     | Leader binding / =M-x elfeed= only             | *=SPC o r=* accepted — neither the module nor this config's default bindings ship one; matches [[id:adr-ai-leader-namespace][ADR-003]]'s discoverability rationale |
+| Update cadence                  | Auto-update on open / manual =elfeed-update= only | *Auto-update on open* accepted (user's explicit choice) — avoids a stale buffer on every =SPC o r= |
+| Initial feed content            | Seed real feeds now / scaffold root structure only | *Scaffold only* accepted (user's explicit choice) — feed content isn't an architecture decision, added later by the user |
+
+** Evidence
+- =init.el:185-191= (pre-change) confirmed the inert scaffold =;;(rss +org)=
+  already anticipating this module, alongside =;;irc=/=;;twitter=/=;;calendar=
+  (all still commented out, untouched).
+- Read =~/.config/emacs/sources/doom+/modules/app/rss/README.org= in full:
+  confirmed =+org=/=+youtube= flag semantics, =elfeed-org='s
+  =:elfeed:=-tagged-root convention, and the module's own default
+  =elfeed-search-filter= (=@2-weeks-ago=).
+- Read the module's =packages.el=: =elfeed=, =elfeed-goodies= unconditional;
+  =elfeed-org= gated on =+org=; =elfeed-tube= gated on =+youtube= — all
+  version-pinned by the module itself, no override needed here.
+- Read the module's =config.el=: confirmed =rmh-elfeed-org-files= already
+  defaults to =(list "elfeed.org")= relative to =org-directory= (=~/org/=,
+  set in this repo's =config.el:43=) — no path override needed. Confirmed no
+  leader-key binding is shipped by the module or by this config's default
+  bindings (grepped for =elfeed=/=+rss= in both default-bindings files:
+  zero matches) — the discoverability gap driving the =SPC o r= decision
+  above is real, not assumed.
+- =which mpv=: not found. =sudo -n true=: fails ("a password is required")
+  — confirmed, same as [[id:adr-email-mu4e][ADR-011]]'s precedent, the agent cannot install
+  system packages unattended; =mpv= install is a user action.
+- =doom doctor= output (see Validation) surfaced a second, previously
+  undiscussed dependency: =youtube-dl=/=yt-dlp=, also required for
+  elfeed-tube-mpv live transcripts, also missing.
+
+** Decision
+- =init.el=: =:app (rss +org +youtube)=, uncommenting the existing scaffold.
+- =packages.el=: no changes (module supplies its own pinned packages).
+- =config.el=: one new short section (matching the flat-section style used
+  for the =mu4e= block, [[id:adr-email-mu4e][ADR-011]] — a =config/rss.el= split is premature
+  per [[id:std-no-scope-creep][std-no-scope-creep]] for a subsystem this new):
+  =(map! :leader :desc "RSS (elfeed)" "o r" #'elfeed)= and
+  =(add-hook 'elfeed-search-mode-hook #'elfeed-update)=.
+- =~/org/elfeed.org= scaffolded with a =* root :elfeed:= headline and a
+  short usage comment — no real feed subscriptions yet.
+- System dependency: =mpv= (and, discovered via =doom doctor=,
+  =youtube-dl=/=yt-dlp=) to be installed by the user via their own =sudo=
+  (agent has no passwordless =sudo=, per Evidence above).
+- =docs/roadmap.org=: "RSS and communications" bullet split — RSS promoted
+  to an active Phase 3 row; a standalone, still-unscoped "Communications
+  (IRC, social feeds, etc.)" bullet left in the Future phases list.
+
+** Consequences
+- A new externally-managed dependency pair (=mpv=, =yt-dlp=) exists outside
+  =doom sync='s reach, same lifecycle class as [[id:adr-email-mu4e][ADR-011]]'s =oama= binary —
+  tracked in [[id:docs-inventory][inventory.org]] once installed, not assumed to follow apt's
+  normal Doom-package upgrade path.
+- Until =mpv=/=yt-dlp= are installed, =elfeed-tube-mpv-follow-mode=/=-where=
+  are inert (bound but non-functional) — =doom doctor= will keep surfacing
+  these two warnings until then; this is expected, not a regression to
+  chase.
+- =elfeed.org= has no real feeds yet — =SPC o r= will show an empty buffer
+  until the user adds subscriptions, which is expected per the scaffold-only
+  decision above, not a bug.
+- "Communications" (IRC/social) remains genuinely unscoped — this ADR
+  deliberately does not decide anything about it.
+
+** Rejected alternatives
+See Candidates table above.
+
+** Validation
+- =doom sync=: clean, 188 packages up-to-date, =elfeed=/=elfeed-goodies=/
+  =elfeed-org=/=elfeed-tube= all confirmed installed.
+- =doom doctor= (first run, before =mpv=/=yt-dlp=): 46 modules, 151 packages,
+  2 expected warnings under =:app rss= (=mpv=, =youtube-dl=/=yt-dlp=
+  missing).
+- *2026-08-10:* user installed =mpv= 0.37.0-1ubuntu4 and =yt-dlp=
+  2024.04.09-1 via apt, in their own interactive terminal (=sudo= through
+  the agent's =!= session-shell prefix has no TTY for the password prompt).
+  =doom doctor= re-run: fully clean, 46 modules, 151 packages, zero
+  warnings. Both binaries confirmed on =PATH= (=which mpv yt-dlp=) and
+  recorded in [[id:docs-inventory][inventory.org]].
+- Not yet done: live-verify =SPC o r= opens elfeed, auto-update fires, and
+  an elfeed-tube transcript/follow-along actually works — this repo's
+  convention (Phase 1/2) is to confirm these in the user's own interactive
+  session rather than assert them from static config, so =:STATUS:= stays
+  short of =live-verified= until that happens.
+
+** Rollback
+Remove =(rss +org +youtube)= from =init.el='s =:app= section (restore the
+=;;(rss +org)= comment or delete outright), revert the RSS section in
+=config.el=, delete =~/org/elfeed.org= if abandoning entirely, then
+=doom sync=. =mpv=/=yt-dlp=, if installed, can be removed via the system
+package manager independently — nothing else in this config depends on them.
+
+** Revisit when
+- *Done 2026-08-10, see LOGBOOK:* =mpv=/=yt-dlp= installed, =doom doctor=
+  re-run clean. Still open: the user tries =SPC o r=/auto-update/
+  elfeed-tube follow-along in their own interactive session — once
+  confirmed, update =:STATUS:= to =live-verified= alongside a =:LOGBOOK:=
+  entry, not a silent edit.
+- The user wants IRC, Mastodon/Twitter, or another "communications" tool —
+  scope and grill that as its own phase; this ADR explicitly does not cover
+  it, per the Context split above.
+- =elfeed.org= grows enough feeds/tags that the flat scaffold's usage
+  comment stops being sufficient documentation of the convention.

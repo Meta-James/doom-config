@@ -170,6 +170,32 @@ CLOSED: [2026-07-21 Tue]
   reviewed, nothing unintended, no secret values present. Ready for your
   review.
 
+* IN-PROGRESS Phase 3 — RSS integration
+:PROPERTIES:
+:EFFORT:   30m
+:END:
+Promoted from [[file:docs/roadmap.org][docs/roadmap.org]]'s old bundled "RSS and communications" Future
+bullet — RSS only, scoped via a grill session. See [[file:docs/decisions.org][docs/decisions.org]]
+ADR-012 for the full decision record.
+- [X] =init.el=: enable =:app (rss +org +youtube)=
+- [X] =config.el=: =SPC o r= leader binding, auto-update-on-open hook
+- [X] Scaffold =~/org/elfeed.org= with just the required =:elfeed:=-tagged
+  root headline (real feeds added later by the user)
+- [X] =doom sync= clean (188 packages, elfeed/elfeed-goodies/elfeed-org/
+  elfeed-tube all installed)
+- [X] =doom doctor= run — clean except 2 expected warnings (=mpv=,
+  =youtube-dl=/=yt-dlp= missing, both needed only for elfeed-tube's mpv
+  follow-along feature)
+- [X] User installs =mpv= + =yt-dlp= (agent has no passwordless =sudo=);
+  =doom doctor= re-run 2026-08-10 — fully clean, 46 modules, 151 packages,
+  zero warnings
+- [X] =docs/inventory.org= entry added for =mpv= 0.37.0-1ubuntu4 and
+  =yt-dlp= 2024.04.09-1 (both apt, both confirmed on =PATH=)
+- [ ] Live-verify in the user's own interactive session: =SPC o r= opens
+  elfeed, auto-update fires, elfeed-tube transcript/follow-along works
+- [ ] Update ADR-012 =:STATUS:= to =live-verified= (with a =:LOGBOOK:=
+  entry) once the above is confirmed
+
 * Backlog (untimed, not tied to a phase)
 
 ** TODO Migrate claude-code-ide.el's terminal backend from vterm to ghostel

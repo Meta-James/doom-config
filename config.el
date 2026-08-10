@@ -80,14 +80,9 @@
 (add-hook 'server-after-make-frame-hook
           (lambda ()
             (set-frame-parameter nil 'fullscreen 'maximized)
-            (run-with-timer 0.1 nil #'+doom-dashboard/open (selected-frame))))
+            (run-with-timer 0.1 nil #'+dashboard/open (selected-frame))))
 
 (add-to-list 'default-frame-alist '(undecorated . t))
-
-(add-hook 'server-after-make-frame-hook
-          (lambda ()
-            (set-frame-parameter nil 'fullscreen 'maximized)
-            (run-with-timer 0.1 nil #'+doom-dashboard/open (selected-frame))))
 
 ;; Center text and limit line width for better readability
 (use-package! perfect-margin
@@ -407,6 +402,18 @@ region/buffer/project-file context already."
     (smtpmail-smtp-server . "mail.gandi.net")
     (smtpmail-smtp-service . 465)
     (smtpmail-stream-type  . ssl)))
+
+;; RSS: elfeed (+org +youtube). Feeds are managed as an Org outline at
+;; org-directory/elfeed.org (elfeed-org), not as a `elfeed-feeds' list here --
+;; see that file for actual subscriptions. `+youtube' adds elfeed-tube
+;; (transcript fetching, mpv follow-along -- the mpv-specific keybindings are
+;; inert until `mpv' is installed on this system). See docs/decisions.org for
+;; the RSS integration ADR.
+(map! :leader :desc "RSS (elfeed)" "o r" #'elfeed)
+
+;; Auto-refresh feeds whenever the elfeed search buffer is opened, so `SPC o r'
+;; doesn't show a buffer that's stale since the last manual `elfeed-update'.
+(add-hook 'elfeed-search-mode-hook #'elfeed-update)
 
 ;; Inline completion: Copilot overlay + Next Edit Suggestions.
 ;; TAB/C-TAB below are copilot.el's own default bindings (`copilot-completion-map'
