@@ -387,3 +387,68 @@ affordance (doesn't exist) and an agent-initiated file-open capability (does
 exist, already exercised via Ediff). Write acceptance criteria against a
 verified mechanism, not an assumed one — this one should have been checked
 against source before being handed to the user to test by hand.
+
+* RESOLVED: poisoned =05-doom-env.load.el= caused "Transcript saving is off", recurring every reboot
+:PROPERTIES:
+:ID:       tshoot-claude-env-leak
+:END:
+:LOGBOOK:
+- Resolved [2026-08-11 Tue], reported directly by the user as "Transcript
+  saving is off" recurring identically after every reboot, in a
+  claude-code-ide.el session
+- Live-verified [2026-08-11 Tue]: user opened a real claude-code-ide.el
+  session in their live daemon (after the =config.el= strip was applied to
+  it, see [[id:adr-strip-claude-env-vars][ADR-013]]'s LOGBOOK) and confirmed it worked, no "Transcript
+  saving is off".
+:END:
+
+Same underlying mechanism as [[id:tshoot-daemon-path-systemd][tshoot-daemon-path-systemd]] above (=doom sync
+--env='s cache, =05-doom-env.load.el=, loaded unconditionally on every Emacs
+startup), different poison: on 2026-08-10 that command was run from *inside
+an active Claude Code CLI subprocess shell*, so the scrape captured and
+permanently baked in that shell's ephemeral, subprocess-only Claude Code
+identity vars (=CLAUDECODE=1=, =CLAUDE_CODE_SESSION_ID=,
+=CLAUDE_JOB_DIR=, =CLAUDE_PID=, =CLAUDE_CODE_CHILD_SESSION=1=,
+=CLAUDE_CODE_ENTRYPOINT=cli=, =AI_AGENT=) belonging to a session/job that had
+already exited. Every subsequent Emacs startup — including after reboot —
+reloaded this cache, so every =claude= process launched from Emacs afterward
+inherited a dead session's identity instead of a fresh one. Confirmed live,
+in the diagnosing session itself: its own =CLAUDE_JOB_DIR= env var pointed at
+the stale, already-exited job directory from the poisoned file (not its own,
+different, real session ID) — and that job directory's =exit-cause=/
+=exit-detail= read =exit_with_message= / "No conversation found to
+continue".
+
+Confirmed via Anthropic's own docs
+([[https://code.claude.com/docs/en/env-vars]]) that =CLAUDECODE=/
+=CLAUDE_CODE_CHILD_SESSION= are documented as subprocess-only markers, never
+meant to be inherited past that subprocess's lifetime, and that a process
+seeing =CLAUDE_CODE_CHILD_SESSION=1= is "automatically excluded from
+--resume, --continue, up-arrow history, and the claude agents list" —
+matching the observed "No conversation found to continue" and almost
+certainly the mechanism behind "Transcript saving is off" too. Confirmed via
+GitHub issue =anthropics/claude-code#26190= this is a known bug class
+(inherited =CLAUDECODE=/=CLAUDE_CODE_ENTRYPOINT= confusing a freshly-launched
+=claude=), with Anthropic's own recommended workaround being to strip these
+vars before launching a nested =claude= process. Confirmed by reading
+claude-code-ide.el's source directly that the package does not do this
+stripping itself (it only prepends its own =CLAUDE_CODE_SSE_PORT=/
+=TERM_PROGRAM=/=FORCE_CODE_TERMINAL=, passing the rest of
+=process-environment= through untouched) and exposes no setting for it.
+
+*Fix*: see [[id:adr-strip-claude-env-vars][ADR-013]] for the full decision record. Short version — a
+one-time cache regeneration isn't sufficient (it will keep getting
+re-poisoned, since =doom sync --env= is this repo's own documented remedy
+for the PATH bug above, and will always be run by an agent whose shell has
+=CLAUDECODE=1= set). =config.el= (confirmed via source reading to be the one
+thing Doom loads *last*, every startup, after the env cache and all modules)
+now defensively strips any =process-environment= entry matching
+=CLAUDECODE=, =CLAUDE_*=, or =AI_AGENT= on every startup, regardless of what
+=05-doom-env.load.el= contains — self-healing even if the cache is poisoned
+again in the future.
+
+*Takeaway*: don't run =doom sync --env= (or trust its output) from a shell
+that is itself a Claude Code CLI subprocess — its ambient environment
+includes ephemeral, subprocess-only identity vars that were never meant to
+be cached as permanent config. If it happens anyway, the =config.el= strip
+now neutralizes the consequences regardless.

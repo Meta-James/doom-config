@@ -170,7 +170,8 @@ CLOSED: [2026-07-21 Tue]
   reviewed, nothing unintended, no secret values present. Ready for your
   review.
 
-* IN-PROGRESS Phase 3 — RSS integration
+* DONE Phase 3 — RSS integration
+CLOSED: [2026-08-10 Mon]
 :PROPERTIES:
 :EFFORT:   30m
 :END:
@@ -191,30 +192,44 @@ ADR-012 for the full decision record.
   zero warnings
 - [X] =docs/inventory.org= entry added for =mpv= 0.37.0-1ubuntu4 and
   =yt-dlp= 2024.04.09-1 (both apt, both confirmed on =PATH=)
-- [ ] Live-verify in the user's own interactive session: =SPC o r= opens
-  elfeed, auto-update fires, elfeed-tube transcript/follow-along works
-- [ ] Update ADR-012 =:STATUS:= to =live-verified= (with a =:LOGBOOK:=
+- [X] Live-verify in the user's own interactive session: =SPC o r= opens
+  elfeed, auto-update fires, elfeed-tube transcript/follow-along works —
+  user confirmed all three
+- [X] Update ADR-012 =:STATUS:= to =live-verified= (with a =:LOGBOOK:=
   entry) once the above is confirmed
 
 * Backlog (untimed, not tied to a phase)
 
-** TODO Migrate claude-code-ide.el's terminal backend from vterm to ghostel
+** IN-PROGRESS Migrate claude-code-ide.el's terminal backend from vterm to ghostel
 User intends to eventually switch =claude-code-ide-terminal-backend= from
 ='vterm= to ='ghostel= (an embedded-Ghostty backend claude-code-ide.el
 already supports alongside =vterm=/=eat=, see =claude-code-ide.el:226-234=).
-Not implemented yet — =ghostel= isn't installed and its resize/redraw
-behavior is unverified. Interim fix for the vterm resize-repaint bug that
-motivated this is the =window-size-fixed= freeze in =config.el= (2026-08-07,
-see the =vterm-mode-hook= comment there).
+Interim fix for the vterm resize-repaint bug that motivated this is the
+=window-size-fixed= freeze in =config.el= (2026-08-07, see the
+=vterm-mode-hook= comment there).
 
-Before switching:
-- Confirm =ghostel= is still maintained and =ghostel-exec= is available
-  (package install needs explicit approval per =AGENTS.md=).
-- =my/project-vterm= and Doom's built-in terminal popup (=:term vterm= in
-  =init.el=) are hard-wired to =vterm= directly — decide whether to migrate
-  those too or accept running two terminal packages side by side (cuts
-  against =AGENTS.md='s "one tool per responsibility" rule if left
+- [X] Confirm =ghostel= is still maintained and =ghostel-exec= is available
+  — Doom ships a =:term ghostel= module (maintained by @hlissner, since
+  26.07.0) declaring =ghostel=/=evil-ghostel=, providing =ghostel-exec=;
+  confirmed by reading =claude-code-ide.el='s own backend dispatch.
+- [X] Package installed (explicit approval given 2026-08-10) — =init.el=:
+  =ghostel= added alongside =vterm= in =:term= (not replacing it yet).
+  =doom sync= clean, 190 packages. =doom doctor= clean except one expected
+  warning (missing =zig=, only needed to compile from source — pre-built
+  binaries cover this machine's =x86_64-linux=). See [[file:docs/inventory.org][inventory.org]].
+- [ ] User runs =M-x ghostel= interactively once to trigger the native
+  =libghostty-vt= module's pre-built-binary download
+  (=ghostel-module-auto-install=) — needs a real interactive session, not
+  agent-doable.
+- [ ] Live-verify ghostel actually renders/resizes correctly before flipping
+  the backend over.
+- [ ] Set =claude-code-ide-terminal-backend= to ='ghostel= in =config.el=
+  and re-verify the Phase 6 agentic workflow smoke test still passes.
+- [ ] =my/project-vterm= and Doom's built-in terminal popup (=:term vterm=
+  in =init.el=) are hard-wired to =vterm= directly — decide whether to
+  migrate those too or accept running two terminal packages side by side
+  (cuts against =AGENTS.md='s "one tool per responsibility" rule if left
   unresolved).
-- Re-evaluate whether the =window-size-fixed= freeze is still needed
+- [ ] Re-evaluate whether the =window-size-fixed= freeze is still needed
   afterward, or can be scoped down / removed if =ghostel= doesn't share
   vterm's redraw bug.

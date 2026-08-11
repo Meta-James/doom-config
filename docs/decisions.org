@@ -1293,7 +1293,7 @@ console.cloud.google.com if abandoning OAuth2 entirely; =pass rm= any
 * ADR-012: elfeed (=:app rss +org +youtube=) for RSS integration
 :PROPERTIES:
 :ID:       adr-rss-elfeed
-:STATUS:   Accepted, implemented — not yet live-verified
+:STATUS:   live-verified
 :DATE:     2026-08-10
 :END:
 :LOGBOOK:
@@ -1307,6 +1307,12 @@ console.cloud.google.com if abandoning OAuth2 entirely; =pass rm= any
   live-verified"; still short of =live-verified= until =SPC o r=,
   auto-update, and elfeed-tube transcript/follow-along are confirmed working
   in the user's own interactive session.
+- Note taken on [2026-08-10] \\
+  User confirmed, in their own interactive session, all three remaining
+  validation items: =SPC o r= opens elfeed, auto-update fires on open, and
+  an elfeed-tube transcript/follow-along completed successfully.
+  =:STATUS:= moved to =live-verified=. Phase 3 — RSS integration is now
+  fully closed.
 :END:
 
 ** Context
@@ -1416,11 +1422,10 @@ See Candidates table above.
   =doom doctor= re-run: fully clean, 46 modules, 151 packages, zero
   warnings. Both binaries confirmed on =PATH= (=which mpv yt-dlp=) and
   recorded in [[id:docs-inventory][inventory.org]].
-- Not yet done: live-verify =SPC o r= opens elfeed, auto-update fires, and
-  an elfeed-tube transcript/follow-along actually works — this repo's
-  convention (Phase 1/2) is to confirm these in the user's own interactive
-  session rather than assert them from static config, so =:STATUS:= stays
-  short of =live-verified= until that happens.
+- *2026-08-10:* user confirmed, in their own interactive session, that
+  =SPC o r= opens elfeed, auto-update fires on open, and an elfeed-tube
+  transcript/follow-along completed successfully. All validation items now
+  closed.
 
 ** Rollback
 Remove =(rss +org +youtube)= from =init.el='s =:app= section (restore the
@@ -1431,12 +1436,204 @@ package manager independently — nothing else in this config depends on them.
 
 ** Revisit when
 - *Done 2026-08-10, see LOGBOOK:* =mpv=/=yt-dlp= installed, =doom doctor=
-  re-run clean. Still open: the user tries =SPC o r=/auto-update/
-  elfeed-tube follow-along in their own interactive session — once
-  confirmed, update =:STATUS:= to =live-verified= alongside a =:LOGBOOK:=
-  entry, not a silent edit.
+  re-run clean, and =SPC o r=/auto-update/elfeed-tube follow-along all
+  confirmed working in the user's own interactive session. =:STATUS:= is
+  =live-verified=; nothing left open on this ADR.
 - The user wants IRC, Mastodon/Twitter, or another "communications" tool —
   scope and grill that as its own phase; this ADR explicitly does not cover
   it, per the Context split above.
 - =elfeed.org= grows enough feeds/tags that the flat scaffold's usage
   comment stops being sufficient documentation of the convention.
+
+* ADR-013: Defensively strip Claude-Code session env vars in =config.el=
+:PROPERTIES:
+:ID:       adr-strip-claude-env-vars
+:STATUS:   Implemented, live-verified
+:DATE:     2026-08-11
+:END:
+:LOGBOOK:
+- Note taken on [2026-08-11] \\
+  Applied live: =M-x doom/reload-env= picked up the re-cleaned cache, then
+  the =config.el= strip expression was evaluated directly against the user's
+  running daemon to clear the vars =doom/reload-env= alone couldn't (it only
+  appends the reloaded file's contents on top of the existing
+  =(default-value 'process-environment)=, it doesn't clear entries absent
+  from the new file — so vars baked in at the daemon's original boot, before
+  this fix existed, needed a direct clear). Confirmed via
+  =emacsclient --eval= immediately after: zero =CLAUDE*=/=AI_AGENT= entries
+  remained. A subprocess spawned fresh from the live daemon (=call-process
+  "env"=) also showed zero such entries, confirming the actual inheritance
+  mechanism claude-code-ide.el's spawned =claude= process depends on.
+- Note taken on [2026-08-11] \\
+  User opened a real claude-code-ide.el session interactively in their live
+  daemon afterward and confirmed it worked — no "Transcript saving is off".
+  (An agent-driven attempt via remote =emacsclient --eval= immediately before
+  this had died with exit code 129; user clarified afterward that was them
+  killing it themselves before the agent could inspect it, not a fix
+  failure.) =:STATUS:= moved to =live-verified=; nothing left open on this
+  ADR.
+:END:
+
+** Context
+User reported "Transcript saving is off" recurring identically after every
+reboot, from a claude-code-ide.el session. Diagnosis (this conversation):
+Doom's =doom sync --env= scrapes the invoking shell's *entire* environment
+into =~/.config/emacs/.local/etc/@/init.d/05-doom-env.load.el=, which Doom
+loads unconditionally on every Emacs startup — this is the exact mechanism
+[[id:tshoot-daemon-path-systemd][docs/ai/troubleshooting.org's tshoot-daemon-path-systemd]] entry documents as
+the standard remediation for a separate PATH bug. On 2026-08-10 that command
+was run from inside an active Claude Code CLI subprocess shell, so it
+captured and permanently baked in that shell's ephemeral, subprocess-only
+Claude Code identity vars (=CLAUDECODE=1=, =CLAUDE_CODE_SESSION_ID=,
+=CLAUDE_JOB_DIR=, =CLAUDE_PID=, =CLAUDE_CODE_CHILD_SESSION=1=,
+=CLAUDE_CODE_ENTRYPOINT=cli=, =AI_AGENT=, ...) belonging to a session/job that
+had already exited. Every subsequent Emacs startup — including after
+reboot — reloads this poisoned cache, so every =claude= process launched from
+Emacs afterward (any claude-code-ide.el session, any terminal backend)
+inherits a dead session's identity instead of a fresh one. This is why the
+symptom is identical after every reboot: the poisoned *file* survives reboot
+untouched; only regenerating it changes anything, and regenerating it via the
+documented =doom sync --env= remediation will always be run by an agent,
+whose shell always has =CLAUDECODE=1= set, so it will keep getting
+re-poisoned unless something else structurally prevents it.
+
+** Decision drivers
+- Must survive reboot (the reported symptom recurs identically every reboot,
+  so a fix that doesn't survive it hasn't fixed anything).
+- Must survive Doom package updates and Doom core upgrades — rules out
+  patching claude-code-ide.el's vendored source or Doom's own =cli/env.el=,
+  both overwritten/reverted by =doom sync -u=/=doom upgrade=, consistent with
+  this project's existing precedent in
+  [[id:tshoot-treesitter-confirmed][docs/ai/troubleshooting.org's tree-sitter entry]] of not patching
+  vendor/module source unprompted.
+- Must be self-healing even if =05-doom-env.load.el= gets re-poisoned again in
+  the future — a real recurrence risk, not hypothetical, since =doom sync
+  --env= is this repo's own documented PATH-bug remediation
+  ([[id:tshoot-daemon-path-systemd][tshoot-daemon-path-systemd]]) and will always be run from a
+  =CLAUDECODE=1= shell by an agent.
+- Must not depend on a procedural rule ("never run =doom sync --env= from
+  inside Claude Code") being remembered — that rule already silently failed
+  once, producing this exact incident.
+
+** Candidates
+| Decision point           | Candidates considered                                                        | Fate |
+|---------------------------+-------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------|
+| Where to strip the vars   | One-time regen of the env cache only / patch Doom's =cli/env.el= scraper / patch claude-code-ide.el's spawn function / defensive strip in this repo's =config.el= | *Defensive strip in =config.el=* accepted — see Evidence for why the other three fail structurally |
+| Strip granularity         | Exact enumerated var-name list / pattern match on =CLAUDECODE=\|=CLAUDE_*=\|=AI_AGENT= | *Pattern match* accepted — three independent sources (empirical contamination, official docs, the GitHub issue) each named a *different, non-overlapping* subset of bad vars, indicating the surface isn't fully enumerable and will likely grow in future CLI versions |
+| Symptom-level mitigation  | Set =CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1= to force persistence despite the child-session flag / fix the underlying env leak | *Fix the leak* accepted — forcing persistence doesn't fix the still-wrong/stale =CLAUDE_CODE_SESSION_ID= or the =CLAUDECODE=1= misidentification, it only papers over one downstream effect of it |
+
+** Evidence
+- Read =~/.config/emacs/.local/etc/@/init.d/05-doom-env.load.el= directly:
+  =:date "2026-08-10 15:34:41"=, containing =CLAUDECODE=1=,
+  =CLAUDE_CODE_SESSION_ID=92960d17-af5b-4dcf-93d4-d1ac5c76656b=,
+  =CLAUDE_JOB_DIR=/home/james/.claude/jobs/92960d17=, =CLAUDE_PID=17508=
+  (confirmed dead — =ps -p 17508= returns nothing),
+  =CLAUDE_CODE_CHILD_SESSION=1=, =CLAUDE_CODE_ENTRYPOINT=cli=,
+  =AI_AGENT=claude-code_2-1-226_agent=.
+- Confirmed live, in this very conversation's own session: =env | grep
+  CLAUDE_JOB_DIR= showed =/home/james/.claude/jobs/92960d17= — the *stale*
+  value from the poisoned file — while the session's real
+  =CLAUDE_CODE_SESSION_ID= was a different, correct value
+  (=cfb115ff-f0fc-4a0e-944f-e95ee16d1f4c=). Only explicable by this Emacs
+  session's =process-environment= having been set from the poisoned cache
+  file at startup and inherited by the vterm/claude subprocess.
+- =cat ~/.claude/jobs/92960d17/exit-cause ~/.claude/jobs/92960d17/exit-detail=:
+  =exit_with_message= / ="No conversation found to continue"= — a prior
+  session choked trying to resume that same stale, already-dead identity.
+- Confirmed via load-order source reading (=doom-profiles.el='s
+  =doom-profile--generate-init=/=doom-profile-generate-functions=, and the
+  generated =~/.config/emacs/.local/etc/@/init.d/80-doom-modules.init.el=)
+  that =05-doom-env.load.el= loads first (numeric prefix =05=) and
+  =$DOOMDIR/config.el= (the =:user= module) loads *last* of everything, every
+  single startup — confirming =config.el= is the one seam guaranteed to run
+  after the poisoned cache regardless of what's in it.
+- Fetched official Anthropic docs
+  ([[https://code.claude.com/docs/en/env-vars]]): =CLAUDECODE= and
+  =CLAUDE_CODE_CHILD_SESSION= are documented as intentionally subprocess-only
+  markers Claude Code sets on things it spawns (Bash tool, hooks, etc.),
+  never meant to be inherited beyond that subprocess's lifetime. Docs state a
+  process seeing =CLAUDE_CODE_CHILD_SESSION=1= is "automatically excluded
+  from --resume, --continue, up-arrow history, and the claude agents list" —
+  matches the observed "No conversation found to continue" exactly, and is
+  the most likely mechanism behind "Transcript saving is off" too.
+- Fetched GitHub issue =anthropics/claude-code#26190=: same bug class
+  (nested/inherited =CLAUDECODE=/=CLAUDE_CODE_ENTRYPOINT= confusing a
+  freshly-launched =claude= process in other users' reports). Issue closed
+  as not-planned; Anthropic's own recommended workaround is to explicitly
+  unset these vars before launching a nested =claude= process — confirms
+  stripping at the launch site is the sanctioned pattern, not a local hack.
+- Read claude-code-ide.el's source directly
+  (=~/.config/emacs/.local/straight/repos/claude-code-ide.el/claude-code-ide.el=,
+  function =claude-code-ide--create-terminal-session=): it only prepends
+  =CLAUDE_CODE_SSE_PORT=/=TERM_PROGRAM=/=FORCE_CODE_TERMINAL= (and
+  =CLAUDE_CODE_NO_FLICKER= when enabled) to whatever =process-environment= it
+  inherited from Emacs, and otherwise passes it through untouched. No
+  customizable variable exists for extra/stripped env vars — confirmed there
+  is no existing package setting to flip instead of this local fix.
+
+** Decision
+- =config.el=: add a defensive block, placed early (runs on every startup
+  regardless — see Evidence on load order), that removes any
+  =process-environment= entry matching =CLAUDECODE=, =CLAUDE_*=, or
+  =AI_AGENT= via pattern match, independent of what
+  =05-doom-env.load.el= contains.
+- One-time hygiene: regenerate =05-doom-env.load.el= via =doom sync --env=
+  from an environment-scrubbed subprocess (the invoking agent session is
+  itself a Claude Code subprocess, so the scrubbing has to happen
+  explicitly rather than by using a "naturally clean" shell) — removes the
+  now-inert dead entries. Not load-bearing for the fix (the =config.el=
+  strip is self-healing regardless), but avoids carrying obviously-wrong
+  cached values forward.
+- =docs/ai/troubleshooting.org=: new entry cross-linking
+  [[id:tshoot-daemon-path-systemd][tshoot-daemon-path-systemd]] and this ADR, documenting the incident.
+
+** Consequences
+- Every =claude= process launched from this Emacs config (any terminal
+  backend, any future integration) gets a clean environment with no risk of
+  inheriting a stale/dead session's identity, regardless of what future
+  =doom sync --env= runs capture.
+- If the user ever legitimately wants a =CLAUDE_*=-prefixed env var set
+  permanently (e.g. =CLAUDE_CONFIG_DIR= to relocate =~/.claude=), it must be
+  set explicitly in =config.el= via =setenv= *after* the strip block, not
+  relied on via shell-profile-scrape-and-cache — documented here as the
+  expected pattern going forward, since the blanket strip would otherwise
+  remove it too.
+- This is a local workaround for a gap in claude-code-ide.el (it doesn't
+  strip nesting-detection vars before spawning, unlike what Anthropic's own
+  issue thread recommends) — worth an upstream issue/PR against
+  =manzaltu/claude-code-ide.el= separately, not done as part of this ADR.
+
+** Rejected alternatives
+See Candidates table above.
+
+** Validation
+- Disposable test daemon (=emacs --daemon=cc-env-test=, spawned from a still
+  =CLAUDECODE=1= shell): =process-environment= showed zero
+  =CLAUDECODE=/=CLAUDE_*=/=AI_AGENT= entries after loading =config.el=,
+  confirming the strip works regardless of the daemon's own ambient
+  environment at boot.
+- Live daemon (the user's real session, socket =/run/user/1000/emacs/server=):
+  after =M-x doom/reload-env= plus a direct eval of the strip expression (see
+  LOGBOOK — =reload-env= alone wasn't sufficient), confirmed zero
+  =CLAUDE*=/=AI_AGENT= entries in both =process-environment= itself and a
+  freshly spawned subprocess (=call-process "env"=).
+- User confirmed, interactively, in their own live session: a new
+  claude-code-ide.el session launched successfully with no "Transcript
+  saving is off" error. Closed.
+- Not separately re-tested across an actual reboot — the fix now lives in
+  =config.el=, which is loaded fresh (not cached) on every startup including
+  after reboot, so this is expected to hold; revisit only if it doesn't.
+
+** Rollback
+Remove the defensive strip block from =config.el=. No other state depends on
+it — =05-doom-env.load.el= regeneration (the hygiene step) is independently
+reversible by just running =doom sync --env= again.
+
+** Revisit when
+- claude-code-ide.el (or Anthropic) adds a first-class option for this —
+  e.g. an upstream defcustom to strip nesting-detection vars before
+  spawning, or an official =claude= flag/env var to fully disable
+  nested-session detection for a specific launch — switch to that instead of
+  this local pattern-match workaround.
+- The user ever wants a real =CLAUDE_*=-prefixed env var set permanently;
+  add it explicitly after the strip block per the Consequences note above.
