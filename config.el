@@ -93,10 +93,49 @@
 ;; You can also try 'gd' (or 'C-c c d') to jump to their definition and see how
 ;; they are implemented.
 
-;; Maximize emacs on startup and resize splash screen
+;; Maximize every new graphical frame, and resize splash screen.
+;;
+;; Without `frame-resize-pixelwise', Emacs quantizes its frame to whole
+;; character-cell dimensions any time the size changes -- including right
+;; after the window manager maximizes it. On GNOME/Mutter (Ubuntu) that
+;; immediate "round back down to a cell boundary" resize reads as the app
+;; rejecting the maximize, so Mutter reverts the state instantly -- the frame
+;; never visibly grows at all. xfwm4 (Xubuntu) tolerates the mismatch and
+;; leaves it maximized regardless, which is why this only shows up on Ubuntu.
+(setq frame-resize-pixelwise t)
+
+;; Belt-and-suspenders: even with pixelwise resizing, GNOME/Mutter can still
+;; ignore a `fullscreen' request sent right at frame creation (the frame
+;; isn't mapped onto the display yet), unlike xfwm4, which applies it
+;; immediately. Reasserting it a few times over the following moments is a
+;; self-healing workaround -- setting `fullscreen' to a value it already has
+;; is a no-op, so this is harmless once it "sticks". Hooking
+;; `after-make-frame-functions' (rather than only
+;; `server-after-make-frame-hook') also covers frames created outside the
+;; emacsclient protocol, e.g. claude-code-ide.el's own frame.
+(defun +my/maximize-frame (frame)
+  (when (display-graphic-p frame)
+    (dolist (delay '(0 0.1 0.3))
+      (run-with-timer delay nil
+                       (lambda ()
+                         (when (frame-live-p frame)
+                           (set-frame-parameter frame 'fullscreen 'maximized)))))))
+(add-hook 'after-make-frame-functions #'+my/maximize-frame)
+
+;; ROOT CAUSE (found 2026-08-17): `after-make-frame-functions' is documented
+;; to never run for the very first frame of a session -- that frame already
+;; exists before this hook is installed. So the maximize logic above only
+;; ever ran for *subsequent* frames (emacsclient, claude-code-ide.el's own
+;; frame, C-x 5 2) and never for the frame you actually see at startup --
+;; confirmed live: zero `+my/maximize-frame' messages logged despite the
+;; frame existing. None of the undecorated/pixelwise theories were it; the
+;; startup frame's maximize call simply never fired. Call it directly once
+;; that frame exists.
+(add-hook 'window-setup-hook
+          (lambda () (+my/maximize-frame (selected-frame))))
+
 (add-hook 'server-after-make-frame-hook
           (lambda ()
-            (set-frame-parameter nil 'fullscreen 'maximized)
             (run-with-timer 0.1 nil #'+dashboard/open (selected-frame))))
 
 (add-to-list 'default-frame-alist '(undecorated . t))
