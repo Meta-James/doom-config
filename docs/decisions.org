@@ -718,8 +718,11 @@ depends on it.
 * ADR-009: Technical enforcement of no-commit/no-push via Claude Code permissions
 :PROPERTIES:
 :ID:       adr-permission-enforcement
-:STATUS:   Accepted, implemented, live-verified
+:STATUS:   Superseded by ADR-015 (2026-08-18)
 :DATE:     2026-07-20
+:END:
+:LOGBOOK:
+- State "Superseded" from "Accepted, implemented, live-verified"  [2026-08-18 Tue] — user requested the agent be able to run these five subcommands itself, gated by a per-action confirmation prompt instead of an outright block; see [[id:adr-agent-git-authority][ADR-015]]
 :END:
 
 ** Context
@@ -1811,3 +1814,128 @@ no separate binding to undo, per =config/default/+evil-bindings.el='s
 - The same unselected-window resize corruption vterm had shows up under
   ghostel — re-add a =window-size-fixed=-style freeze, scoped to
   =ghostel-mode-hook=, if so.
+
+* ADR-015: Agent gains full git commit/push/history-rewrite authority, gated by per-action confirmation prompt
+:PROPERTIES:
+:ID:       adr-agent-git-authority
+:STATUS:   Accepted, not yet live-verified
+:DATE:     2026-08-18
+:END:
+
+** Context
+[[id:adr-permission-enforcement][ADR-009]] technically blocked the agent from ever running =git
+commit=/=push=/=rebase=/=reset=/=clean=, on the premise that
+[[id:std-human-authority][std-human-authority]] means the human runs those commands directly via their own
+git/Magit, not the agent after an in-session approval. The user explicitly
+asked, in this conversation, to change that premise: the agent should be able
+to run these commands itself. This ADR records that reversal rather than
+letting a permission-file edit stand without the reasoning behind it, per
+this repo's own convention (=CLAUDE.md=, the =new-adr= skill) of recording
+architectural decisions as ADRs instead of only stating them in conversation.
+
+** Decision drivers
+- User's explicit, current-turn instruction — exactly the bar
+  =std-human-authority= itself sets for permission changes ("require
+  explicit, current-turn approval — a prior approval doesn't carry forward to
+  a new category of action").
+- Follow-up questions (asked before any edit, since this reverses a
+  live-verified technical control) established two independent axes the user
+  answered separately:
+  - *Scope*: full control — commit, push, and the destructive/history-rewrite
+    subcommands (rebase, reset, clean, amend, force-push) all become the
+    agent's to run, not just plain commit.
+  - *Confirmation model*: the user still wants to be asked before each
+    commit/push runs, in the moment — not full autonomy with no check-in.
+- Prefer a technical mechanism over a purely instructional one where Claude
+  Code supports it, matching the same preference that drove ADR-009
+  originally ([[id:ai-architecture][docs/ai/architecture.org]]: "Enforcement should be technical
+  ... where available, not merely instructional").
+
+** Candidates
+| Candidate | Fate |
+|-----------+------------------------------------------------------------|
+| Remove the =deny= list outright, rely on instructional confirmation only | Rejected — matches "full control" but drops the technical backstop for "still ask each time"; a purely instructional rule is exactly what ADR-009 judged insufficient in the first place |
+| Replace =deny= with =ask= for the same five subcommands | *Accepted* — =ask= forces a Claude Code permission prompt on every matching command, giving "ask each time" a technical mechanism instead of relying only on the agent remembering to propose first; scope (which five subcommands) stays identical to ADR-009, only the disposition changes |
+| =allow= outright, no prompt at all | Rejected — this is the "no confirmation needed" option the user did not choose |
+
+** Evidence
+- ADR-009's own candidates table considered =permissions.ask= and rejected it
+  as "the wrong shape per =std-human-authority=" — correct under the old
+  policy, where the human was meant to run these commands directly. That
+  premise is exactly what this ADR changes, so the previously-rejected
+  option becomes the right fit now.
+- Current =.claude/settings.json= (pre-edit) confirmed to hold only the
+  =permissions.deny= block from ADR-009 — five entries, one per subcommand
+  prefix (=git commit=, =push=, =rebase=, =reset=, =clean=), each using the
+  =Bash(<prefix> *)= wildcard form that also matches the bare prefix with no
+  arguments (so =git commit --amend= and =git push --force= are covered by
+  the existing =commit=/=push= entries — no new prefixes needed for "full
+  control", the five from ADR-009 already cover the full stated scope).
+
+** Decision
+=.claude/settings.json= changes from =deny= to =ask= for the same five
+subcommands:
+#+begin_src json
+{
+  "permissions": {
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git rebase *)",
+      "Bash(git reset *)",
+      "Bash(git clean *)"
+    ]
+  }
+}
+#+end_src
+=AGENTS.md=, =.claude/rules/security.md=, [[id:std-no-commit][docs/standards.org]] (=std-no-commit=),
+[[id:std-human-authority][std-human-authority]], [[id:ai-architecture][docs/ai/architecture.org]], and =docs/ai/workflows.org= updated
+to match: the agent may run these five subcommands, but must propose the
+specific command (and, for commit, the message; for push, the target) in
+conversation and get an explicit go-ahead before running it — a past
+approval doesn't carry forward to the next commit/push.
+
+** Consequences
+- The agent can now commit, push, and rewrite history in this repo, which it
+  technically could not do before. The =ask= prompt is the only remaining
+  technical backstop — if the human reflexively approves prompts without
+  reading them, the practical protection reduces to instructional discipline
+  alone, the exact failure mode ADR-009 was written to close. This is an
+  accepted, explicit trade-off per the user's current-turn instruction, not
+  an oversight.
+- =std-human-authority='s "the user remains responsible for commits and
+  pushes, always" no longer holds as stated; narrowed to "the user must
+  explicitly approve each commit/push/rewrite in the moment."
+- [[id:adr-permission-enforcement][ADR-009]] is superseded, not deleted — its Context/Decision-drivers/Evidence
+  remain an accurate record of why the technical block existed from
+  2026-07-20 to 2026-08-18, and its Rollback section is exactly the path back
+  if this is reverted.
+
+** Rejected alternatives
+See Candidates table above.
+
+** Validation
+- =jq -e '.permissions.ask[]' .claude/settings.json= — valid JSON, all five
+  rules present, =deny= key absent.
+- Not live-tested in this session: doing so would mean actually triggering a
+  matched git command and either approving or denying the resulting prompt,
+  which wasn't warranted just to validate this ADR. The first real
+  commit/push in this repo under the new policy is the live validation;
+  update this section (or add a =:LOGBOOK:= entry) once that happens.
+
+** Rollback
+Restore ADR-009's =.claude/settings.json= (=deny= block with the same five
+entries) and revert the wording in =AGENTS.md=, =.claude/rules/security.md=,
+=docs/standards.org= (=std-no-commit=, =std-human-authority=),
+=docs/ai/architecture.org=, and =docs/ai/workflows.org= back to "the agent
+never commits or pushes." Re-open [[id:adr-permission-enforcement][ADR-009]]'s status if so.
+
+** Revisit when
+- A commit, push, or history-rewrite run under this policy causes an actual
+  mistake (wrong message, unwanted push, unwanted rewrite) — signal to
+  reconsider the trade-off accepted above.
+- The user wants to tighten back to no-agent-commits at any point — that's a
+  reversion to ADR-009, not a new decision.
+- Claude Code's =ask=/=deny= permission-rule semantics change in a way that
+  could silently narrow or widen what these patterns match or how the prompt
+  behaves.

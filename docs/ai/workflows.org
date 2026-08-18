@@ -86,8 +86,9 @@ designed for it. Treat as unsupported until someone actually tries it.
 management, navigation, interaction, config, and debug submenus). One Claude
 instance per project (via =project.el= auto-detection). Plan → multi-file edit
 → run formatters/tests → present diff via Ediff (opens automatically,
-=claude-code-ide-use-ide-diff= =t=) → user accepts/rejects per hunk. Agent
-never commits or pushes (see [[id:std-no-commit][standards.org]]). Terminal backend: ghostel
+=claude-code-ide-use-ide-diff= =t=) → user accepts/rejects per hunk. Agent may
+commit/push, but only with explicit, in-the-moment approval each time (see
+[[id:std-no-commit][standards.org]]). Terminal backend: ghostel
 (switched from vterm 2026-08-17, see [[id:adr-terminal-backend-ghostel][ADR-014]]). Diagnostics backend: Flycheck,
 matching the existing Python stack.
 
