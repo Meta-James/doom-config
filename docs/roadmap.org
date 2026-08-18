@@ -78,6 +78,34 @@ recorded in [[id:docs-inventory][inventory.org]]. Live-verified in the user's
 own interactive session: =SPC o r= opens elfeed, auto-update fires, and
 elfeed-tube transcript/follow-along all confirmed working.
 
+* Phase 4 — Org Agenda and Capture basics (implemented, not yet live-verified)
+:PROPERTIES:
+:ID:       roadmap-phase-4
+:END:
+
+Promoted from the "Org Agenda and personal project management" and "Capture
+and knowledge management" Future-phases bullets below, scoped narrowly per
+=docs/standards.org= =std-no-scope-creep= ("don't build the full Org Agenda
+system until its own phase") — this phase deliberately covers agenda-files,
+TODO states, and capture templates only, plus (once the user asked for it
+mid-scoping) a hand-rolled dailies/backlinks-buffer layer on top of Vulpea
+(installed just before this phase; its own adoption ADR was missing at the
+time and has since been backfilled as [[id:adr-vulpea-note-management][ADR-019]]).
+
+*Status as of 2026-08-18:* implemented and reasoned through against Vulpea's
+actual source and Doom's actual default keybindings, but not yet exercised
+in the user's live session — no capture run, no agenda view opened, no daily
+note or backlinks buffer actually used yet.
+
+| Sub-phase                         | Status | Notes |
+|-------------------------------------+----------+---------------------------------------------------------|
+| Agenda files / TODO keywords / capture templates | Implemented | =org-agenda-files= = all of =org-directory= (user's explicit, informed choice — see [[id:adr-org-agenda-capture-basics][ADR-017]]); TODO keywords match =PROJECT.org='s own sequence; capture templates ("t"/"n"/"v") added, "v" creates a real Vulpea-indexed note. See [[id:adr-org-agenda-capture-basics][ADR-017]] |
+| Vulpea dailies                    | Implemented | =daily/YYYY-MM-DD.org= notes via =vulpea-create=, with today/pick-date/previous/next navigation. See [[id:adr-vulpea-dailies-backlinks][ADR-018]] |
+| Vulpea backlinks side buffer      | Implemented | Hand-rolled =org-roam-buffer= equivalent, right-side window, refreshes on window-selection *and* window-buffer change. See [[id:adr-vulpea-dailies-backlinks][ADR-018]] |
+| Live verification                 | Not started | Needs the user's real interactive session: run a capture, open the agenda, create/visit a daily note, toggle the backlinks buffer |
+| =docs/inventory.org= backfill      | Done | Added the =vulpea= package row that was missing since its 2026-08-18 install |
+| Vulpea-adoption ADR backfill      | Done | [[id:adr-vulpea-note-management][ADR-019]] (retroactive) records the original Vulpea-vs-org-roam decision that was never itself given an ADR |
+
 * Future phases (named, not implemented)
 :PROPERTIES:
 :ID:       roadmap-future
@@ -87,8 +115,6 @@ Listed so Phase 1 decisions don't paint these into a corner — none of this is
 scheduled or scoped yet.
 
 - Git and code review depth beyond Magit/Ediff
-- Org Agenda and personal project management
-- Capture and knowledge management
 - Documentation and publishing workflows
 - Calendar
 - Communications (IRC, social feeds, etc.) — split out from the old bundled

@@ -2086,3 +2086,398 @@ anticipated.
   "pick one as canonical" candidate.
 - This repo opens a new roadmap phase for AI-tooling work, at which point
   this ADR's "standalone update" framing should be revisited alongside it.
+
+* ADR-017: Org Agenda and Capture basics
+:PROPERTIES:
+:ID:       adr-org-agenda-capture-basics
+:STATUS:   Accepted, implemented; not yet live-verified
+:DATE:     2026-08-18
+:END:
+
+** Context
+=roadmap.org='s Future-phases list has carried "Org Agenda and personal
+project management" and "Capture and knowledge management" as named-but-
+unscoped bullets since Phase 1. The user asked to start exploring more of
+what Doom offers; after a scoping conversation, both were picked as the
+starting point, provided the work goes through a real, narrowly-scoped
+phase rather than growing informally — =docs/standards.org= =std-no-scope-
+creep= explicitly says "don't build the full Org Agenda system until its
+own phase." This ADR *is* that phase, deliberately bounded to agenda-files,
+TODO states, and capture templates — no custom agenda views, no refile
+automation, no habit tracking.
+
+A related gap surfaced while scoping this: Vulpea (note management,
+installed the same day as this ADR) was never itself given an ADR, and is
+missing from =docs/inventory.org='s package table. Both are now fixed —
+the inventory row below, and the ADR itself backfilled separately as
+[[id:adr-vulpea-note-management][ADR-019]].
+
+** Decision drivers
+- =std-no-scope-creep=: agenda/capture basics only, not the full system.
+- =org-directory= (=~/org/=) already exists as the user's real, years-old
+  personal Org tree (=doom.org=, =todo.org= from 2020, plus =marxism-
+  notes/=, =work/=, =personal/=, =mtg/=, =test/= subdirectories) — this
+  predates the project entirely and isn't something to redesign or migrate.
+- TODO-keyword consistency: this repo already has a live convention
+  (=PROJECT.org='s =#+TODO: TODO(t) IN-PROGRESS(i) BLOCKED(b) | DONE(d)
+  REJECTED(r)=) — reuse it rather than inventing a second vocabulary.
+- Vulpea's own docstring for =vulpea-create= explicitly recommends
+  =org-capture= with a =vulpea-compatible= template for interactive note
+  capture, and its docs (=docs/user-guide.org= "Quick Capture Integration")
+  give the exact target-function pattern to use.
+
+** Candidates
+| Decision point | Candidates | Fate |
+|-----------------+-------------------------------------------------------+------------------------------------------|
+| Agenda files scope | New =inbox.org= only vs. all of =org-directory= | User explicitly chose all of =org-directory=, informed that =doom.org= has a stray non-task "TODO" headline that will now surface in the live agenda — a deliberate, informed choice, not an oversight |
+| TODO keywords | Stock Org =TODO=/=DONE= vs. this repo's =PROJECT.org= convention | User chose to reuse =PROJECT.org='s convention, for consistency across this repo |
+| Capture targets | New =inbox.org= vs. the pre-existing "Inbox" headline already in =~/org/todo.org= | Reused the existing headline — =todo.org= already had an "Inbox" top-level heading (with a stray note-to-self about =SPC X=/org-capture, ironically), so a second parallel inbox file would only fragment the same concept |
+| Capture scope | Tasks only / tasks+notes / tasks+notes+Vulpea-linked note | User chose tasks+notes+Vulpea-linked (the third creates a real ID-bearing, backlink-capable note, not just a plain entry) |
+
+** Evidence
+- Read =docs/standards.org= (=std-no-scope-creep=) and confirmed the rule
+  directly forbids building the full Agenda system outside its own phase —
+  this ADR exists specifically to satisfy that rule, not route around it.
+- Read Doom's own =+evil-bindings.el=
+  (=~/.config/emacs/sources/doom+/modules/config/default/+evil-bindings.el=)
+  and confirmed =SPC X= and =SPC n n= already resolve to =org-capture=, and
+  =SPC n a=/=SPC o a= already resolve to =org-agenda= — no new keybindings
+  needed for either entry point, only the underlying variables.
+- Read Vulpea's own source (=~/.config/emacs/.local/straight/repos/vulpea/
+  vulpea.el=, =vulpea-create='s docstring) and its
+  =docs/user-guide.org= "Quick Capture Integration" section, confirming the
+  =(file (lambda () (vulpea-note-path (vulpea-create TITLE))))= pattern is
+  the package's own recommended way to wire capture into it — not a
+  workaround.
+- =ls ~/org/= and =find ~/org -iname "*.org"= confirmed the pre-existing
+  personal tree described above, including that =~/org/todo.org= already
+  has an "Inbox" headline and =~/org/doom.org= has a stray =* TODO
+  Referencing [gist]...= headline that isn't a real task.
+- =grep -n -i vulpea docs/inventory.org= returned nothing — confirmed the
+  missing-inventory-entry gap named in Context.
+
+** Decision
+- =config.el=, wrapped in a single =(after! org ...)= block:
+  - =org-agenda-files= set to =(list org-directory)=.
+  - =org-todo-keywords= set to match =PROJECT.org='s sequence.
+  - =org-capture-templates=: ="t"= (Task) and ="n"= (Note), both
+    =file+headline= into =~/org/todo.org='s "Inbox" heading; ="v"= (Vulpea
+    note), a =plain= template whose file target calls =(vulpea-create
+    (read-string "Title: "))= and returns its path, per Vulpea's own
+    recommended pattern.
+- =docs/inventory.org=: added the missing =vulpea= row to the "Explicit
+  packages" table (see the entry there for the pinned commit).
+
+** Consequences
+- Doom's existing =SPC X=/=SPC n n= (capture) and =SPC n a=/=SPC o a=
+  (agenda) entry points now do something real; nothing new was bound.
+- The live agenda view will include =doom.org='s stray "TODO" headline per
+  the user's explicit choice (see Candidates) — not a bug if it shows up.
+- =~/org/todo.org= gains new entries under "Inbox" whenever ="t"=/="n"=
+  capture is used, interleaved with the pre-existing stray note already
+  there; nothing is deleted or restructured.
+- This does not touch =work/=, =personal/=, =marxism-notes/=, =mtg/=, or
+  =test/= — those stay exactly as they were, out of scope.
+- The Vulpea-adoption gap named in Context is now closed by
+  [[id:adr-vulpea-note-management][ADR-019]] (backfilled separately, not as part of this ADR's own scope).
+
+** Rejected alternatives
+See Candidates table above.
+
+** Validation
+Structural only so far: the =after! org= block was written and reasoned
+through against Doom's actual default bindings and Vulpea's actual source,
+but not yet exercised in the user's live session (no capture actually run,
+no agenda view actually opened). =doom sync=/=doom doctor= confirm the
+config loads cleanly; see the Validation note this ADR's companion,
+[[id:adr-vulpea-dailies-backlinks][ADR-018]], shares the same live-verification gap.
+
+** Rollback
+Delete the =(after! org ...)= block added to =config.el=. =org-agenda-
+files=/=org-todo-keywords=/=org-capture-templates= all revert to Doom's
+stock defaults (=org-agenda-files= empty, stock =TODO=/=DONE=, stock
+single "Todo" capture template). Nothing in =~/org/= needs to be touched —
+this only changes what points at the tree, not the tree itself.
+
+** Revisit when
+- The user actually uses capture/agenda for a while and wants a real
+  agenda view (custom block agenda, tags search, etc.) — that's exactly
+  the "full system" =std-no-scope-creep= deferred, and would be its own
+  follow-on ADR.
+- =doom.org='s stray "TODO" headline turns out to actually bother the user
+  in practice — trivial fix (reword the headline, or narrow =org-agenda-
+  files= at that point), not a reason to hold up this ADR now.
+
+* ADR-018: Hand-rolled Vulpea dailies and backlinks buffer
+:PROPERTIES:
+:ID:       adr-vulpea-dailies-backlinks
+:STATUS:   Accepted, implemented; not yet live-verified
+:DATE:     2026-08-18
+:END:
+
+** Context
+While scoping [[id:adr-org-agenda-capture-basics][ADR-017]], the user asked for
+"everything org-roam has to offer" on top of the newly-installed Vulpea.
+Reading Vulpea's actual source found two real gaps against org-roam:
+dailies/journal notes (=org-roam-dailies=) and a persistent backlinks side
+buffer (=org-roam-buffer=) — neither exists anywhere in Vulpea. Installing
+org-roam alongside Vulpea to get them was rejected outright: Vulpea was
+already chosen over org-roam specifically to keep "one tool per
+responsibility" (=AGENTS.md=, =docs/standards.org= =std-no-duplication=),
+and running both would reopen that settled choice for no clear gain, since
+they serve the same role. That leaves hand-rolling both features on top of
+Vulpea's public API as the only option that doesn't reopen the org-roam
+question — offered to the user explicitly as "real new code, not just
+config, worth its own ADR section," and chosen.
+
+** Decision drivers
+- =std-no-duplication=: don't add org-roam as a second note-graph tool
+  alongside Vulpea.
+- The user explicitly chose the "build both, hand-rolled" option after
+  being told plainly this means new =config.el= logic, not configuration
+  of something that already exists.
+- Whatever gets built should stay a Vulpea note under the hood (real ID,
+  indexed, backlink-capable via =vulpea-find=/=vulpea-insert=) rather than
+  a parallel, un-indexed file format — otherwise it isn't really "on top
+  of Vulpea."
+
+** Candidates
+| Feature | Candidates | Fate |
+|----------+---------------------------------------------------------------+------------------------------------------|
+| Dailies | Skip / daily-only / hand-rolled daily+backlinks (both) | User chose "build both, hand-rolled" over the two lighter options offered first |
+| Daily file naming | Vulpea's own =${timestamp}_${slug}= default vs. an explicit =daily/YYYY-MM-DD.org= path | Explicit date-based path chosen — timestamp+slug is right for atomic notes, wrong for one-per-calendar-day journal entries that need to be found by date, not searched by title |
+| Backlinks refresh trigger | =window-selection-change-functions= only vs. that plus =window-buffer-change-functions= | Both — reasoned through the failure mode of using only the first (see Evidence): visiting a different note in the *same* window via =vulpea-find=/=vulpea-find-backlink= would never trigger a refresh, which is the single most common way notes actually get visited |
+
+** Evidence
+- Grepped Vulpea's source
+  (=~/.config/emacs/.local/straight/repos/vulpea/*.el=) for
+  =backlink=/=daily=/=journal=/=buffer=-related public functions: no
+  dailies concept anywhere; the only backlinks-related public function is
+  =vulpea-find-backlink= (jump-to, not a live panel).
+- Confirmed the underlying public query API needed for a backlinks buffer
+  does exist and is loaded transitively: =vulpea-db-query-links-to=,
+  =vulpea-db-query-by-ids=, and =vulpea-db-query-by-file-path= are all
+  defined in =vulpea-db-query.el=, which =vulpea.el= pulls in transitively
+  via =(require 'vulpea-select)= etc. (traced the require graph directly;
+  =vulpea.el= itself calls all three of these internally, at
+  =vulpea.el:787= and =vulpea.el:2028=, confirming they're safe to call
+  once Vulpea is loaded).
+- Confirmed =vulpea-create='s file-name argument is a template relative to
+  =vulpea--default-directory= (defaults to =org-directory=), not required
+  to be the package's own default pattern — passing an explicit
+  =daily/<date>.org= template is a supported, not a hacked-around, use.
+- Reasoned explicitly through the single-hook failure mode before writing
+  the refresh logic: =window-selection-change-functions= fires on
+  =select-window= (switching windows) but *not* when the buffer inside the
+  already-selected window changes (e.g. =find-file=, or anything
+  =vulpea-visit= does) — the exact case triggered by using =vulpea-find=/
+  =vulpea-find-backlink= from within a note. Added
+  =window-buffer-change-functions= alongside it to cover that case; both
+  share the same handler and signature.
+- Not yet live-tested: no capture run, no daily note created, no side
+  buffer opened in the user's real session. See Validation.
+
+** Decision
+=config.el= additions (both under the existing "Vulpea" section, after the
+=use-package! vulpea= block):
+- *Dailies*: =my/vulpea-daily-today=, =my/vulpea-daily-date=,
+  =my/vulpea-daily-previous=, =my/vulpea-daily-next=, backed by
+  =vulpea-create= with an explicit =daily/YYYY-MM-DD.org= file-name
+  template and a ="daily"= tag; previous/next scan the =daily/= directory
+  by filename (ISO dates sort lexically = chronologically) rather than
+  querying the Vulpea database, keeping them simple and independent of
+  index freshness.
+- *Backlinks buffer*: =my/vulpea-buffer-toggle= opens a right-side window
+  (=*vulpea-buffer*=, its own =special-mode=-derived major mode) rendering
+  the current note's title and incoming links (source note as a clickable
+  button via =insert-text-button=, plus the link's description if any). No
+  unlinked-references section, no citation backlinks — scoped to exactly
+  what was asked for. Refreshes via both
+  =window-selection-change-functions= and =window-buffer-change-functions=
+  (see Evidence), gated on the shown note's ID actually changing so it
+  doesn't re-render on every window/buffer event.
+- New leader bindings under the existing =(n v)= vulpea prefix: ="j"=
+  (today), ="J"= (pick date), ="p"=/="n"= (previous/next daily), ="B"=
+  (toggle backlinks buffer). ="d"= was already taken by
+  =vulpea-doctor=, hence ="j"=/="J"= for dailies rather than a =d=-based
+  mnemonic.
+
+** Consequences
+- Daily notes are real Vulpea notes: indexed, findable via =vulpea-find=,
+  linkable via =vulpea-insert=, backlink-capable — not a separate,
+  un-indexed journal format.
+- The backlinks buffer is intentionally thinner than =org-roam-buffer=:
+  no unlinked-references, no per-link context/preview beyond the
+  description text, no citation-link support. Documented here as a
+  deliberate boundary, not a bug to file later without checking this ADR
+  first.
+- Two more custom, hand-maintained functions' worth of surface area in
+  =config.el= that a future Vulpea upgrade could break (e.g. if
+  =vulpea-db-query-links-to='s plist shape ever changes) — accepted
+  knowingly, per the Decision drivers, as the cost of not running a second
+  note-graph tool.
+- =daily/= is a new subdirectory under =org-directory=; since [[id:adr-org-agenda-capture-basics][ADR-017]]
+  put all of =org-directory= in =org-agenda-files=, any daily note that
+  happens to contain a TODO-keyword heading will also surface in the
+  agenda — consistent with that ADR's already-accepted scope, not a new
+  decision.
+
+** Rejected alternatives
+See Candidates table above. Installing org-roam alongside Vulpea specifically
+to get these two features was the implicit third option and was never
+seriously on the table, per the Decision drivers.
+
+** Validation
+Structural only: read Vulpea's actual source to confirm every function
+called here is real and public (or safely transitively loaded), and reasoned
+through the backlinks-refresh failure mode concretely rather than assuming a
+single hook would do. Not yet live-verified in the user's own session —
+none of =my/vulpea-daily-today=, the previous/next navigation, or
+=my/vulpea-buffer-toggle= has actually been run yet. =doom doctor= confirms
+the config loads without error, which is necessary but not sufficient
+evidence this behaves correctly in use.
+
+** Rollback
+Delete the two new =config.el= sections (dailies functions, backlinks
+buffer functions) and the five new =map!= entries they added under =(n
+v)=. Any daily notes already created under =~/org/daily/= remain as
+ordinary Vulpea notes (nothing about removing this code deletes user
+content) but lose their dedicated navigation commands.
+
+** Revisit when
+- The user actually uses dailies/backlinks for a while and wants
+  org-roam-buffer's fuller feature set (unlinked references, richer
+  preview) — that's a real scope expansion of *this* ADR's boundary, not a
+  bug in what's here now.
+- =vulpea-db-query-links-to='s or =vulpea-db-query-by-ids='s return shape
+  changes in a future Vulpea upgrade (watch =CHANGELOG.org= in the
+  =vulpea= repo) — =my/vulpea-buffer--render= depends on the current
+  plist keys (=:source=, =:description=) directly.
+- Live-verification actually happens in the user's session — update
+  =:STATUS:= on both this ADR and [[id:adr-org-agenda-capture-basics][ADR-017]] together once it does,
+  per this repo's =:LOGBOOK:= convention.
+
+* ADR-019: Vulpea for note management (retroactive)
+:PROPERTIES:
+:ID:       adr-vulpea-note-management
+:STATUS:   Accepted, implemented; not live-verified (retroactive ADR)
+:DATE:     2026-08-18
+:END:
+
+** Context
+This is a *retroactive* ADR — =vulpea= was already installed and configured
+in the "Added Vulpea" commit (2026-08-18, same day), which added
+=(package! vulpea)=, a =use-package!= block, and =(n v)= leader bindings to
+=config.el=, but never got its own =decisions.org= entry. The gap was found
+and named while scoping [[id:adr-org-agenda-capture-basics][ADR-017]] (its Context/Consequences), and this
+ADR fills it in, backfilling reasoning that wasn't captured at decision
+time. Per this repo's own =new-adr= skill guidance ("a thin ADR with real
+gaps flagged is better than a confident one with fabricated evidence"),
+this entry is explicit about what's genuinely known versus what's honest
+reconstruction from Vulpea's own documentation rather than a record of the
+original conversation, which this session has no access to.
+
+*What's actually known*, verbatim from the =config.el= comment written at
+install time: Vulpea indexes org entries (file- or heading-level) carrying
+an =ID= property into its own SQLite database — titles, tags, =id:= links,
+description-list metadata — "independently of org-roam (not installed
+here; per Vulpea's own docs the two can coexist but serve the same role,
+and this config keeps one tool per responsibility)."
+
+*What's not known*: no record of org-roam (or org-node, or plain
+=org-id=/=occur=) actually being evaluated and rejected point-by-point at
+decision time — only the one-line rationale above. The Candidates/Evidence
+sections below reconstruct the objective picture from Vulpea's own
+=docs/comparison.org= (which explicitly compares itself to org-roam and
+org-node), not from a record of what was actually weighed on the day.
+
+** Decision drivers
+- =AGENTS.md=/=docs/standards.org= =std-no-duplication=: one note-graph
+  tool at a time, matching this repo's existing "one chat client, one
+  completion engine, one primary agentic frontend" pattern.
+- =std-org-first=: whatever tool is used should work with real Org
+  capabilities (IDs, property drawers), not a parallel non-Org format —
+  all three candidates below satisfy this equally.
+
+** Candidates
+| Candidate | Fate |
+|------------+---------------------------------------------------------------|
+| org-roam | Not installed. Per Vulpea's own =docs/comparison.org=: the established, largest-ecosystem choice ("Roam Research for Emacs"), best if you want =roam:= links, third-party packages (org-roam-ui, org-roam-bibtex), or a complete out-of-the-box application. Rejected implicitly via "one tool per responsibility," not via a recorded feature-by-feature comparison |
+| org-node | Not evaluated at all — no mention anywhere in the =config.el= comment or any doc from install time. Per Vulpea's own comparison: "org-roam but fast," best for minimal migration effort and vanilla-Org feel; genuinely absent from this decision's record |
+| Vulpea | *Accepted*. Per its own =docs/comparison.org=: positions itself as "a foundation for building note-based applications" rather than an application itself — stable API (=vulpea-note= struct, query functions) over exposed SQL, async/multi-Emacs-session design, structured metadata via description lists. Matches this config's existing preference for foundational, composable tools (=gptel=, =claude-code-ide.el=) over monolithic ones |
+| Plain =org-id= + =occur=/=consult-ripgrep=, no indexing tool | Not seriously considered as far as the record shows — this config already uses =consult=/=vertico= for completion generally, so a dedicated indexed-note-finder is a natural fit, not a redundant layer |
+
+** Evidence
+- =grep -n -i "vulpea\|org-roam" docs/decisions.org= (before this entry)
+  returned nothing — confirmed the gap directly rather than assuming.
+- =grep -n -i "vulpea" docs/inventory.org= (before [[id:adr-org-agenda-capture-basics][ADR-017]]'s fix) also
+  returned nothing — the package-table gap this ADR's sibling already
+  patched.
+- Read =config.el='s own Vulpea comment in full (the only contemporaneous
+  reasoning that exists) — quoted verbatim in Context above.
+- Read Vulpea's own =docs/comparison.org=
+  (=~/.config/emacs/.local/straight/repos/vulpea/docs/comparison.org=,
+  dated 2026-07-08, matching the installed commit =2ea4a8b= from
+  2026-08-17) in full for the objective org-roam/org-node/vulpea
+  differences summarized in Candidates above — this is the package's own
+  stated positioning, not this session's opinion.
+- =cd .../vulpea && git log -1 -- docs/comparison.org= confirmed the doc's
+  dating lines up with the installed version, so it reflects the same
+  Vulpea this config actually runs, not a stale/future description.
+
+** Decision
+No new action — this ADR formally records a decision already implemented:
+=packages.el= has =(package! vulpea)=; =config.el= has the =use-package!
+vulpea= block (deferred to =doom-first-input-hook=,
+=vulpea-db-autosync-mode= enabled) and the =(n v)= leader prefix
+(=vulpea-find=/=-find-backlink=/=-insert=/=-db-sync-full-scan=/=-doctor=,
+later extended by [[id:adr-vulpea-dailies-backlinks][ADR-018]]'s dailies/backlinks-buffer bindings).
+=docs/inventory.org='s package table now has the corresponding row (added
+alongside [[id:adr-org-agenda-capture-basics][ADR-017]]).
+
+** Consequences
+- Note management now has a documented decision record, closing the gap
+  named in [[id:adr-org-agenda-capture-basics][ADR-017]]'s Context/Consequences.
+- Because org-node specifically was never actually evaluated (see
+  Candidates), this ADR cannot honestly claim Vulpea beats it for this
+  user's needs — only that Vulpea satisfies =std-no-duplication= and its
+  own stated design goals line up with this config's existing preferences.
+  If org-node's speed/vanilla-Org advantages ever matter in practice,
+  that's a real open question this ADR doesn't close.
+- [[id:adr-vulpea-dailies-backlinks][ADR-018]]'s hand-rolled dailies/backlinks-buffer work rests on this
+  decision; if Vulpea were ever swapped out, that ADR's Rollback section
+  would need revisiting too, not just this one.
+
+** Rejected alternatives
+See Candidates table above — with the explicit caveat that org-node's
+rejection is by omission (never evaluated), not by comparison, unlike
+org-roam's.
+
+** Validation
+None beyond =doom sync=/=doom doctor= being clean at install time (implicit
+in the original commit landing without incident) and again after
+[[id:adr-org-agenda-capture-basics][ADR-017]]/[[id:adr-vulpea-dailies-backlinks][ADR-018]]'s additions. No feature-by-feature validation that
+Vulpea outperforms the alternatives for this user's actual note collection
+— that would require using it for a while, which is exactly what
+[[id:adr-org-agenda-capture-basics][ADR-017]]'s live-verification step (still pending) is for.
+
+** Rollback
+Remove =(package! vulpea)= from =packages.el=; remove the =use-package!
+vulpea= block and the =(n v)= =map!= block from =config.el= (including
+[[id:adr-vulpea-dailies-backlinks][ADR-018]]'s additions to the same prefix, which depend on Vulpea's API
+directly); remove the =vulpea= row from =docs/inventory.org='s package
+table; =doom sync=. Any notes already created via Vulpea (including daily
+notes) remain as plain Org files with =ID= properties — nothing about
+removing Vulpea deletes their content, only the indexing/navigation layer
+on top of them.
+
+** Revisit when
+- org-node's speed or vanilla-Org-capture advantages become a concrete pain
+  point (large collection, slow minibuffer) — this ADR never actually
+  compared them, so that comparison would need to happen for real at that
+  point, not be assumed already settled.
+- Someone wants =vulpea-ui=/=vulpea-journal= (Vulpea's own richer sidebar/
+  journal companions) instead of the hand-rolled equivalents in
+  [[id:adr-vulpea-dailies-backlinks][ADR-018]] — worth checking those before extending the hand-rolled
+  versions further, since they may now cover the same ground more
+  completely.

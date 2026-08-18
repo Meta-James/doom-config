@@ -78,6 +78,7 @@ hand:
 | copilot        | =(:host github :repo "copilot-emacs/copilot.el" :files ("*.el"))= | =277ca35= / tagged release 0.9.0 |
 | perfect-margin | MELPA default                                       | unrelated to AI work, untouched            |
 | claude-code-ide | =(:host github :repo "manzaltu/claude-code-ide.el")= | Installed Phase 6, 2026-07-20; no tagged release upstream yet (pre-1.0) |
+| vulpea         | MELPA default                                       | =2ea4a8b= (2026-08-17), installed 2026-08-18; see [[id:adr-vulpea-note-management][ADR-019]] (retroactive) |
 | ~~exwm~~       | removed 2026-07-20, see [[id:adr-remove-exwm][ADR-002]]         | —                                          |
 
 * External binaries

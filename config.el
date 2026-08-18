@@ -533,13 +533,189 @@ region/buffer/project-file context already."
   :config
   (vulpea-db-autosync-mode +1))
 
+;; Org Agenda & Capture basics (docs/decisions.org ADR-017). Deliberately
+;; minimal per docs/standards.org std-no-scope-creep ("don't build the full
+;; Org Agenda system until its own phase") -- this *is* that phase, scoped to
+;; agenda-files/TODO-states/capture-templates only, no custom agenda views.
+;; `org-agenda-files' covers the whole pre-existing `org-directory' tree
+;; (~/org/), including files that predate this project (e.g. `doom.org' has a
+;; stray "TODO" headline that isn't really a task) -- a deliberate, informed
+;; choice, not an oversight. TODO keywords match this repo's own PROJECT.org
+;; convention rather than inventing a second one. Capture templates file into
+;; the "Inbox" headline `~/org/todo.org' already had (pre-dating this
+;; project); the third creates a real Vulpea-indexed note using the exact
+;; org-capture target pattern Vulpea's own docs recommend (`vulpea-create' as
+;; the file target, so the note gets an ID/backlinks like any
+;; `vulpea-find'-created note would).
+(after! org
+  (setq org-agenda-files (list org-directory)
+        org-todo-keywords
+        '((sequence "TODO(t)" "IN-PROGRESS(i)" "BLOCKED(b)" "|" "DONE(d)" "REJECTED(r)"))
+        org-capture-templates
+        `(("t" "Task" entry
+           (file+headline ,(expand-file-name "todo.org" org-directory) "Inbox")
+           "* TODO %?\n%U" :empty-lines 1)
+          ("n" "Note" entry
+           (file+headline ,(expand-file-name "todo.org" org-directory) "Inbox")
+           "* %?\n%U" :empty-lines 1)
+          ("v" "Vulpea note" plain
+           (file ,(lambda ()
+                    (vulpea-note-path
+                     (vulpea-create (read-string "Title: ")))))
+           "%?"))))
+
+;; Vulpea dailies (docs/decisions.org ADR-018): a hand-rolled equivalent of
+;; org-roam-dailies -- Vulpea itself has no daily-note concept. Each day is
+;; its own real Vulpea file-level note (ID, backlinks, findable via
+;; `vulpea-find' like anything else) at org-directory/daily/YYYY-MM-DD.org,
+;; created on first visit via `vulpea-create'.
+(defun my/vulpea-daily--file (date)
+  "Return the daily-note file path for DATE (a \"YYYY-MM-DD\" string)."
+  (expand-file-name (format "daily/%s.org" date) org-directory))
+
+(defun my/vulpea-daily--goto (date)
+  "Visit the daily note for DATE, creating it via `vulpea-create' if needed."
+  (let ((file (my/vulpea-daily--file date)))
+    (unless (file-exists-p file)
+      (vulpea-create date (format "daily/%s.org" date) :tags '("daily")))
+    (find-file file)))
+
+(defun my/vulpea-daily--dates ()
+  "Return the existing daily-note dates, sorted chronologically."
+  (let ((dir (expand-file-name "daily/" org-directory)))
+    (when (file-directory-p dir)
+      (sort (mapcar #'file-name-sans-extension
+                     (directory-files dir nil "\\`[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\.org\\'"))
+            #'string<))))
+
+(defun my/vulpea-daily--current-date ()
+  "Return the date the current buffer's daily note is for, or nil."
+  (when-let* ((file (buffer-file-name))
+              (dir (expand-file-name "daily/" org-directory)))
+    (when (string-prefix-p dir (expand-file-name file))
+      (file-name-sans-extension (file-name-nondirectory file)))))
+
+(defun my/vulpea-daily--adjacent (direction)
+  "Visit the nearest existing daily note before/after the current one.
+DIRECTION is `previous' or `next'."
+  (let* ((dates (my/vulpea-daily--dates))
+         (current (or (my/vulpea-daily--current-date)
+                      (format-time-string "%Y-%m-%d")))
+         (candidates (if (eq direction 'previous)
+                         (reverse (seq-filter (lambda (d) (string< d current)) dates))
+                       (seq-filter (lambda (d) (string> d current)) dates))))
+    (if candidates
+        (find-file (my/vulpea-daily--file (car candidates)))
+      (message "No %s daily note" (if (eq direction 'previous) "earlier" "later")))))
+
+(defun my/vulpea-daily-today ()
+  "Open (creating if needed) today's daily note."
+  (interactive)
+  (my/vulpea-daily--goto (format-time-string "%Y-%m-%d")))
+
+(defun my/vulpea-daily-date ()
+  "Open (creating if needed) the daily note for a prompted date."
+  (interactive)
+  (my/vulpea-daily--goto (format-time-string "%Y-%m-%d" (org-read-date nil t))))
+
+(defun my/vulpea-daily-previous ()
+  "Visit the previous existing daily note."
+  (interactive)
+  (my/vulpea-daily--adjacent 'previous))
+
+(defun my/vulpea-daily-next ()
+  "Visit the next existing daily note."
+  (interactive)
+  (my/vulpea-daily--adjacent 'next))
+
+;; Vulpea backlinks buffer (docs/decisions.org ADR-018): a hand-rolled,
+;; deliberately scoped equivalent of org-roam-buffer -- Vulpea only ships
+;; jump-to-backlink (`vulpea-find-backlink'), not a live panel. Shows the
+;; current note's incoming links only (no unlinked-references section, no
+;; citation backlinks). Refreshes on both a window-selection change (moving
+;; to a different window) and a window-buffer change (visiting a different
+;; note in the *same* window, e.g. via `vulpea-find' or `vulpea-find-backlink'
+;; -- the more common case, and the reason both hooks are needed rather than
+;; just one).
+(defvar my/vulpea-buffer-name "*vulpea-buffer*")
+
+(defvar-local my/vulpea-buffer--shown-id nil
+  "ID of the note currently rendered in the Vulpea backlinks buffer.")
+
+(define-derived-mode my/vulpea-buffer-mode special-mode "Vulpea-Backlinks"
+  "Major mode for the hand-rolled Vulpea backlinks side buffer.")
+
+(defun my/vulpea-buffer--note-for-window (window)
+  "Return the Vulpea note backing WINDOW's buffer's file, or nil."
+  (when-let* ((file (buffer-file-name (window-buffer window))))
+    (car (vulpea-db-query-by-file-path file 0))))
+
+(defun my/vulpea-buffer--render (note)
+  "Render NOTE's backlinks into the Vulpea backlinks buffer."
+  (with-current-buffer (get-buffer-create my/vulpea-buffer-name)
+    (unless (derived-mode-p 'my/vulpea-buffer-mode)
+      (my/vulpea-buffer-mode))
+    (let* ((inhibit-read-only t)
+           (links (vulpea-db-query-links-to (vulpea-note-id note)))
+           (id->note (make-hash-table :test #'equal)))
+      (when links
+        (dolist (n (vulpea-db-query-by-ids
+                    (delete-dups (mapcar (lambda (l) (plist-get l :source)) links))))
+          (puthash (vulpea-note-id n) n id->note)))
+      (erase-buffer)
+      (insert (propertize (vulpea-note-title note) 'face 'org-document-title) "\n\n"
+              (format "Backlinks (%d)\n" (length links))
+              (make-string 20 ?-) "\n\n")
+      (if (null links)
+          (insert "No backlinks.\n")
+        (dolist (link links)
+          (when-let* ((src (gethash (plist-get link :source) id->note)))
+            (insert-text-button (vulpea-note-title src)
+                                 'action (lambda (_) (vulpea-visit src))
+                                 'follow-link t)
+            (when-let* ((desc (plist-get link :description)))
+              (insert (format "  — %s" desc)))
+            (insert "\n"))))
+      (goto-char (point-min))
+      (setq my/vulpea-buffer--shown-id (vulpea-note-id note)))))
+
+(defun my/vulpea-buffer--maybe-update (&optional _frame)
+  "Refresh the Vulpea backlinks buffer for the selected window, if visible."
+  (when (get-buffer-window my/vulpea-buffer-name)
+    (when-let* ((note (my/vulpea-buffer--note-for-window (selected-window))))
+      (unless (equal (vulpea-note-id note)
+                     (buffer-local-value 'my/vulpea-buffer--shown-id
+                                         (get-buffer my/vulpea-buffer-name)))
+        (my/vulpea-buffer--render note)))))
+
+(defun my/vulpea-buffer-toggle ()
+  "Toggle a live side window showing backlinks to the current buffer's note."
+  (interactive)
+  (if-let* ((win (get-buffer-window my/vulpea-buffer-name)))
+      (delete-window win)
+    (if-let* ((note (my/vulpea-buffer--note-for-window (selected-window))))
+        (progn
+          (display-buffer-in-side-window
+           (get-buffer-create my/vulpea-buffer-name)
+           '((side . right) (slot . 0) (window-width . 0.30)))
+          (my/vulpea-buffer--render note))
+      (message "Current buffer is not a Vulpea note"))))
+
+(add-hook 'window-selection-change-functions #'my/vulpea-buffer--maybe-update)
+(add-hook 'window-buffer-change-functions #'my/vulpea-buffer--maybe-update)
+
 (map! :leader
       (:prefix ("n v" . "vulpea")
        :desc "Find note"     "f" #'vulpea-find
        :desc "Find backlink" "b" #'vulpea-find-backlink
        :desc "Insert link"   "i" #'vulpea-insert
        :desc "Full scan"     "s" #'vulpea-db-sync-full-scan
-       :desc "Diagnostics"   "d" #'vulpea-doctor))
+       :desc "Diagnostics"   "d" #'vulpea-doctor
+       :desc "Toggle backlinks buffer" "B" #'my/vulpea-buffer-toggle
+       :desc "Daily: today"     "j" #'my/vulpea-daily-today
+       :desc "Daily: pick date" "J" #'my/vulpea-daily-date
+       :desc "Daily: previous"  "p" #'my/vulpea-daily-previous
+       :desc "Daily: next"      "n" #'my/vulpea-daily-next))
 
 ;; EXWM
 ;; (defun my/exwm-screen-layout ()
