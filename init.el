@@ -79,7 +79,7 @@
        ghostel            ; libghostty-vt powered terminal emulation
        ;;shell             ; simple shell REPL for Emacs
        ;;term              ; basic terminal emulator for Emacs
-       vterm             ; the best terminal emulation in Emacs
+       ;;vterm             ; the best terminal emulation in Emacs -- migrated to ghostel, see ADR-014
 
        :checkers
        syntax              ; tasing you for every semicolon you forget

@@ -452,3 +452,56 @@ that is itself a Claude Code CLI subprocess — its ambient environment
 includes ephemeral, subprocess-only identity vars that were never meant to
 be cached as permanent config. If it happens anyway, the =config.el= strip
 now neutralizes the consequences regardless.
+
+* RESOLVED: ghostel needs a real graphical (X11) frame — a frame-less headless daemon isn't enough
+:PROPERTIES:
+:ID:       tshoot-ghostel-needs-x-frame
+:END:
+:LOGBOOK:
+- Resolved [2026-08-17 Mon], during the ghostel-backend Phase 6 re-verification ([[id:adr-terminal-backend-ghostel][ADR-014]])
+:END:
+
+The isolated-headless-daemon smoke-test pattern used successfully for
+vterm ([[id:tshoot-vterm-module][the vterm-module entry above]]) does *not* work unmodified for =ghostel=.
+Starting a plain =emacs --daemon=some-name= (no display attached) and
+launching a claude-code-ide.el session with the ghostel backend produced a
+=ghostel-mode= buffer that looked alive (=process-status= = =open=) but was
+actually dead: =ghostel-debug-info= showed =PID: nil=, =buffer-size: 0
+chars, 0 lines=, and degenerate rendering fields (=Resolved font: nil=,
+=Frame font: tty=, =Window system: terminal=). No amount of waiting produced
+output.
+
+Root cause: unlike =vterm= (a plain character-grid terminal emulator that
+only needs a PTY), =ghostel= embeds a real GPU/font-metric-based terminal
+renderer (libghostty) and needs an actual graphical frame's font/pixel
+metrics to size and draw itself. A frame-less daemon has no such frame, so
+ghostel's process never really starts.
+
+Fix: attach a real X frame to the daemon before starting the session —
+=emacsclient --socket-name=some-name -c -n -F '((window-system . x)
+(display . ":1"))'= (adjust the display number). Two things that look like
+they should work but don't:
+- Setting =DISPLAY=:1= in the *shell* environment before a plain =emacsclient
+  -c= is *not* sufficient — it silently produces another frame-less tty
+  frame instead of erroring, so this failure mode is easy to miss.
+- =XAUTHORITY= also needs to be set explicitly (=/run/user/<uid>/gdm/Xauthority=
+  on this machine, confirmed via =echo $XAUTHORITY= in a real session) if
+  invoking =emacsclient= from a context that doesn't already have it — an
+  X connection can silently fail to authenticate without it.
+The explicit =-F= frame-parameters are what actually forces a real X
+connection, confirmed via =(frame-parameter nil 'window-system)= returning
+=x= only after adding them. Once a real X frame exists, delete any stray
+frame-less tty frames the earlier attempts left behind
+(=(delete-frame f t)= for each frame not on =window-system= =x=) before
+starting the ghostel session, since Emacs requires at least one frame to
+always exist.
+
+After attaching a real X frame this way, ghostel rendered correctly: real
+font metrics, correct terminal dimensions, full-color TUI output readable
+via plain =buffer-string= (with text properties for faces/colors intact).
+
+*Takeaway*: any future headless/disposable-daemon smoke test involving
+=ghostel= specifically (not just claude-code-ide.el generically) must attach
+a real graphical frame first — the vterm-era assumption that a frame-less
+daemon is good enough for any terminal-backend test no longer holds now that
+a second, GPU-rendering backend is in use.

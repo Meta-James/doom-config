@@ -213,30 +213,28 @@
 
 (map! :leader :desc "Magit status" "g s" #'magit-status)
 
-;; VTerm in project root
-(defun my/project-vterm ()
-  "Open vterm in the current project's root."
+;; Ghostel in project root (migrated from vterm 2026-08-17, see ADR-014;
+;; my/project-vterm's whole reason for existing -- vterm doesn't offer a
+;; project-root-scoped entry point of its own -- carries over unchanged,
+;; just swapping which terminal backend it opens).
+(defun my/project-ghostel ()
+  "Open ghostel in the current project's root."
   (interactive)
   (let ((default-directory (projectile-project-root)))
-    (vterm)))
+    (ghostel)))
 
-(map! :leader :desc "Project vterm" "p t" #'my/project-vterm)
+(map! :leader :desc "Project ghostel" "p t" #'my/project-ghostel)
 
-;; vterm doesn't repaint reliably when its window is resized while it's not
-;; the selected window (a known vterm/libvterm bug class — Doom's own core
-;; carries a narrower hack for a different trigger of the same family, see
-;; term/vterm/autoload.el's "Force vterm to redraw" comment). Any
-;; bottom-appearing popup (which-key, vterm popups themselves) reclaims frame
-;; lines from existing windows, so a vterm window elsewhere in the layout
-;; (claude-code-ide's session, my/project-vterm, Doom's built-in terminal
-;; popup) gets resized as a side effect and ends up visually corrupted until
-;; manually resized to force a clean redraw. Freezing vterm windows' height
-;; against automatic layout changes avoids triggering the bug in the first
-;; place. Trade-off accepted: this also blocks Evil's manual window-resize
-;; commands (C-w +/-/</>, C-w =) on vterm windows, not just automatic
-;; rebalancing — acceptable since these windows are rarely resized on
-;; purpose.
-(add-hook! 'vterm-mode-hook (setq-local window-size-fixed 'height))
+;; vterm didn't repaint reliably when its window was resized while it wasn't
+;; the selected window (a known vterm/libvterm bug class). This was worked
+;; around here via a window-size-fixed freeze on vterm-mode-hook (added
+;; 2026-08-07, removed 2026-08-17 when vterm itself was migrated away from —
+;; see ADR-014). Not carried over to ghostel: no equivalent corruption has
+;; been observed, and claude-code-ide.el already actively re-syncs ghostel's
+;; process window size on resize (see claude-code-ide.el's
+;; ghostel--window-adjust-process-window-size call), which vterm never had.
+;; If the same visual-corruption symptom ever recurs under ghostel, revisit
+;; with an equivalent freeze scoped to ghostel-mode-hook instead.
 
 (after! envrc
   (envrc-global-mode))
@@ -403,7 +401,7 @@ region/buffer/project-file context already."
        :desc "Rewrite/transform"      "r" #'gptel-rewrite
        :desc "Model/provider/directive menu" "m" #'gptel-menu
        :desc "Agent (Claude Code)"    "g" #'claude-code-ide-menu
-       :desc "Project vterm"          "t" #'my/project-vterm))
+       :desc "Project ghostel"        "t" #'my/project-ghostel))
 
 ;; Email: mu4e (+org +gmail +mbsync). Sync via mbsync (isync), send via
 ;; msmtp. Credentials never live here: the plain-password account resolves
@@ -487,18 +485,45 @@ region/buffer/project-file context already."
                       :background 'unspecified))
 
 ;; Primary agentic coding workflow: claude-code-ide.el drives the already-
-;; installed Claude Code CLI over MCP. vterm backend and ediff-based review
-;; match this config's existing incumbents (docs/decisions.org ADR-004).
+;; installed Claude Code CLI over MCP. Ediff-based review matches this
+;; config's existing incumbent (docs/decisions.org ADR-004). Terminal backend
+;; migrated from vterm to ghostel 2026-08-17 (docs/decisions.org ADR-014) to
+;; get around a vterm/libvterm resize-repaint bug; live-verified to
+;; render/resize correctly before this flip, and again via a full from-scratch
+;; smoke-test re-run. Vterm itself (module and all its call sites in this
+;; config) was removed the same day once ghostel covered every prior use.
 ;; Settings below are set explicitly even where they match upstream defaults,
 ;; so an upstream default change doesn't silently change behavior here.
 (use-package! claude-code-ide
   :commands (claude-code-ide-menu)
   :init
-  (setq claude-code-ide-terminal-backend 'vterm
+  (setq claude-code-ide-terminal-backend 'ghostel
         claude-code-ide-diagnostics-backend 'flycheck
         claude-code-ide-use-ide-diff t)
   :config
   (claude-code-ide-emacs-tools-setup))
+
+;; Note management: Vulpea indexes any org entry (file- or heading-level)
+;; carrying an `ID' property into its own sqlite database -- titles, tags,
+;; id: links, and description-list metadata -- independently of org-roam
+;; (not installed here; per Vulpea's own docs the two can coexist but serve
+;; the same role, and this config keeps one tool per responsibility). Notes
+;; are picked up from `org-directory' (set above) since
+;; `vulpea-db-sync-directories' is left at its default. Deferred to first
+;; input so it never blocks startup; `vulpea-db-autosync-mode' does the
+;; initial database scan in the background and then watches for changes.
+(use-package! vulpea
+  :defer t :after-call doom-first-input-hook
+  :config
+  (vulpea-db-autosync-mode +1))
+
+(map! :leader
+      (:prefix ("n v" . "vulpea")
+       :desc "Find note"     "f" #'vulpea-find
+       :desc "Find backlink" "b" #'vulpea-find-backlink
+       :desc "Insert link"   "i" #'vulpea-insert
+       :desc "Full scan"     "s" #'vulpea-db-sync-full-scan
+       :desc "Diagnostics"   "d" #'vulpea-doctor))
 
 ;; EXWM
 ;; (defun my/exwm-screen-layout ()

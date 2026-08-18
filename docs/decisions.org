@@ -1637,3 +1637,177 @@ reversible by just running =doom sync --env= again.
   this local pattern-match workaround.
 - The user ever wants a real =CLAUDE_*=-prefixed env var set permanently;
   add it explicitly after the strip block per the Consequences note above.
+
+* ADR-014: Switch claude-code-ide.el's terminal backend from vterm to ghostel, then remove vterm entirely
+:PROPERTIES:
+:ID:       adr-terminal-backend-ghostel
+:STATUS:   Implemented, live-verified
+:DATE:     2026-08-17
+:END:
+:LOGBOOK:
+- Note taken on [2026-08-17] \\
+  Follow-through same day: with claude-code-ide.el's own re-verification
+  done (see Evidence below), completed the full migration this ADR's
+  Consequences had left open. =init.el=: =vterm= commented out of the
+  =:term= module block (=ghostel= is now the only =:term= backend enabled).
+  =config.el=: =my/project-vterm= renamed to =my/project-ghostel= and
+  rewritten to call =(ghostel)= instead of =(vterm)= (kept
+  =projectile-project-root= for consistency with the rest of this config
+  rather than switching to =ghostel-project='s built-in =project.el=-based
+  root detection, which uses different heuristics); both its keybindings
+  (=SPC p t=, =SPC a t=) updated to match. The =window-size-fixed= freeze on
+  =vterm-mode-hook= removed outright (dead code once vterm is gone) rather
+  than ported to =ghostel-mode-hook= — no equivalent corruption has been
+  observed with ghostel, and claude-code-ide.el already actively re-syncs
+  ghostel's process window size on resize
+  (=ghostel--window-adjust-process-window-size=), which vterm never had; if
+  the same visual-corruption symptom recurs under ghostel, add an
+  equivalent freeze then rather than pre-emptively. =doom sync= run (module
+  change), =doom doctor= clean afterward: 46 modules (was 47), 151 packages
+  (was 152). Verified in a fresh disposable daemon
+  (=emacs --daemon=vterm-migration-check=, torn down after): =my/project-vterm=
+  no longer =fboundp=, =my/project-ghostel= is, =vterm= feature not loaded,
+  =SPC p t=/=SPC a t= both resolve to =my/project-ghostel= via
+  =doom-leader-map=, and Doom's own built-in =SPC o t= popup terminal
+  resolves unambiguously to =+ghostel/toggle= (confirmed by reading
+  =config/default/+evil-bindings.el=: with both =:term vterm= and =:term
+  ghostel= modules active, that file's sequential =(:when (modulep! ...))=
+  blocks meant ghostel's binding was already silently winning over vterm's
+  for the same key even before this cleanup — this migration mainly removes
+  the now-redundant vterm module and its now-dead call sites, not a change
+  in which backend =SPC o t= actually opened). Resolves this ADR's
+  =my/project-vterm=/=:term vterm= consolidation open item.
+:END:
+
+** Context
+[[id:adr-primary-agent][ADR-004]] picked =vterm= as claude-code-ide.el's terminal backend because it
+matched this config's then-incumbent terminal module. A =vterm=/libvterm
+resize-repaint bug surfaced afterward (a known bug class: a vterm window
+elsewhere in the layout gets corrupted when a bottom-appearing popup like
+which-key reclaims frame lines from other windows) and was only worked
+around, not fixed, via the =window-size-fixed= freeze added to =config.el=
+on 2026-08-07. This motivated evaluating =ghostel= (Doom's =:term ghostel=
+module, maintained by @hlissner since Doom 26.07.0; an embedded-Ghostty
+backend claude-code-ide.el already supports alongside =vterm=/=eat=) as a
+replacement, tracked as a =PROJECT.org= backlog item ("Migrate
+claude-code-ide.el's terminal backend from vterm to ghostel").
+
+** Decision drivers
+- The resize-repaint bug is real and only papered over, not fixed — a
+  backend that doesn't share the bug class removes the need for the
+  =window-size-fixed= workaround entirely.
+- =ghostel='s own docstring (=claude-code-ide-terminal-backend=, in
+  claude-code-ide.el) names it "the recommended backend" for rendering
+  Claude Code's TUI, ahead of =vterm=/=eat=.
+- Any replacement must be live-verified with the same rigor as the original
+  vterm-based Phase 6 smoke test ([[id:adr-claude-code-ide-install][ADR-008]]), not just configured and
+  assumed to work.
+
+** Candidates
+| Candidate | Fate |
+|-----------+------------------------------------------------------------|
+| Stay on =vterm= | Rejected — the resize-repaint bug was the original motivation for looking elsewhere; staying means keeping the =window-size-fixed= workaround indefinitely |
+| =ghostel= | *Accepted* — Doom-maintained, already supported by claude-code-ide.el, docstring-recommended over the alternatives |
+| =eat= | Not evaluated in depth — =ghostel= was already Doom's own maintained recommendation, and evaluating a third backend wasn't asked for |
+
+** Evidence
+All gathered 2026-08-17:
+- User ran =M-x ghostel= interactively once, triggering the native
+  =libghostty-vt= module's pre-built-binary download
+  (=ghostel-module-auto-install=). Confirmed via =ghostel-debug-info= in a
+  live session: =Module loaded: yes=, =Module file:
+  .../straight/build-30.2/ghostel/ghostel-module.so= (1,438,328 bytes).
+- User live-verified in their own real session that ghostel renders and
+  resizes correctly.
+- I independently re-ran the Phase 6 agentic-workflow smoke test (compare
+  [[id:adr-claude-code-ide-install][ADR-008]]'s original vterm-based run) against a fresh disposable scratch
+  project (=scratchpad/phase6-ghostel-smoke-test/=, its own git repo, zero
+  commits — no baseline commit created by me, per this session's blanket
+  =Bash(git commit *)= deny rule, see [[id:adr-permission-enforcement][ADR-009]]), using an isolated named
+  Emacs daemon (=emacs --daemon=ghostel-smoke-test=) per the headless
+  smoke-test pattern in =docs/ai/troubleshooting.org=, driven entirely via
+  =emacsclient --eval=, never touching the user's real daemon (confirmed
+  distinct sockets throughout, and confirmed via =ps aux= after teardown
+  that only the user's pre-existing real daemon's processes remained).
+- *New finding*: ghostel needs a real graphical (X11) frame to function,
+  unlike =vterm=. A first attempt using a plain frame-less daemon (the exact
+  pattern that worked fine for the original vterm-based Phase 6 test)
+  produced a =ghostel-mode= buffer with =PID: nil=, =buffer-size: 0 chars=,
+  and degenerate rendering fields in =ghostel-debug-info= (=Resolved font:
+  nil=, =Frame font: tty=) — because ghostel embeds a real GPU/font-metric
+  terminal renderer (libghostty), unlike vterm's plain character-grid text,
+  and had no display to size itself against. Fixed by attaching a real X
+  frame to the same isolated daemon via =emacsclient -c -F '((window-system
+  . x) (display . ":1"))'= — plain =-c= with =DISPLAY= merely set in the
+  shell environment was *not* sufficient; it silently produced another
+  frame-less tty frame. The explicit =-F= frame-parameters were what forced
+  a real X connection. After that, ghostel rendered correctly: real Ubuntu
+  Sans Mono font metrics, a 100x48 terminal, and the full-color Claude Code
+  TUI banner readable via =buffer-string= with text properties/faces
+  intact, authenticated as the user's real account and correctly scoped to
+  the scratch directory.
+- Ran the same seeded-bug task as ADR-008's original test (write =calc.py=
+  with a deliberate =a - b= bug, write =test_calc.py= asserting
+  =add(2, 3) == 5=, run pytest, fix the bug, re-run to confirm, never touch
+  git, write a =DONE.marker= sentinel): the agent wrote both files, ran
+  pytest, hit the expected failure, fixed =calc.py= to =a + b=, re-ran
+  pytest to confirm passing, created =DONE.marker=, and explicitly reported
+  "No git commands were used at any point." Independently confirmed by me
+  directly on disk afterward: correct =calc.py=/=test_calc.py= content,
+  =.pytest_cache=/=__pycache__= present (proving pytest actually ran), and
+  =git rev-list --all --count= == 0.
+- Isolated test daemon and its child =copilot-language-server= processes
+  cleanly killed afterward (=kill-emacs= over =emacsclient=); =ps aux=
+  confirmed no orphaned processes from the test daemon remained.
+
+** Decision
+- =config.el=: =claude-code-ide-terminal-backend= set to ='ghostel= (was
+  ='vterm=).
+- =doom doctor= clean (152 packages) after the change.
+
+** Consequences
+- claude-code-ide.el's primary agentic workflow, =my/project-ghostel=
+  (=SPC p t=/=SPC a t=), and Doom's built-in terminal popup (=SPC o t=) all
+  render via ghostel now. =vterm= is disabled (commented out, not deleted,
+  in =init.el='s =:term= block) and nothing in this config calls it —
+  resolves the =AGENTS.md= "one tool per responsibility" concern this ADR
+  originally flagged as open.
+- The =window-size-fixed= freeze hack is removed outright (see LOGBOOK) —
+  the =PROJECT.org= backlog item asking to re-evaluate it is resolved by
+  removing it rather than by confirming it's still needed.
+- If ghostel ever exhibits the same unselected-window resize corruption
+  vterm had, there's no existing freeze to fall back on — it would need to
+  be re-added, scoped to =ghostel-mode-hook= this time (see LOGBOOK for why
+  it wasn't pre-emptively ported).
+- The headless-daemon smoke-test pattern documented in
+  =docs/ai/troubleshooting.org= needs a caveat for any future ghostel-based
+  test: it must attach a real X frame (=emacsclient -c -F
+  '((window-system . x) (display . ":1"))'=), not just spawn a plain
+  =emacs --daemon=. New =docs/ai/troubleshooting.org= entry added
+  cross-linking here.
+
+** Rejected alternatives
+See Candidates table above.
+
+** Validation
+See Evidence above — this ADR's evidence *is* its validation (a from-scratch
+live re-run of the Phase 6 smoke test under the new backend, not just a
+config-value check).
+
+** Rollback
+Uncomment =vterm= in =init.el='s =:term= block, =doom sync=. In =config.el=:
+set =claude-code-ide-terminal-backend= back to ='vterm=; revert
+=my/project-ghostel= to =my/project-vterm= (swap =(ghostel)= back to
+=(vterm)=, restore the =SPC p t=/=SPC a t= descriptions); re-add the
+=window-size-fixed= freeze on =vterm-mode-hook= (see this entry's earlier
+git history / LOGBOOK for the exact form). Doom's built-in =SPC o t= popup
+reverts to =+vterm/toggle= automatically once =:term vterm= is re-enabled
+alongside =:term ghostel= (or on its own if =ghostel= is disabled too) —
+no separate binding to undo, per =config/default/+evil-bindings.el='s
+=:when=-gated logic.
+
+** Revisit when
+- =ghostel= itself regresses or goes unmaintained.
+- The same unselected-window resize corruption vterm had shows up under
+  ghostel — re-add a =window-size-fixed=-style freeze, scoped to
+  =ghostel-mode-hook=, if so.

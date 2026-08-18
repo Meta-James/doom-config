@@ -87,9 +87,9 @@ management, navigation, interaction, config, and debug submenus). One Claude
 instance per project (via =project.el= auto-detection). Plan → multi-file edit
 → run formatters/tests → present diff via Ediff (opens automatically,
 =claude-code-ide-use-ide-diff= =t=) → user accepts/rejects per hunk. Agent
-never commits or pushes (see [[id:std-no-commit][standards.org]]). Terminal backend: vterm, matching
-this config's existing incumbent. Diagnostics backend: Flycheck, matching the
-existing Python stack.
+never commits or pushes (see [[id:std-no-commit][standards.org]]). Terminal backend: ghostel
+(switched from vterm 2026-08-17, see [[id:adr-terminal-backend-ghostel][ADR-014]]). Diagnostics backend: Flycheck,
+matching the existing Python stack.
 
 Verified structurally (headless daemon): package loads, settings applied,
 keybinding resolves, CLI correctly detected via a local, network-free check.
@@ -106,6 +106,14 @@ workflow (and =my/project-vterm=) the first time either was used for real.
 *Not yet exercised*: interactive interruption/partial-rejection mid-session
 (needs a human actually present, not a scripted test) and anything requiring
 a remote/TRAMP target (needs hardware this agent doesn't have).
+
+Re-verified live under the =ghostel= backend (2026-08-17, [[id:adr-terminal-backend-ghostel][ADR-014]]): same
+seeded-bug task, fresh disposable scratch project, isolated headless
+daemon — found the bug, fixed it, tests passed, marker file written, no git
+commands run, independently confirmed on disk afterward. Along the way
+surfaced a new backend-specific gotcha: ghostel needs a real graphical (X11)
+frame to function, unlike vterm's plain-PTY approach (see
+[[id:tshoot-ghostel-needs-x-frame][troubleshooting.org]]).
 
 * Review (existing tools, no new package)
 :PROPERTIES:
