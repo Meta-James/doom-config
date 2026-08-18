@@ -37,9 +37,14 @@ changes, don't re-derive architecture from scratch. `docs/roadmap.org` and
   Doom's CLI from a subprocess/script — `$PATH` has a literal-tilde bug that
   breaks non-interactive `doom` invocation; see
   `docs/ai/troubleshooting.org::tshoot-path-tilde`.
-- One tool per responsibility (one chat client, one completion engine, one
-  primary agentic-coding frontend). Don't add a second without a clearly
-  distinct, frequently-useful role the first can't cover.
+- One tool per responsibility (one chat client, one primary agentic-coding
+  frontend). Don't add a second without a clearly distinct, frequently-useful
+  role the first can't cover. Completion is scoped per axis, not as a single
+  responsibility: one engine for in-buffer code completion (Corfu) and one for
+  minibuffer/`completing-read` completion (Vertico) — these solve different
+  problems and both existing is not a violation. Don't stack two engines on
+  the *same* axis (e.g. Corfu and Company both active). See `docs/decisions.org`
+  ADR-021.
 
 ## Where to look first
 

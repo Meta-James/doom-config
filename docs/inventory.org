@@ -54,7 +54,8 @@ from Phase 2/3 not individually re-itemized here). Full source of truth is
 =init.el= itself — this is a summary, not a duplicate to keep in sync by
 hand:
 
-- =:completion= company +childframe, vertico
+- =:completion= corfu +orderless +icons, vertico (Company → Corfu 2026-08-18,
+  see [[id:adr-corfu-migration][ADR-021]])
 - =:ui= doom, dashboard, hl-todo, ligatures, modeline, ophints, popup +defaults,
   vc-gutter +pretty, vi-tilde-fringe, workspaces
 - =:editor= evil +everywhere, file-templates, fold, format +onsave, snippets

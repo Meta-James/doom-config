@@ -41,37 +41,68 @@ mapped to context-sensitive behavior that doesn't vary by which key was pressed
 would have been artificial, so this collapsed to one binding (=SPC a a=) plus
 the still-distinct =SPC a s= (immediate send, not context-add).
 
-* Completion — verified (Phase 5)
+* Completion — verified (Phase 5, re-verified for Corfu in [[id:adr-corfu-migration][ADR-021]])
+
+Non-AI in-buffer completion migrated Company → Corfu 2026-08-18 ([[id:adr-corfu-migration][ADR-021]]);
+Doom's own README marked Company deprecated/maintenance-mode in favor of
+Corfu. Vertico (minibuffer/=completing-read= axis) is unchanged.
 
 | Key      | Behavior                                                        |
 |----------+--------------------------------------------------------------------|
-| =TAB=    | Copilot accept if a suggestion overlay is visible → else NES accept if an edit is pending → else Company (=company-indent-for-tab-command=) → else indent/yasnippet |
+| =TAB=    | Copilot accept if a suggestion overlay is visible → else yasnippet field-navigate if a field is active → else Corfu cycle (=corfu-next=) if a popup is showing → else NES accept if an edit is pending → else indent/yasnippet |
+| =RET=    | (Corfu popup showing) insert/accept the selected candidate (=corfu-insert=) — Corfu routes acceptance through =RET=, not =TAB=, unlike Company |
 | =C-TAB=  | Copilot accept-by-word                                          |
 | =M-n=/=M-p= | Cycle between multiple Copilot completion candidates (discovered in source, not previously documented) |
 | =C-g=     | Dismiss a pending NES suggestion (=copilot-nes-mode-map=); regular Copilot overlays dismiss automatically on the next non-whitelisted command via =post-command-hook=, no dedicated key needed |
 
-Live-verified in an isolated headless daemon (not the user's session; both
-disposable test daemons killed after use) via a simulated suggestion overlay,
-with Evil active in normal state throughout:
-- No overlay present → =TAB= → =company-indent-for-tab-command=
-- Copilot overlay present at point → =TAB= → =copilot-accept-completion=,
-  =C-TAB= → =copilot-accept-completion-by-word=
-- Overlay removed → =TAB= reverts identically to the no-overlay case
-- =copilot-nes-mode= enabled but no edit pending → =TAB= still falls through
-  to Company (its =:filter=-based keymap doesn't misfire when idle)
-- A yasnippet active-field overlay and a Copilot suggestion overlay
-  simultaneously present at the same point → =TAB= resolves to
-  =copilot-accept-completion= (verified: Copilot's overlay priority 101 beats
-  yasnippet's default 100 by exactly one point — by design, not accident; see
-  [[id:adr-copilot-nes][ADR-007]])
+Live-verified in an isolated headless daemon (not the user's session;
+disposable test daemons killed after use) via simulated overlays/keymap
+state built from the real primitives (=copilot--get-overlay=,
+=copilot-completion-map=, =yas-keymap=, =corfu-map= installed the same way
+=corfu--setup= installs it), in both =evil-normal-state= and
+=evil-insert-state= (identical results in both):
+- Nothing active → =TAB= → =indent-for-tab-command=
+- Corfu popup only → =TAB= → =corfu-next= (cycles; does *not* accept — accept
+  is =RET=, a genuine behavior change from Company's TAB-accepts flow)
+- Corfu popup + Copilot suggestion overlay → =TAB= → =copilot-accept-completion=
+  (Copilot still wins outright, unchanged from the Company era)
+- Corfu popup + real yasnippet field overlay (no Copilot) → =TAB= →
+  =yas-next-field-or-maybe-expand= (yasnippet's overlay-keymap property still
+  beats Corfu's =minor-mode-overriding-map-alist= entry — same relative
+  ordering as Copilot-vs-yasnippet, since both are keymap-at-point checks
+  ranked above Corfu's alist tier)
+- Copilot overlay + yasnippet field, no Corfu popup → =TAB= →
+  =copilot-accept-completion= (ADR-007's original finding, re-confirmed
+  unchanged: Copilot's overlay priority 101 beats yasnippet's default 100)
+- NES pending only → =TAB= → =copilot-nes-accept=
+- Corfu popup + NES pending simultaneously (no regular Copilot overlay) →
+  =TAB= → =corfu-next=, i.e. *Corfu wins*, not NES — a case ADR-007 never had
+  to consider (no third overriding-map-alist layer existed yet). Low
+  real-world likelihood since the two rarely trigger at once, but now
+  documented rather than unknown.
+
+One simulation mistake was caught mid-verification and is worth recording:
+a first pass simulated the yasnippet field with a zero-width overlay, which
+Emacs's keymap search does not reliably pick up at point at all (Corfu won
+that malformed case by default) — real yasnippet fields always span their
+placeholder text, so the overlay was corrected to real width before trusting
+any result built on it.
 
 Evil doesn't bind =TAB= in normal/insert/visual state (only in
-=evil-command-line-map=, the Ex minibuffer), so there's no Evil-vs-Copilot or
-Evil-vs-NES conflict in the states that matter.
+=evil-command-line-map=, the Ex minibuffer) in this config — Doom's own
+=[C-i]= rebind of =evil-jump-forward= (=editor/evil/config.el=) keeps plain
+=TAB=/=C-i= free — so there's no Evil-vs-Copilot, Evil-vs-Corfu, or
+Evil-vs-NES conflict in the states that matter. The GUI-only half of Doom's
+=[C-i]=/=TAB= disambiguation hack (=doom-emacs.el= "HACK: Emacs can't
+distinguish C-i from TAB") was not exercised by this verification — it needs
+a real hardware keypress in a graphical frame to trigger at all, and it only
+matters for =evil-jump-forward= reachability when no completion UI is active
+in the first place, so it's orthogonal to the precedence chain above.
 
 Not yet verified (needs the user's own authenticated session, not a headless
-daemon): an actual live suggestion/NES-edit appearing and being
-accepted/dismissed against real Copilot output.
+daemon): an actual live Copilot suggestion/NES-edit, and a real Corfu popup
+built from genuine LSP/dabbrev candidates (not simulated keymap state),
+appearing and being accepted/dismissed/cycled as expected.
 
 * Conflicts resolved by ADR-003
 

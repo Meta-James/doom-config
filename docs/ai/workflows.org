@@ -53,15 +53,26 @@ directive-edit suffix). This replaced =my/gptel-rewrite-clearer/-formal=,
 :END:
 
 Passive: copilot.el overlays a suggestion in supported =prog-mode= buffers.
-=TAB= accepts a pending Copilot/NES suggestion; otherwise falls through to
-Company, then ordinary indent/yasnippet behavior. =copilot-nes-mode= is now
-also enabled on =prog-mode=, giving genuine multi-location Next Edit
-Suggestions (=textDocument/copilotInlineEdit=) alongside regular cursor-
--position completions. Precedence is live-verified (simulated overlay in an
-isolated daemon, not assumed), and the user has since confirmed a real
-suggestion/NES-edit appearing and being accepted in their authenticated
-session — see [[id:adr-copilot-nes][ADR-007]] and [[id:ai-keybindings][keybindings.org]] for the full chain, including the
-yasnippet-overlap edge case.
+=copilot-nes-mode= is also enabled on =prog-mode=, giving genuine
+multi-location Next Edit Suggestions (=textDocument/copilotInlineEdit=)
+alongside regular cursor-position completions. Non-AI in-buffer completion is
+Corfu (Company → Corfu, [[id:adr-corfu-migration][ADR-021]]).
+
+=TAB= precedence, live-verified (simulated overlays in an isolated daemon, not
+assumed) in both Evil states: a pending Copilot suggestion overlay wins
+outright (=copilot-accept-completion=) over everything else, including an
+active Corfu popup; absent that, an active yasnippet field overlay wins over
+a Corfu popup (=yas-next-field-or-maybe-expand=); absent that, a Corfu popup
+cycles candidates (=corfu-next= — Corfu's own default, unlike Company, routes
+*acceptance* through =RET= [=corfu-insert=], not =TAB=); absent that, a
+pending NES edit is accepted (=copilot-nes-accept=); otherwise =TAB= falls
+through to ordinary indent/yasnippet-expand behavior. The one case ADR-007's
+Company-era chain never had to cover — a Corfu popup and a pending NES edit
+coinciding with no regular Copilot overlay — resolves to the Corfu popup
+(=corfu-next=), since Corfu's =minor-mode-overriding-map-alist= entry outranks
+NES's plain =minor-mode-map-alist= entry. See [[id:adr-copilot-nes][ADR-007]] (original Company-era
+verification) and [[id:adr-corfu-migration][ADR-021]] (Corfu re-verification) and [[id:ai-keybindings][keybindings.org]] for the full
+chain, including the yasnippet-overlap edge case.
 
 *Network/offline behavior*: suggestion and NES requests
 (=textDocument/inlineCompletion=, =getPanelCompletions=, etc.) go through

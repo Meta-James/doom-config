@@ -17,8 +17,8 @@ live-session exercising of the agent path and remote/TRAMP testing — see
                      Doom Emacs (Evil)
 
 Inline completion  ──▶ copilot.el ──▶ copilot-language-server (native binary)
-(buffer-local,               interacts with: Company +childframe, LSP, snippets
- passive overlay)
+(buffer-local,               interacts with: Corfu +orderless +icons, LSP,
+ passive overlay)             snippets (Company → Corfu, ADR-021)
 
 Chat / focused edit ──▶ gptel ──▶ gptel-make-anthropic (primary)
 (region/buffer/               gptel-make-openai   (secondary)
@@ -48,6 +48,7 @@ No secondary agentic-coding frontend — see [[id:adr-agent-shell-rejected][ADR-
 | Responsibility               | Owner              | Notes |
 |-------------------------------+---------------------+---------------------------------|
 | Inline completion             | copilot.el          | Keep — see [[id:adr-doom-core-upgrade][ADR-001]] for version state |
+| In-buffer code completion (non-AI) | Corfu +orderless +icons | Company → Corfu, [[id:adr-corfu-migration][ADR-021]] |
 | Chat / conversational         | gptel               | Rework to multi-provider, Phase 4 |
 | Focused text/code transform   | gptel presets/directives | Replaces custom rewrite commands, Phase 4 |
 | Repository-wide agentic coding | claude-code-ide.el | Sole agent, [[id:adr-primary-agent][ADR-004]] |

@@ -519,9 +519,10 @@ matching window is found."
 ;; Inline completion: Copilot overlay + Next Edit Suggestions.
 ;; TAB/C-TAB below are copilot.el's own default bindings (`copilot-completion-map'
 ;; and `copilot-nes-mode-map'), not re-bound here -- both are activated via
-;; overlay-local/filtered keymaps that fall through to Company/indent/yasnippet
-;; when no suggestion is pending. See docs/ai/keybindings.org for the precedence
-;; analysis and docs/decisions.org ADR-007.
+;; overlay-local/filtered keymaps that fall through to Corfu/indent/yasnippet
+;; when no suggestion is pending (Corfu, not Company, since ADR-021). See
+;; docs/ai/keybindings.org for the precedence analysis and docs/decisions.org
+;; ADR-007/ADR-021.
 (use-package! copilot
   :hook ((prog-mode . copilot-mode)
          (prog-mode . copilot-nes-mode)))

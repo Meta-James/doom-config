@@ -2707,3 +2707,200 @@ depends on either.
   specifically rather than assuming the transition policy resolves itself.
 - The user wants more apps added to =SPC o l=, or KiCad (or an EDA
   alternative) actually gets installed on this machine.
+
+* ADR-021: Migrate in-buffer completion from Company to Corfu; scope the
+  "one completion engine" rule per axis
+:PROPERTIES:
+:ID:       adr-corfu-migration
+:STATUS:   Implemented, partially live-verified (TAB-precedence mechanics
+           confirmed in an isolated daemon with simulated overlays; real
+           model-backed Copilot suggestions and real corfu popups from actual
+           LSP/dabbrev candidates not separately re-exercised — see Validation)
+:DATE:     2026-08-18
+:END:
+:LOGBOOK:
+- State "Implemented" from "Proposed" [2026-08-18 Tue]
+:END:
+
+** Context
+=AGENTS.md= had a hard rule: "one completion engine" (grouped with "one chat
+client, one primary agentic-coding frontend" under "one tool per
+responsibility"). The user asked to review Doom's completion module family and
+migrate to "the best supported completion engines," want multiple engines
+where they serve genuinely different purposes. Reviewing Doom's own module
+READMEs (=~/.config/emacs/sources/doom+/modules/completion/*/README.org=)
+surfaced two things:
+- This config was already running two completion engines
+  (=company +childframe= for in-buffer completion, =vertico= for
+  minibuffer/=completing-read= completion) on two different axes — not a rule
+  violation once "completion" is understood as two distinct responsibilities,
+  but the rule as literally worded ("one completion engine") didn't say that.
+- Company is explicitly deprecated by Doom itself: "*This module is
+  deprecated* in favor of the Corfu module... in maintenance mode until it is
+  eventually removed" (=completion/company/README.org=). Corfu is Doom's
+  current recommendation for the same axis (in-buffer/cap(f) completion).
+  Vertico (minibuffer axis) is already Doom's current recommendation, not
+  deprecated — no change needed there.
+
+** Decision drivers
+- Don't leave a config module on Doom's own deprecated/maintenance-mode list
+  when the modern replacement is a drop-in swap on the same axis
+  (=AGENTS.md=: package installs/module changes need explicit approval, which
+  the user gave for this migration specifically)
+- Don't let a mis-scoped hard rule ("one completion engine," unqualified) block
+  a config that was already correctly running two engines for two distinct
+  problems (in-buffer vs. minibuffer completion)
+- =docs/decisions.org= ADR-007 (Copilot/NES) proved TAB-precedence claims
+  live rather than assumed; the same standard applies here since Corfu's
+  keymap-activation mechanism (=minor-mode-overriding-map-alist=) is
+  structurally different from Company's (=minor-mode-map-alist=), so ADR-007's
+  Company-specific evidence doesn't automatically carry over
+- Doom's own corfu README flags a known Evil/TAB interaction gotcha
+  ("Fixing TAB Keybindings" troubleshooting section) — reason to verify, not
+  assume
+
+** Candidates
+| Candidate | Fate |
+|-----------+------|
+| Keep Company | Rejected — Doom's own README marks it maintenance-mode/deprecated; no reason to stay once Corfu covers the same role |
+| Corfu (+orderless +icons) | *Chosen* — Doom's current recommendation for this axis; native =completion-at-point-functions=-based, lighter, actively maintained (2 maintainers vs. Company's original author only), and layers =cape= (dabbrev/file/keyword capfs) and =yasnippet-capf= automatically since =:editor snippets= is already enabled |
+| Add a second in-buffer engine alongside Company/Corfu (e.g. a second AI backend) | Rejected — no distinct, frequently-useful role identified that Copilot doesn't already cover on the in-buffer axis; would violate the (now axis-scoped) hard rule for real, not just its old over-broad wording |
+| Replace Vertico with Ivy/Helm/Ido | Not seriously considered — Vertico is Doom's current recommendation and not deprecated; Ivy is itself deprecated in favor of Vertico per its own README; Helm/Ido have no dedicated Doom maintainers and no distinct capability Vertico lacks here |
+
+** Evidence
+- *Doom's own deprecation notices* (read directly from source, not inferred):
+  =completion/company/README.org= — "This module is deprecated in favor of
+  the Corfu module... in maintenance mode until it is eventually removed;"
+  =completion/ivy/README.org= — same wording pointing at Vertico. Neither
+  =corfu= nor =vertico= module READMEs carry a deprecation notice.
+- *Packages already present*: =doom sync= (2026-08-18) reported =corfu=,
+  =cape=, =nerd-icons-corfu=, and =orderless= all "up-to-date" immediately
+  after the =init.el= flag swap — these were already pinned/fetched
+  dependencies of the (previously disabled) corfu module declaration, no new
+  package downloads were needed. =company=/=company-dict=/=company-box=
+  dropped from the package set (151 packages after, matching the swap).
+- *=doom doctor= clean* after the swap: 46 modules, 151 packages, one
+  pre-existing unrelated warning (missing =zig= for optional =:term ghostel=
+  compilation, present before this change too, not introduced by it).
+- *Corfu's actual TAB semantics differ from Company's*, read from source
+  (=corfu.el= =defvar-keymap corfu-map=): upstream binds =TAB= to
+  =corfu-complete=, but Doom's own corfu module keymap wiring (confirmed live
+  below) resolves =TAB= to =corfu-next= (cycle) while a popup is showing —
+  acceptance happens on =RET= (=corfu-insert=), not =TAB=. This is a genuine
+  user-facing behavior change from the old Company flow and is called out in
+  Consequences below, not just an implementation detail.
+- *Keymap-activation mechanism differs from Company's*, read from source:
+  Corfu installs its popup keymap into =minor-mode-overriding-map-alist= via
+  =(setcdr (assq #'completion-in-region-mode minor-mode-overriding-map-alist)
+  corfu-map)= (=corfu--setup=, =corfu.el:917-919=), a different (higher-
+  priority) alist than Company's plain =minor-mode-map-alist= entry. Per
+  Emacs's documented active-keymap search order, both sit *below* the
+  =keymap= text/overlay property at point (where Copilot's overlay and
+  yasnippet's field overlay live) and *below* =emulation-mode-map-alists=
+  (where Evil's state maps live), but =minor-mode-overriding-map-alist= sits
+  above ordinary =minor-mode-map-alist= entries — relevant to the
+  Corfu-vs-NES case below.
+- *Live-verified* in an isolated, disposable Doom daemon (distinct
+  =--daemon=/=--socket-name=, this repo's real =init.el=/=config.el= as
+  edited today, killed immediately after; no frame created, no interaction
+  with the user's actual running daemon). Copilot/yasnippet/NES state was
+  built from the exact primitives their own source uses
+  (=copilot--get-overlay=, =copilot-completion-map=, =yas-keymap=,
+  =yas-overlay-priority=, =completion-in-region-mode= + =corfu-map=) rather
+  than through real network-backed suggestions — same method ADR-007 used,
+  same caveat applies (mechanics verified, not live model output). Results,
+  =(key-binding (kbd "TAB"))= in a real =emacs-lisp-mode= buffer, both Evil
+  states:
+  | Scenario                                          | TAB resolves to             |
+  |----------------------------------------------------+-----------------------------|
+  | Nothing active                                     | =indent-for-tab-command=    |
+  | Corfu popup only                                   | =corfu-next= (cycle)        |
+  | Corfu popup + Copilot suggestion overlay           | =copilot-accept-completion= |
+  | Corfu popup + real-width yasnippet field overlay   | =yas-next-field-or-maybe-expand= |
+  | Copilot overlay + yasnippet field (no corfu popup) | =copilot-accept-completion= (ADR-007's finding repeated, still holds) |
+  | NES pending only                                   | =copilot-nes-accept=        |
+  | Corfu popup + NES pending simultaneously           | =corfu-next= (Corfu wins — new case, ADR-007 had no third overriding-map-alist layer to test against) |
+  All six held identically in both =evil-normal-state= and =evil-insert-state=.
+  One simulation error was caught and fixed mid-verification: an initial
+  zero-width yasnippet overlay was not picked up by keymap search at all
+  (Corfu won that malformed case) — real yasnippet fields are never
+  zero-width (they span the field's placeholder text), so the overlay was
+  corrected to span real buffer text before trusting the result.
+- *Not verified*: the GUI-only =display-graphic-p= branch of Doom's =[C-i]=/
+  =TAB= disambiguation hack (=doom-emacs.el= "HACK: Emacs can't distinguish
+  C-i from TAB" block, ~line 823) genuinely requires a real graphical frame
+  receiving a real hardware keypress to exercise; synthesizing it would have
+  required opening a visible frame on the user's actual display from the
+  isolated daemon, which risked a visible on-screen disruption for a
+  non-completion-relevant edge case (it only matters for =evil-jump-forward=
+  reachability in Normal state when no popup/overlay is present at all — moot
+  whenever completion is actually in play). Flagged, not silently assumed.
+
+** Decision
+- =init.el=: disabled =(company +childframe)=, enabled
+  =(corfu +orderless +icons)= under =:completion=.
+- =AGENTS.md=: reworded the "one completion engine" hard rule to be scoped
+  per completion axis (in-buffer vs. minibuffer) rather than an unqualified
+  singular, since the prior wording didn't match the config's own correct,
+  pre-existing shape (Company/Corfu + Vertico as two engines for two
+  problems).
+- No change to Vertico, Copilot, or copilot-nes-mode.
+
+** Consequences
+- *TAB no longer accepts a completion candidate* — it cycles
+  (=corfu-next=/=corfu-previous= via =TAB=/=S-TAB=). Accepting now requires
+  =RET= (=corfu-insert=), per Corfu's own documented default. Users muscle-
+  -memoried to "TAB completes" from the Company era need to adjust to
+  "TAB cycles, RET inserts" for the non-Copilot completion path. Copilot/NES
+  acceptance via =TAB= is unaffected (still wins outright).
+- Corfu brings =cape= along automatically (dabbrev, file-path, and other
+  CAPF sources layer onto the same popup rather than requiring a second
+  frontend) and =yasnippet-capf= since =:editor snippets= is enabled — this
+  is the "richer sources without a second engine" outcome the user was
+  actually looking for, achieved within one engine on the in-buffer axis
+  rather than by stacking engines.
+- =docs/ai/architecture.org=, =docs/ai/workflows.org=, and
+  =docs/inventory.org= need their "Company +childframe" references updated
+  to Corfu (tracked as a follow-up in the same change, not left stale).
+- New, previously-undocumented precedence fact: if a Corfu popup and a
+  pending NES edit ever coincide (no regular Copilot overlay), Corfu wins,
+  not NES. Low real-world likelihood (different trigger conditions) but now
+  documented rather than unknown.
+
+** Rejected alternatives
+See Candidates table above.
+
+** Validation
+- =doom sync= clean, corfu/cape/nerd-icons-corfu/orderless confirmed present;
+  =doom doctor= clean (46 modules, 151 packages, one pre-existing unrelated
+  =:term ghostel=/=zig= warning).
+- TAB-precedence mechanics live-verified per Evidence above, in an isolated,
+  disposable daemon killed immediately after use — the user's real daemon was
+  never touched.
+- Not yet done (needs the user's real session, same caveat ADR-007 left
+  open): confirm a real Corfu popup from actual LSP/dabbrev candidates
+  renders and cycles/inserts as expected, and that a live Copilot suggestion
+  still wins over it, with real model output rather than simulated overlays.
+
+** Rollback
+Swap the =init.el= flags back: =(company +childframe)= enabled,
+=(corfu +orderless +icons)= disabled, then =doom sync=. =company-box=/
+=company-dict= are still pinned in the (deprecated) company module's own
+=packages.el=, so nothing else needs restoring. Revert the =AGENTS.md= rule
+wording if reverting the engine too (they're coupled: the axis-scoping
+rationale referenced Corfu's arrival, though the axis distinction itself
+would still be independently true even under Company).
+
+** Revisit when
+- The user actually exercises Corfu in a live buffer and finds the
+  TAB-cycles/RET-inserts behavior worse than Company's TAB-accepts flow —
+  =+corfu-want-ret-to-confirm= and remapping =TAB= back to
+  =corfu-complete=/=corfu-insert= in =corfu-map= are both one-line config
+  changes, not a reason to revert the whole migration.
+- Doom changes Corfu's keymap-installation mechanism (currently
+  =minor-mode-overriding-map-alist=) — re-check the Corfu-vs-NES and
+  Corfu-vs-yasnippet precedence findings above if so.
+- The user wants a genuinely distinct second in-buffer completion role (e.g.
+  a offline/local model alongside Copilot) — that would be a new ADR, not an
+  amendment to this one, since it's a different decision (adding an engine)
+  from this one (swapping one deprecated engine for its replacement).
