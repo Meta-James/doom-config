@@ -20,7 +20,7 @@ command shown.
 | =SPC a d= | =my/gptel-add-diagnostics= (new, Flycheck has no gptel integration) | normal | global | Explicit diagnostic context, genuinely not covered by any built-in |
 | =SPC a r= | =gptel-rewrite= (built-in, ediff-based) | visual | global | Replaces the old scratch-buffer copy-paste rewrite flow entirely |
 | =SPC a m= | =gptel-menu= (transient: backend/model/directive/tools) | normal | global | Provider switching frequent enough to deserve a direct key |
-| =SPC a t= | =my/project-vterm= (existing, unchanged, =config.el:166-172=) | normal | global | Also still bound at =SPC p t=; two legitimate entry points to the same command, not duplication of logic |
+| =SPC a t= | =my/project-ghostel= (=config.el:216-226=; renamed from =my/project-vterm= 2026-08-17, [[id:adr-terminal-backend-ghostel][ADR-014]]) | normal | global | Also still bound at =SPC p t=; two legitimate entry points to the same command, not duplication of logic |
 | =SPC a g= | =claude-code-ide-menu= (transient: session mgmt, navigation, interaction, config, debug) | normal | global | One binding, not two — the transient's own submenus cover launch/stop/status/list-sessions/diff-toggle; no separate "review" key needed since Ediff opens automatically on file changes (=claude-code-ide-use-ide-diff= =t=) |
 
 No separate =SPC a R= was added — the original sketch assumed a distinct

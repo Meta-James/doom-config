@@ -107,7 +107,7 @@ the shell-profile level, not worked around again in Elisp.
 :ID:       tshoot-agent-shell-system-state
 :END:
 
-During [[id:adr-app-launcher][ADR-014]], the agent ran =which wmctrl xdotool= (reported both
+During [[id:adr-app-launcher][ADR-020]], the agent ran =which wmctrl xdotool= (reported both
 missing), then separately =dpkg -s libpoppler-glib-dev= (reported not
 installed) and told the user both needed installing. The user directly
 corrected this afterward: both packages were already installed on the real
@@ -487,3 +487,98 @@ that is itself a Claude Code CLI subprocess — its ambient environment
 includes ephemeral, subprocess-only identity vars that were never meant to
 be cached as permanent config. If it happens anyway, the =config.el= strip
 now neutralizes the consequences regardless.
+
+* RESOLVED: ghostel needs a real graphical (X11) frame — a frame-less headless daemon isn't enough
+:PROPERTIES:
+:ID:       tshoot-ghostel-needs-x-frame
+:END:
+:LOGBOOK:
+- Resolved [2026-08-17 Mon], during the ghostel-backend Phase 6 re-verification ([[id:adr-terminal-backend-ghostel][ADR-014]])
+:END:
+
+The isolated-headless-daemon smoke-test pattern used successfully for
+vterm ([[id:tshoot-vterm-module][the vterm-module entry above]]) does *not* work unmodified for =ghostel=.
+Starting a plain =emacs --daemon=some-name= (no display attached) and
+launching a claude-code-ide.el session with the ghostel backend produced a
+=ghostel-mode= buffer that looked alive (=process-status= = =open=) but was
+actually dead: =ghostel-debug-info= showed =PID: nil=, =buffer-size: 0
+chars, 0 lines=, and degenerate rendering fields (=Resolved font: nil=,
+=Frame font: tty=, =Window system: terminal=). No amount of waiting produced
+output.
+
+Root cause: unlike =vterm= (a plain character-grid terminal emulator that
+only needs a PTY), =ghostel= embeds a real GPU/font-metric-based terminal
+renderer (libghostty) and needs an actual graphical frame's font/pixel
+metrics to size and draw itself. A frame-less daemon has no such frame, so
+ghostel's process never really starts.
+
+Fix: attach a real X frame to the daemon before starting the session —
+=emacsclient --socket-name=some-name -c -n -F '((window-system . x)
+(display . ":1"))'= (adjust the display number). Two things that look like
+they should work but don't:
+- Setting =DISPLAY=:1= in the *shell* environment before a plain =emacsclient
+  -c= is *not* sufficient — it silently produces another frame-less tty
+  frame instead of erroring, so this failure mode is easy to miss.
+- =XAUTHORITY= also needs to be set explicitly (=/run/user/<uid>/gdm/Xauthority=
+  on this machine, confirmed via =echo $XAUTHORITY= in a real session) if
+  invoking =emacsclient= from a context that doesn't already have it — an
+  X connection can silently fail to authenticate without it.
+The explicit =-F= frame-parameters are what actually forces a real X
+connection, confirmed via =(frame-parameter nil 'window-system)= returning
+=x= only after adding them. Once a real X frame exists, delete any stray
+frame-less tty frames the earlier attempts left behind
+(=(delete-frame f t)= for each frame not on =window-system= =x=) before
+starting the ghostel session, since Emacs requires at least one frame to
+always exist.
+
+After attaching a real X frame this way, ghostel rendered correctly: real
+font metrics, correct terminal dimensions, full-color TUI output readable
+via plain =buffer-string= (with text properties for faces/colors intact).
+
+*Takeaway*: any future headless/disposable-daemon smoke test involving
+=ghostel= specifically (not just claude-code-ide.el generically) must attach
+a real graphical frame first — the vterm-era assumption that a frame-less
+daemon is good enough for any terminal-backend test no longer holds now that
+a second, GPU-rendering backend is in use.
+
+* RESOLVED: dashboard silently replaced the Magit commit-message buffer
+:PROPERTIES:
+:ID:       tshoot-dashboard-stomps-commit-buffer
+:END:
+:LOGBOOK:
+- Resolved [2026-08-18 Tue]
+:END:
+
+*Symptom*: committing via Magit, the frame that opened to edit the commit
+message showed the dashboard instead. Pressing =q= (which buries/quits the
+dashboard buffer) revealed the actual =COMMIT_EDITMSG= buffer underneath, as
+if it had been open the whole time.
+
+*Root cause*: the 43b3bcc "Fixed maximization bug on Ubuntu" commit
+(=config.el=) hooked =server-after-make-frame-hook= to force the dashboard
+open on *every* client frame emacsclient creates, via
+=(run-with-timer 0.1 nil #'+dashboard/open (selected-frame))= — with no
+guard for frames that were created to edit a specific file. Traced Emacs's
+own =server.el= (=server-execute=): it calls =server-visit-files= and
+=server-switch-buffer= to display the requested file *before*
+=server-after-make-frame-hook= runs, so at hook time the frame is already
+showing the right buffer. But =+dashboard/open= (=ui/dashboard/autoload.el=)
+does an unconditional =(switch-to-buffer (doom-fallback-buffer))= in the
+frame's only window, so the deferred 0.1s timer swapped the dashboard in
+over whatever was already there. Magit's commit flow hits this because
+=with-editor= has =git commit= shell out to =emacsclient COMMIT_EDITMSG=,
+which creates exactly such a frame.
+
+*Fix*: guard the timer callback so it only opens the dashboard when the
+frame's current buffer isn't already visiting a file
+(=(unless buffer-file-name (+dashboard/open frame))=) — this preserves the
+original intent (a bare =emacsclient -c= frame with nothing requested still
+gets the dashboard) while leaving file-editing frames (commit messages, and
+anything else opened by name via emacsclient) alone.
+
+*Takeaway*: any hook on =server-after-make-frame-hook= that unconditionally
+takes over the frame's window is a landmine for every other feature that
+opens files through emacsclient (with-editor/Magit here, but equally
+=git rebase -i= or any other =$EDITOR=-via-emacsclient caller) — gate on
+whether the frame already has something real displayed, not just on "a new
+client frame was created".

@@ -59,20 +59,22 @@ Every external binary this config relies on needs, somewhere in
 [[id:docs-inventory][inventory.org]]: a documented role, install method, version check, upgrade
 method, and rollback/removal method.
 
-* No automatic commits or pushes
+* Commit, push, and history-rewrite authority
 :PROPERTIES:
 :ID:       std-no-commit
 :END:
 
-- Never commit. Never push. Never amend, rebase, reset, clean, or rewrite Git
-  history without explicit, in-the-moment permission.
-- Read-only Git commands and diffs are always fine.
-- At stable checkpoints, state plainly that the tree is ready for the user to
-  inspect and commit — don't do it for them.
+- The agent may commit, push, amend, rebase, reset, clean, or otherwise
+  rewrite Git history — but only after proposing the specific command (and,
+  for commit, the message; for push, the target) in conversation and
+  receiving explicit, in-the-moment permission. A past approval doesn't carry
+  forward to the next commit/push/rewrite.
+- Read-only Git commands and diffs are always fine, no permission needed.
 - Backed technically, not just instructionally: a committed
-  =.claude/settings.json= =permissions.deny= list blocks =git
-  commit=/=push=/=rebase=/=reset=/=clean= outright for any Claude Code
-  session in this repo. See [[id:adr-permission-enforcement][ADR-009]].
+  =.claude/settings.json= =permissions.ask= list forces a Claude Code
+  confirmation prompt on =git commit=/=push=/=rebase=/=reset=/=clean= for any
+  session in this repo — it can no longer run unattended. See
+  [[id:adr-agent-git-authority][ADR-015]] (supersedes [[id:adr-permission-enforcement][ADR-009]], which blocked these outright).
 
 * Credentials
 :PROPERTIES:
@@ -118,4 +120,6 @@ method, and rollback/removal method.
 - Package installs, system upgrades, broad rewrites, deletions, and permission
   changes require explicit, current-turn approval — a prior approval doesn't
   carry forward to a new category of action.
-- The user remains responsible for commits and pushes, always.
+- The agent may commit, push, and rewrite Git history, but only with
+  explicit, current-turn approval for each one — see [[id:std-no-commit][std-no-commit]] and
+  [[id:adr-agent-git-authority][ADR-015]].

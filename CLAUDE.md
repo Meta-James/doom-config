@@ -13,3 +13,21 @@
   a new ADR (context, drivers, candidates, evidence, decision, consequences,
   rejected alternatives, validation, rollback, revisit condition) rather than
   only stating it in conversation.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub issues on `Meta-James/doom-config`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), unchanged. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context, but not the CONTEXT.md/docs/adr convention — points at this repo's existing `docs/*.org` structure instead. See `docs/agents/domain.md`.
+
+### Engineering skills
+
+Curated default subset of `mattpocock-skills` (`tdd`, `mattpocock-skills:code-review`, `codebase-design`, `writing-for-agents`, `diagnosing-bugs`, `domain-modeling`), scoped to this repo's meta-docs layer per ADR-016. See `docs/agents/skills.md` — in particular, always invoke `mattpocock-skills:code-review` by its full name; a different, built-in `code-review` skill also exists.

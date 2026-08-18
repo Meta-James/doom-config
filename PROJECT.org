@@ -198,9 +198,51 @@ ADR-012 for the full decision record.
 - [X] Update ADR-012 =:STATUS:= to =live-verified= (with a =:LOGBOOK:=
   entry) once the above is confirmed
 
+* IN-PROGRESS Phase 4 — Org Agenda and Capture basics
+:PROPERTIES:
+:EFFORT:   2h
+:END:
+Promoted from [[file:docs/roadmap.org][docs/roadmap.org]]'s old "Org Agenda and personal project
+management" / "Capture and knowledge management" Future-phases bullets,
+scoped narrowly per =docs/standards.org= =std-no-scope-creep=. See
+[[file:docs/decisions.org][docs/decisions.org]] ADR-017 (agenda/capture basics) and ADR-018 (hand-rolled
+Vulpea dailies + backlinks buffer, added mid-scoping once asked for) for the
+full decision records.
+
+- [X] =config.el=: =org-agenda-files= (all of =org-directory=, user's
+  explicit informed choice), =org-todo-keywords= (matches this file's own
+  sequence), =org-capture-templates= ("t" task / "n" note, both into
+  =~/org/todo.org='s pre-existing "Inbox" heading; "v" creates a real
+  Vulpea-indexed note per Vulpea's own recommended capture pattern)
+- [X] =config.el=: Vulpea dailies (=my/vulpea-daily-today/-date/-previous/
+  -next=, backed by =vulpea-create= with an explicit =daily/YYYY-MM-DD.org=
+  template)
+- [X] =config.el=: Vulpea backlinks side buffer (=my/vulpea-buffer-toggle=,
+  hand-rolled =org-roam-buffer= equivalent, refreshes on both
+  window-selection and window-buffer change — reasoned through the
+  single-hook failure mode before writing it, see ADR-018 Evidence)
+- [X] New leader bindings under the existing =(n v)= vulpea prefix: "B"
+  (backlinks buffer), "j"/"J" (daily today/pick-date), "p"/"n" (daily
+  previous/next)
+- [X] =docs/inventory.org=: backfilled the =vulpea= package row that was
+  missing since its 2026-08-18 install
+- [X] =docs/decisions.org=: backfilled ADR-019 (retroactive), recording the
+  original Vulpea-vs-org-roam decision that had never itself gotten an ADR
+  — explicit about what's genuinely known (the one-line =config.el=
+  comment) versus reconstructed from Vulpea's own =docs/comparison.org= (found while scoping this phase)
+- [ ] =doom sync=/=doom doctor= clean after these changes
+- [ ] Live-verify in the user's own interactive session: run a capture
+  ("t"/"n"/"v"), open the agenda (=SPC n a=), create/visit a daily note,
+  toggle the backlinks buffer and confirm it refreshes on both a
+  window-switch and an in-window =vulpea-find= jump
+- [ ] Once live-verified, update ADR-017/ADR-018 =:STATUS:= together (both
+  currently "Accepted, implemented; not yet live-verified") with a
+  =:LOGBOOK:= entry each, and move this phase's =roadmap.org= status line
+  from "implemented, not yet live-verified" to "live-verified"
+
 * Backlog (untimed, not tied to a phase)
 
-** IN-PROGRESS Migrate claude-code-ide.el's terminal backend from vterm to ghostel
+** DONE Migrate claude-code-ide.el's terminal backend from vterm to ghostel
 User intends to eventually switch =claude-code-ide-terminal-backend= from
 ='vterm= to ='ghostel= (an embedded-Ghostty backend claude-code-ide.el
 already supports alongside =vterm=/=eat=, see =claude-code-ide.el:226-234=).
@@ -220,17 +262,32 @@ Interim fix for the vterm resize-repaint bug that motivated this is the
 - [X] User runs =M-x ghostel= interactively once to trigger the native
   =libghostty-vt= module's pre-built-binary download
   (=ghostel-module-auto-install=) — needs a real interactive session, not
-  agent-doable. Done 2026-08-13; module downloaded and terminal opened
-  successfully.
-- [ ] Live-verify ghostel actually renders/resizes correctly before flipping
-  the backend over.
-- [ ] Set =claude-code-ide-terminal-backend= to ='ghostel= in =config.el=
-  and re-verify the Phase 6 agentic workflow smoke test still passes.
-- [ ] =my/project-vterm= and Doom's built-in terminal popup (=:term vterm=
-  in =init.el=) are hard-wired to =vterm= directly — decide whether to
-  migrate those too or accept running two terminal packages side by side
-  (cuts against =AGENTS.md='s "one tool per responsibility" rule if left
-  unresolved).
-- [ ] Re-evaluate whether the =window-size-fixed= freeze is still needed
-  afterward, or can be scoped down / removed if =ghostel= doesn't share
-  vterm's redraw bug.
+  agent-doable. Confirmed run 2026-08-17.
+- [X] Live-verify ghostel actually renders/resizes correctly before flipping
+  the backend over. Confirmed 2026-08-17: resizes fine, rendering correct.
+- [X] Set =claude-code-ide-terminal-backend= to ='ghostel= in =config.el=
+  (2026-08-17).
+- [X] Re-verified the Phase 6 agentic workflow smoke test passes with the
+  new backend (2026-08-17) — full re-run against a fresh disposable scratch
+  project in an isolated daemon, same seeded-bug task as the original vterm
+  test: bug found and fixed, tests run, marker written, no git actions,
+  clean teardown. Surfaced and resolved a new gotcha: ghostel needs a real
+  X11 frame to render (frame-less headless daemons don't work for it). Full
+  writeup: [[id:adr-terminal-backend-ghostel][ADR-014]].
+- [X] =my/project-vterm= and Doom's built-in terminal popup (=:term vterm=
+  in =init.el=) migrated too (2026-08-17): =vterm= commented out of
+  =init.el='s =:term= block entirely (nothing left using it —
+  =AGENTS.md='s "one tool per responsibility" rule now holds cleanly);
+  =my/project-vterm= renamed to =my/project-ghostel= and rewritten to call
+  =(ghostel)=; =SPC o t= (Doom's built-in popup) confirmed resolving to
+  =+ghostel/toggle=. =doom sync=/=doom doctor= clean (46 modules, 151
+  packages). Full writeup: [[id:adr-terminal-backend-ghostel][ADR-014]]'s LOGBOOK.
+- [X] =window-size-fixed= freeze removed outright (2026-08-17) rather than
+  ported to ghostel — no equivalent resize corruption observed, and
+  claude-code-ide.el already re-syncs ghostel's window size on resize
+  itself. Revisit only if the same visual corruption recurs under ghostel
+  (see ADR-014's Revisit-when).
+
+Only remaining loose end: your live Emacs session needs a restart (or
+=M-x doom/reload=) to actually pick up the =init.el=/=config.el= changes —
+not yet done, since that has to happen in your own interactive session.

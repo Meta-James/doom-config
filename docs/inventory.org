@@ -46,19 +46,21 @@ dated rather than deleted, so history stays visible.
 :ID:       inv-modules
 :END:
 
-47 modules as of 2026-08-10 (=doom doctor= count; was 43 at 2026-07-20
-baseline, +1 =:app rss= for [[id:adr-rss-elfeed][ADR-012]], +1 =:term ghostel=
-below — remaining growth is =:email=/=:app= modules from Phase 2/3 not
-individually re-itemized here). Full source of truth is =init.el= itself —
-this is a summary, not a duplicate to keep in sync by hand:
+46 modules as of 2026-08-17 (=doom doctor= count; was 43 at 2026-07-20
+baseline, +1 =:app rss= for [[id:adr-rss-elfeed][ADR-012]], +1 =:term ghostel= added
+2026-08-10, -1 =:term vterm= disabled 2026-08-17 once ghostel covered every
+prior use — see [[id:adr-terminal-backend-ghostel][ADR-014]] — remaining growth is =:email=/=:app= modules
+from Phase 2/3 not individually re-itemized here). Full source of truth is
+=init.el= itself — this is a summary, not a duplicate to keep in sync by
+hand:
 
 - =:completion= company +childframe, vertico
 - =:ui= doom, dashboard, hl-todo, ligatures, modeline, ophints, popup +defaults,
   vc-gutter +pretty, vi-tilde-fringe, workspaces
 - =:editor= evil +everywhere, file-templates, fold, format +onsave, snippets
 - =:emacs= dired +icons, electric, undo, vc
-- =:term= vterm, ghostel (added 2026-08-10, not yet the active
-  =claude-code-ide-terminal-backend= — see backlog in [[file:../PROJECT.org][PROJECT.org]])
+- =:term= ghostel (sole terminal backend since 2026-08-17, [[id:adr-terminal-backend-ghostel][ADR-014]];
+  =vterm= commented out in =init.el=, not deleted, for easy rollback)
 - =:checkers= syntax, spell +flyspell, grammar
 - =:tools= direnv, eval +overlay, lookup, lsp, magit, pdf, tree-sitter
 - =:lang= emacs-lisp, json, latex, markdown, org, python +lsp +pyenv +poetry
@@ -76,6 +78,7 @@ this is a summary, not a duplicate to keep in sync by hand:
 | copilot        | =(:host github :repo "copilot-emacs/copilot.el" :files ("*.el"))= | =277ca35= / tagged release 0.9.0 |
 | perfect-margin | MELPA default                                       | unrelated to AI work, untouched            |
 | claude-code-ide | =(:host github :repo "manzaltu/claude-code-ide.el")= | Installed Phase 6, 2026-07-20; no tagged release upstream yet (pre-1.0) |
+| vulpea         | MELPA default                                       | =2ea4a8b= (2026-08-17), installed 2026-08-18; see [[id:adr-vulpea-note-management][ADR-019]] (retroactive) |
 | ~~exwm~~       | removed 2026-07-20, see [[id:adr-remove-exwm][ADR-002]]         | —                                          |
 
 * External binaries
@@ -109,8 +112,8 @@ this is a summary, not a duplicate to keep in sync by hand:
 | oama    | yes     | ~/.local/bin/oama, =0.22.0 - 2025-08-29=, precompiled release binary (no apt package) — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
 | mpv     | yes     | =/usr/bin/mpv=, =0.37.0-1ubuntu4= (apt) — Phase 3, [[id:adr-rss-elfeed][ADR-012]] |
 | yt-dlp  | yes     | =/usr/bin/yt-dlp=, =2024.04.09-1= (apt) — Phase 3, [[id:adr-rss-elfeed][ADR-012]] |
-| xdotool | yes     | =/usr/bin/xdotool=, =3.20160805.1= (apt) — predates this project. The agent's own =which= check first reported it missing; user confirmed it was installed the whole time — see [[id:adr-app-launcher][ADR-014]]'s LOGBOOK and [[id:tshoot-agent-shell-system-state][troubleshooting.org]] |
-| libpoppler-glib-dev | yes | needed for =pdf-tools='s =epdfinfo= helper to compile. The agent's own =dpkg -s= check first reported it missing; user confirmed it was installed the whole time — see [[id:adr-app-launcher][ADR-014]]'s LOGBOOK and [[id:tshoot-agent-shell-system-state][troubleshooting.org]] |
+| xdotool | yes     | =/usr/bin/xdotool=, =3.20160805.1= (apt) — predates this project. The agent's own =which= check first reported it missing; user confirmed it was installed the whole time — see [[id:adr-app-launcher][ADR-020]]'s LOGBOOK and [[id:tshoot-agent-shell-system-state][troubleshooting.org]] |
+| libpoppler-glib-dev | yes | needed for =pdf-tools='s =epdfinfo= helper to compile. The agent's own =dpkg -s= check first reported it missing; user confirmed it was installed the whole time — see [[id:adr-app-launcher][ADR-020]]'s LOGBOOK and [[id:tshoot-agent-shell-system-state][troubleshooting.org]] |
 
 Node 18.19.1 initially looked like a possible blocker for
 =copilot-language-server=. Resolved in Phase 5: this install actually uses the
@@ -140,19 +143,21 @@ the AI subsystem, not a full machine audit).
 |------------------------------+------------------------------------------+--------------------------------------------------------------------------+----------------------------------+---------------------------------------------------|
 | =claude= (Claude Code CLI)  | Backs claude-code-ide.el's agentic session ([[id:adr-primary-agent][ADR-004]]) | Official native installer (=curl -fsSL https://claude.ai/install.sh \vert bash=); lands in =~/.local/share/claude/versions/<ver>=, symlinked from =~/.local/bin/claude= | Self-updates in place (=claude update=, or automatic) — confirmed two versions present on disk (2.1.215, 2.1.216), so an update already happened mid-project without manual reinstall | Delete =~/.local/share/claude= and the =~/.local/bin/claude= symlink; remove the =claude-code-ide= package declaration from =packages.el= and =doom sync= |
 | =@github/copilot-language-server= (via =node=/=npm=) | LSP-protocol backend for =copilot.el='s suggestions and NES ([[id:adr-copilot-nes][ADR-007]]) | =M-x copilot-install-server= (fully in-Emacs, reproducible — reads source: uses npm when found on =PATH=, else downloads precompiled native binaries directly, no manual shell step either way) | =M-x copilot-install-server= again re-installs current/latest | Delete =copilot-install-dir= (Copilot's own package-managed install dir); remove =copilot= from =packages.el= and =doom sync= |
-| =cmake=, =make=, =gcc= (=build-essential=) | Build toolchain to compile vterm's native module (=vterm-module.so=) — discovered as a genuine missing prerequisite during Phase 6, see [[id:tshoot-vterm-module][troubleshooting.org]] | =sudo apt install build-essential cmake= (already present on this machine when checked; not installed by this project) | Standard =apt= upgrade | Standard =apt remove=; unrelated to whether vterm itself stays installed |
+| =cmake=, =make=, =gcc= (=build-essential=) | Build toolchain that compiled vterm's native module (=vterm-module.so=) — discovered as a genuine missing prerequisite during Phase 6, see [[id:tshoot-vterm-module][troubleshooting.org]]. Historical: =vterm= itself is disabled since 2026-08-17 ([[id:adr-terminal-backend-ghostel][ADR-014]]), this toolchain now unused by this project (may still back other tools on the machine) | =sudo apt install build-essential cmake= (already present on this machine when checked; not installed by this project) | Standard =apt= upgrade | Standard =apt remove=; unrelated to whether vterm itself stays installed |
 | =mu=/=mu4e= | mu4e's indexer + the mu4e elisp package itself (mu4e is *not* straight-managed — deliberately, per the module's own source comment, since it's "prone to breaking updates" and bundled with =mu=) — [[id:adr-email-mu4e][ADR-011]] | =sudo apt install maildir-utils mu4e= — done 2026-07-29 (user's own terminal, sudo denied to the agent by auto-mode's classifier) | Standard =apt= upgrade | Standard =apt remove=; also remove =(mu4e ...)= from =init.el='s =:email= block and =doom sync= |
 | =isync= (=mbsync=) | IMAP sync backend for all 3 mail accounts — [[id:adr-email-mu4e][ADR-011]] | =sudo apt install isync= — done 2026-07-29 | Standard =apt= upgrade | Standard =apt remove=; delete =~/.mbsyncrc= |
 | =msmtp= | SMTP send backend, recommended by the mu4e module over raw =smtpmail= for multi-account setups — [[id:adr-email-mu4e][ADR-011]] | =sudo apt install msmtp= — done 2026-07-29 | Standard =apt= upgrade | Standard =apt remove=; delete =~/.msmtprc= |
 | =oama= | OAuth2 access-token manager for the 2 Gmail accounts' XOAUTH2/OAUTHBEARER refresh cycle, called from =.mbsyncrc=/=.msmtprc= — [[id:adr-email-mu4e][ADR-011]] | Downloaded =oama-0.22.0-Linux-x86_64.tar.gz= from =github.com/pdobsan/oama/releases= (no apt package — this repo's first externally-sourced static binary), extracted =oama= to =~/.local/bin= | Re-download a newer release tarball and overwrite =~/.local/bin/oama= — no auto-update mechanism | Delete =~/.local/bin/oama= and =~/.config/oama/=, =~/.local/state/oama/= |
 | =mpv= | Video player backing elfeed-tube's live-transcript/follow-along feature (=+youtube= flag) — [[id:adr-rss-elfeed][ADR-012]] | =sudo apt install mpv= — done 2026-08-10 (user's own terminal; =sudo= via the =!= session-shell prefix has no TTY for the password prompt, same constraint as Phase 2's mail binaries) | Standard =apt= upgrade | Standard =apt remove=; elfeed-tube's mpv-follow keybindings go inert but elfeed itself is unaffected |
 | =yt-dlp= | Video/transcript fetch backend elfeed-tube-mpv calls into, alongside =mpv= — [[id:adr-rss-elfeed][ADR-012]] | =sudo apt install yt-dlp= — done 2026-08-10 (same install run as =mpv=, same constraint) | Standard =apt= upgrade | Standard =apt remove=; same effect as removing =mpv= above |
-| =libpoppler-glib-dev= | Build dependency for =pdf-tools='s =epdfinfo= server — [[id:adr-app-launcher][ADR-014]] | Already installed, predates this project's involvement — not installed by this project (agent's own =dpkg -s= check wrongly reported it missing at first; see ADR-014's LOGBOOK) | Standard =apt= upgrade | Standard =apt remove=; =pdf-tools= goes back to unable-to-compile =epdfinfo= |
-| ghostel's native module (=libghostty-vt= via a Zig-compiled dynamic module) | Backend candidate for =claude-code-ide-terminal-backend=, evaluated to replace/augment vterm — see Backlog in [[file:../PROJECT.org][PROJECT.org]] | Elisp package installed via =:term ghostel= (=doom sync=, 2026-08-10); the native binary itself downloads on first interactive =M-x ghostel= (=ghostel-module-auto-install=, default =ask=) — *not yet triggered*, needs the user's own session | Re-run =M-x ghostel-module-compile/-download= or let the auto-install prompt fire again after an upgrade | Delete the downloaded module file (path TBD once installed) and/or remove =ghostel=/=evil-ghostel= from =init.el='s =:term= block, =doom sync= |
+| =libpoppler-glib-dev= | Build dependency for =pdf-tools='s =epdfinfo= server — [[id:adr-app-launcher][ADR-020]] | Already installed, predates this project's involvement — not installed by this project (agent's own =dpkg -s= check wrongly reported it missing at first; see ADR-020's LOGBOOK) | Standard =apt= upgrade | Standard =apt remove=; =pdf-tools= goes back to unable-to-compile =epdfinfo= |
+| ghostel's native module (=libghostty-vt= via a Zig-compiled dynamic module) | Sole terminal backend for claude-code-ide.el and every other terminal use in this config since 2026-08-17, replacing vterm — [[id:adr-terminal-backend-ghostel][ADR-014]] | Elisp package installed via =:term ghostel= (=doom sync=, 2026-08-10); native binary downloaded via =M-x ghostel= (=ghostel-module-auto-install=), confirmed 2026-08-17 — =ghostel-debug-info= shows =Module loaded: yes=, =~/.config/emacs/.local/straight/build-30.2/ghostel/ghostel-module.so= (1,438,328 bytes) | Re-run =M-x ghostel-module-compile/-download= or let the auto-install prompt fire again after an upgrade | Delete the downloaded module file and/or remove =ghostel=/=evil-ghostel= from =init.el='s =:term= block, =doom sync= |
 
-*vterm-module build, done once during Phase 6* (not shell-history-only — the
-exact commands are captured in [[id:tshoot-vterm-module][troubleshooting.org]] and reproducible on any
-machine with the toolchain above):
+*vterm-module build, done once during Phase 6, historical* (=vterm= is
+disabled since 2026-08-17, [[id:adr-terminal-backend-ghostel][ADR-014]] — kept here as a reproducible record,
+not because it's still needed; the exact commands are captured in
+[[id:tshoot-vterm-module][troubleshooting.org]] and reproducible on any
+machine with the toolchain above, should =vterm= ever be re-enabled):
 #+BEGIN_SRC sh
 cd ~/.config/emacs/.local/straight/build-30.1/vterm
 mkdir -p build && cd build
@@ -223,25 +228,28 @@ fresh Ubuntu-like machine with Doom Emacs already bootstrapped against this
 
 1. =doom sync= (picks up =packages.el=: gptel, copilot, claude-code-ide,
    perfect-margin).
-2. Install prerequisites this project actually needed: =build-essential=
-   +=cmake= (for vterm's native module — see the lifecycle table above),
-   =npm=/=node= (for =copilot-language-server=, or accept the native-binary
-   fallback), the =claude= CLI (official installer), =pass=+=gpg= with a
-   trusted secret key already set up.
-2. Compile vterm's native module (=cmake= + =make=, see the recipe above) —
-   otherwise the first =(require 'vterm)= blocks on an interactive
-   compile-confirmation prompt with nowhere to go in a headless context (see
-   [[id:tshoot-vterm-module][troubleshooting.org]]).
-3. =M-x copilot-install-server= (in-Emacs, not a shell step).
-4. Create the =api/anthropic= and =api/openai= =pass= entries (manual,
+2. Install prerequisites this project actually needed: =npm=/=node= (for
+   =copilot-language-server=, or accept the native-binary fallback), the
+   =claude= CLI (official installer), =pass=+=gpg= with a trusted secret key
+   already set up. (=build-essential=+=cmake=, needed to compile vterm's
+   native module, is no longer required — =vterm= is disabled since
+   2026-08-17, [[id:adr-terminal-backend-ghostel][ADR-014]]; skip unless re-enabling it, see the lifecycle
+   table above.)
+3. Run =M-x ghostel= interactively once, in a real graphical session, to
+   trigger the native =libghostty-vt= module's pre-built-binary download
+   (=ghostel-module-auto-install=) — needs an actual interactive session
+   with a real X/graphical frame attached, not a headless/frame-less one
+   (see [[id:tshoot-ghostel-needs-x-frame][troubleshooting.org]]).
+4. =M-x copilot-install-server= (in-Emacs, not a shell step).
+5. Create the =api/anthropic= and =api/openai= =pass= entries (manual,
    deliberately never scriptable — see [[id:ai-providers][providers.org]]).
-5. Log in / authenticate the =claude= CLI itself (its own subscription login,
+6. Log in / authenticate the =claude= CLI itself (its own subscription login,
    outside this repo's credential system — see [[id:ai-providers][providers.org]]'s two-tier
    credential model).
-6. Run =doom sync --env= once, so a daemon started by something other than
+7. Run =doom sync --env= once, so a daemon started by something other than
    an interactive shell (systemd, a display manager) still gets the right
    =PATH= — see the "Known environment issues" entry above.
-7. =doom doctor=, confirm clean.
+8. =doom doctor=, confirm clean.
 
 Known gaps in this checklist, honestly: it's reasoned from what this project
 actually did on this one machine, not verified against a second one. Order

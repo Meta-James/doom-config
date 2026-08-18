@@ -93,11 +93,66 @@
 ;; You can also try 'gd' (or 'C-c c d') to jump to their definition and see how
 ;; they are implemented.
 
-;; Maximize emacs on startup and resize splash screen
+;; Maximize every new graphical frame, and resize splash screen.
+;;
+;; Without `frame-resize-pixelwise', Emacs quantizes its frame to whole
+;; character-cell dimensions any time the size changes -- including right
+;; after the window manager maximizes it. On GNOME/Mutter (Ubuntu) that
+;; immediate "round back down to a cell boundary" resize reads as the app
+;; rejecting the maximize, so Mutter reverts the state instantly -- the frame
+;; never visibly grows at all. xfwm4 (Xubuntu) tolerates the mismatch and
+;; leaves it maximized regardless, which is why this only shows up on Ubuntu.
+(setq frame-resize-pixelwise t)
+
+;; Belt-and-suspenders: even with pixelwise resizing, GNOME/Mutter can still
+;; ignore a `fullscreen' request sent right at frame creation (the frame
+;; isn't mapped onto the display yet), unlike xfwm4, which applies it
+;; immediately. Reasserting it a few times over the following moments is a
+;; self-healing workaround -- setting `fullscreen' to a value it already has
+;; is a no-op, so this is harmless once it "sticks". Hooking
+;; `after-make-frame-functions' (rather than only
+;; `server-after-make-frame-hook') also covers frames created outside the
+;; emacsclient protocol, e.g. claude-code-ide.el's own frame.
+(defun +my/maximize-frame (frame)
+  (when (display-graphic-p frame)
+    (dolist (delay '(0 0.1 0.3))
+      (run-with-timer delay nil
+                       (lambda ()
+                         (when (frame-live-p frame)
+                           (set-frame-parameter frame 'fullscreen 'maximized)))))))
+(add-hook 'after-make-frame-functions #'+my/maximize-frame)
+
+;; ROOT CAUSE (found 2026-08-17): `after-make-frame-functions' is documented
+;; to never run for the very first frame of a session -- that frame already
+;; exists before this hook is installed. So the maximize logic above only
+;; ever ran for *subsequent* frames (emacsclient, claude-code-ide.el's own
+;; frame, C-x 5 2) and never for the frame you actually see at startup --
+;; confirmed live: zero `+my/maximize-frame' messages logged despite the
+;; frame existing. None of the undecorated/pixelwise theories were it; the
+;; startup frame's maximize call simply never fired. Call it directly once
+;; that frame exists.
+(add-hook 'window-setup-hook
+          (lambda () (+my/maximize-frame (selected-frame))))
+
+;; Only take over a bare `emacsclient -c' frame (e.g. a terminal alias that
+;; pops a blank Emacs frame) with the dashboard. `server-visit-files' has
+;; already switched the frame to any requested file by the time this hook
+;; runs, so unconditionally forcing the dashboard here would stomp on it --
+;; concretely, this broke `git commit' from Magit: `with-editor' opens
+;; COMMIT_EDITMSG via `emacsclient', this hook fired and swapped that buffer
+;; out for the dashboard ~0.1s later, and `q' (which buries/quits the
+;; dashboard) revealed the COMMIT_EDITMSG buffer sitting underneath -- see
+;; docs/ai/troubleshooting.org::tshoot-dashboard-stomps-commit-buffer.
 (add-hook 'server-after-make-frame-hook
           (lambda ()
-            (set-frame-parameter nil 'fullscreen 'maximized)
-            (run-with-timer 0.1 nil #'+dashboard/open (selected-frame))))
+            (let ((frame (selected-frame)))
+              (run-with-timer
+               0.1 nil
+               (lambda ()
+                 (when (frame-live-p frame)
+                   (with-selected-frame frame
+                     (unless buffer-file-name
+                       (+dashboard/open frame)))))))))
 
 (add-to-list 'default-frame-alist '(undecorated . t))
 
@@ -174,30 +229,28 @@
 
 (map! :leader :desc "Magit status" "g s" #'magit-status)
 
-;; VTerm in project root
-(defun my/project-vterm ()
-  "Open vterm in the current project's root."
+;; Ghostel in project root (migrated from vterm 2026-08-17, see ADR-014;
+;; my/project-vterm's whole reason for existing -- vterm doesn't offer a
+;; project-root-scoped entry point of its own -- carries over unchanged,
+;; just swapping which terminal backend it opens).
+(defun my/project-ghostel ()
+  "Open ghostel in the current project's root."
   (interactive)
   (let ((default-directory (projectile-project-root)))
-    (vterm)))
+    (ghostel)))
 
-(map! :leader :desc "Project vterm" "p t" #'my/project-vterm)
+(map! :leader :desc "Project ghostel" "p t" #'my/project-ghostel)
 
-;; vterm doesn't repaint reliably when its window is resized while it's not
-;; the selected window (a known vterm/libvterm bug class — Doom's own core
-;; carries a narrower hack for a different trigger of the same family, see
-;; term/vterm/autoload.el's "Force vterm to redraw" comment). Any
-;; bottom-appearing popup (which-key, vterm popups themselves) reclaims frame
-;; lines from existing windows, so a vterm window elsewhere in the layout
-;; (claude-code-ide's session, my/project-vterm, Doom's built-in terminal
-;; popup) gets resized as a side effect and ends up visually corrupted until
-;; manually resized to force a clean redraw. Freezing vterm windows' height
-;; against automatic layout changes avoids triggering the bug in the first
-;; place. Trade-off accepted: this also blocks Evil's manual window-resize
-;; commands (C-w +/-/</>, C-w =) on vterm windows, not just automatic
-;; rebalancing — acceptable since these windows are rarely resized on
-;; purpose.
-(add-hook! 'vterm-mode-hook (setq-local window-size-fixed 'height))
+;; vterm didn't repaint reliably when its window was resized while it wasn't
+;; the selected window (a known vterm/libvterm bug class). This was worked
+;; around here via a window-size-fixed freeze on vterm-mode-hook (added
+;; 2026-08-07, removed 2026-08-17 when vterm itself was migrated away from —
+;; see ADR-014). Not carried over to ghostel: no equivalent corruption has
+;; been observed, and claude-code-ide.el already actively re-syncs ghostel's
+;; process window size on resize (see claude-code-ide.el's
+;; ghostel--window-adjust-process-window-size call), which vterm never had.
+;; If the same visual-corruption symptom ever recurs under ghostel, revisit
+;; with an equivalent freeze scoped to ghostel-mode-hook instead.
 
 (after! envrc
   (envrc-global-mode))
@@ -364,7 +417,7 @@ region/buffer/project-file context already."
        :desc "Rewrite/transform"      "r" #'gptel-rewrite
        :desc "Model/provider/directive menu" "m" #'gptel-menu
        :desc "Agent (Claude Code)"    "g" #'claude-code-ide-menu
-       :desc "Project vterm"          "t" #'my/project-vterm))
+       :desc "Project ghostel"        "t" #'my/project-ghostel))
 
 ;; Email: mu4e (+org +gmail +mbsync). Sync via mbsync (isync), send via
 ;; msmtp. Credentials never live here: the plain-password account resolves
@@ -479,18 +532,221 @@ matching window is found."
                       :background 'unspecified))
 
 ;; Primary agentic coding workflow: claude-code-ide.el drives the already-
-;; installed Claude Code CLI over MCP. vterm backend and ediff-based review
-;; match this config's existing incumbents (docs/decisions.org ADR-004).
+;; installed Claude Code CLI over MCP. Ediff-based review matches this
+;; config's existing incumbent (docs/decisions.org ADR-004). Terminal backend
+;; migrated from vterm to ghostel 2026-08-17 (docs/decisions.org ADR-014) to
+;; get around a vterm/libvterm resize-repaint bug; live-verified to
+;; render/resize correctly before this flip, and again via a full from-scratch
+;; smoke-test re-run. Vterm itself (module and all its call sites in this
+;; config) was removed the same day once ghostel covered every prior use.
 ;; Settings below are set explicitly even where they match upstream defaults,
 ;; so an upstream default change doesn't silently change behavior here.
 (use-package! claude-code-ide
   :commands (claude-code-ide-menu)
   :init
-  (setq claude-code-ide-terminal-backend 'vterm
+  (setq claude-code-ide-terminal-backend 'ghostel
         claude-code-ide-diagnostics-backend 'flycheck
         claude-code-ide-use-ide-diff t)
   :config
   (claude-code-ide-emacs-tools-setup))
+
+;; Note management: Vulpea indexes any org entry (file- or heading-level)
+;; carrying an `ID' property into its own sqlite database -- titles, tags,
+;; id: links, and description-list metadata -- independently of org-roam
+;; (not installed here; per Vulpea's own docs the two can coexist but serve
+;; the same role, and this config keeps one tool per responsibility). Notes
+;; are picked up from `org-directory' (set above) since
+;; `vulpea-db-sync-directories' is left at its default. Deferred to first
+;; input so it never blocks startup; `vulpea-db-autosync-mode' does the
+;; initial database scan in the background and then watches for changes.
+(use-package! vulpea
+  :defer t :after-call doom-first-input-hook
+  :config
+  (vulpea-db-autosync-mode +1))
+
+;; Org Agenda & Capture basics (docs/decisions.org ADR-017). Deliberately
+;; minimal per docs/standards.org std-no-scope-creep ("don't build the full
+;; Org Agenda system until its own phase") -- this *is* that phase, scoped to
+;; agenda-files/TODO-states/capture-templates only, no custom agenda views.
+;; `org-agenda-files' covers the whole pre-existing `org-directory' tree
+;; (~/org/), including files that predate this project (e.g. `doom.org' has a
+;; stray "TODO" headline that isn't really a task) -- a deliberate, informed
+;; choice, not an oversight. TODO keywords match this repo's own PROJECT.org
+;; convention rather than inventing a second one. Capture templates file into
+;; the "Inbox" headline `~/org/todo.org' already had (pre-dating this
+;; project); the third creates a real Vulpea-indexed note using the exact
+;; org-capture target pattern Vulpea's own docs recommend (`vulpea-create' as
+;; the file target, so the note gets an ID/backlinks like any
+;; `vulpea-find'-created note would).
+(after! org
+  (setq org-agenda-files (list org-directory)
+        org-todo-keywords
+        '((sequence "TODO(t)" "IN-PROGRESS(i)" "BLOCKED(b)" "|" "DONE(d)" "REJECTED(r)"))
+        org-capture-templates
+        `(("t" "Task" entry
+           (file+headline ,(expand-file-name "todo.org" org-directory) "Inbox")
+           "* TODO %?\n%U" :empty-lines 1)
+          ("n" "Note" entry
+           (file+headline ,(expand-file-name "todo.org" org-directory) "Inbox")
+           "* %?\n%U" :empty-lines 1)
+          ("v" "Vulpea note" plain
+           (file ,(lambda ()
+                    (vulpea-note-path
+                     (vulpea-create (read-string "Title: ")))))
+           "%?"))))
+
+;; Vulpea dailies (docs/decisions.org ADR-018): a hand-rolled equivalent of
+;; org-roam-dailies -- Vulpea itself has no daily-note concept. Each day is
+;; its own real Vulpea file-level note (ID, backlinks, findable via
+;; `vulpea-find' like anything else) at org-directory/daily/YYYY-MM-DD.org,
+;; created on first visit via `vulpea-create'.
+(defun my/vulpea-daily--file (date)
+  "Return the daily-note file path for DATE (a \"YYYY-MM-DD\" string)."
+  (expand-file-name (format "daily/%s.org" date) org-directory))
+
+(defun my/vulpea-daily--goto (date)
+  "Visit the daily note for DATE, creating it via `vulpea-create' if needed."
+  (let ((file (my/vulpea-daily--file date)))
+    (unless (file-exists-p file)
+      (vulpea-create date (format "daily/%s.org" date) :tags '("daily")))
+    (find-file file)))
+
+(defun my/vulpea-daily--dates ()
+  "Return the existing daily-note dates, sorted chronologically."
+  (let ((dir (expand-file-name "daily/" org-directory)))
+    (when (file-directory-p dir)
+      (sort (mapcar #'file-name-sans-extension
+                     (directory-files dir nil "\\`[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\.org\\'"))
+            #'string<))))
+
+(defun my/vulpea-daily--current-date ()
+  "Return the date the current buffer's daily note is for, or nil."
+  (when-let* ((file (buffer-file-name))
+              (dir (expand-file-name "daily/" org-directory)))
+    (when (string-prefix-p dir (expand-file-name file))
+      (file-name-sans-extension (file-name-nondirectory file)))))
+
+(defun my/vulpea-daily--adjacent (direction)
+  "Visit the nearest existing daily note before/after the current one.
+DIRECTION is `previous' or `next'."
+  (let* ((dates (my/vulpea-daily--dates))
+         (current (or (my/vulpea-daily--current-date)
+                      (format-time-string "%Y-%m-%d")))
+         (candidates (if (eq direction 'previous)
+                         (reverse (seq-filter (lambda (d) (string< d current)) dates))
+                       (seq-filter (lambda (d) (string> d current)) dates))))
+    (if candidates
+        (find-file (my/vulpea-daily--file (car candidates)))
+      (message "No %s daily note" (if (eq direction 'previous) "earlier" "later")))))
+
+(defun my/vulpea-daily-today ()
+  "Open (creating if needed) today's daily note."
+  (interactive)
+  (my/vulpea-daily--goto (format-time-string "%Y-%m-%d")))
+
+(defun my/vulpea-daily-date ()
+  "Open (creating if needed) the daily note for a prompted date."
+  (interactive)
+  (my/vulpea-daily--goto (format-time-string "%Y-%m-%d" (org-read-date nil t))))
+
+(defun my/vulpea-daily-previous ()
+  "Visit the previous existing daily note."
+  (interactive)
+  (my/vulpea-daily--adjacent 'previous))
+
+(defun my/vulpea-daily-next ()
+  "Visit the next existing daily note."
+  (interactive)
+  (my/vulpea-daily--adjacent 'next))
+
+;; Vulpea backlinks buffer (docs/decisions.org ADR-018): a hand-rolled,
+;; deliberately scoped equivalent of org-roam-buffer -- Vulpea only ships
+;; jump-to-backlink (`vulpea-find-backlink'), not a live panel. Shows the
+;; current note's incoming links only (no unlinked-references section, no
+;; citation backlinks). Refreshes on both a window-selection change (moving
+;; to a different window) and a window-buffer change (visiting a different
+;; note in the *same* window, e.g. via `vulpea-find' or `vulpea-find-backlink'
+;; -- the more common case, and the reason both hooks are needed rather than
+;; just one).
+(defvar my/vulpea-buffer-name "*vulpea-buffer*")
+
+(defvar-local my/vulpea-buffer--shown-id nil
+  "ID of the note currently rendered in the Vulpea backlinks buffer.")
+
+(define-derived-mode my/vulpea-buffer-mode special-mode "Vulpea-Backlinks"
+  "Major mode for the hand-rolled Vulpea backlinks side buffer.")
+
+(defun my/vulpea-buffer--note-for-window (window)
+  "Return the Vulpea note backing WINDOW's buffer's file, or nil."
+  (when-let* ((file (buffer-file-name (window-buffer window))))
+    (car (vulpea-db-query-by-file-path file 0))))
+
+(defun my/vulpea-buffer--render (note)
+  "Render NOTE's backlinks into the Vulpea backlinks buffer."
+  (with-current-buffer (get-buffer-create my/vulpea-buffer-name)
+    (unless (derived-mode-p 'my/vulpea-buffer-mode)
+      (my/vulpea-buffer-mode))
+    (let* ((inhibit-read-only t)
+           (links (vulpea-db-query-links-to (vulpea-note-id note)))
+           (id->note (make-hash-table :test #'equal)))
+      (when links
+        (dolist (n (vulpea-db-query-by-ids
+                    (delete-dups (mapcar (lambda (l) (plist-get l :source)) links))))
+          (puthash (vulpea-note-id n) n id->note)))
+      (erase-buffer)
+      (insert (propertize (vulpea-note-title note) 'face 'org-document-title) "\n\n"
+              (format "Backlinks (%d)\n" (length links))
+              (make-string 20 ?-) "\n\n")
+      (if (null links)
+          (insert "No backlinks.\n")
+        (dolist (link links)
+          (when-let* ((src (gethash (plist-get link :source) id->note)))
+            (insert-text-button (vulpea-note-title src)
+                                 'action (lambda (_) (vulpea-visit src))
+                                 'follow-link t)
+            (when-let* ((desc (plist-get link :description)))
+              (insert (format "  — %s" desc)))
+            (insert "\n"))))
+      (goto-char (point-min))
+      (setq my/vulpea-buffer--shown-id (vulpea-note-id note)))))
+
+(defun my/vulpea-buffer--maybe-update (&optional _frame)
+  "Refresh the Vulpea backlinks buffer for the selected window, if visible."
+  (when (get-buffer-window my/vulpea-buffer-name)
+    (when-let* ((note (my/vulpea-buffer--note-for-window (selected-window))))
+      (unless (equal (vulpea-note-id note)
+                     (buffer-local-value 'my/vulpea-buffer--shown-id
+                                         (get-buffer my/vulpea-buffer-name)))
+        (my/vulpea-buffer--render note)))))
+
+(defun my/vulpea-buffer-toggle ()
+  "Toggle a live side window showing backlinks to the current buffer's note."
+  (interactive)
+  (if-let* ((win (get-buffer-window my/vulpea-buffer-name)))
+      (delete-window win)
+    (if-let* ((note (my/vulpea-buffer--note-for-window (selected-window))))
+        (progn
+          (display-buffer-in-side-window
+           (get-buffer-create my/vulpea-buffer-name)
+           '((side . right) (slot . 0) (window-width . 0.30)))
+          (my/vulpea-buffer--render note))
+      (message "Current buffer is not a Vulpea note"))))
+
+(add-hook 'window-selection-change-functions #'my/vulpea-buffer--maybe-update)
+(add-hook 'window-buffer-change-functions #'my/vulpea-buffer--maybe-update)
+
+(map! :leader
+      (:prefix ("n v" . "vulpea")
+       :desc "Find note"     "f" #'vulpea-find
+       :desc "Find backlink" "b" #'vulpea-find-backlink
+       :desc "Insert link"   "i" #'vulpea-insert
+       :desc "Full scan"     "s" #'vulpea-db-sync-full-scan
+       :desc "Diagnostics"   "d" #'vulpea-doctor
+       :desc "Toggle backlinks buffer" "B" #'my/vulpea-buffer-toggle
+       :desc "Daily: today"     "j" #'my/vulpea-daily-today
+       :desc "Daily: pick date" "J" #'my/vulpea-daily-date
+       :desc "Daily: previous"  "p" #'my/vulpea-daily-previous
+       :desc "Daily: next"      "n" #'my/vulpea-daily-next))
 
 ;; EXWM
 ;; (defun my/exwm-screen-layout ()

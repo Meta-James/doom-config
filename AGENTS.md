@@ -18,12 +18,13 @@ changes, don't re-derive architecture from scratch. `docs/roadmap.org` and
   or a second package manager.
 - Evil-first: don't design workflows that fight Evil states or Doom's modal
   conventions.
-- Never commit. Never push. Never amend/rebase/reset/clean/rewrite history
-  without explicit in-the-moment permission. Read-only git commands and diffs
-  are fine. At a stable checkpoint, say the tree is ready for the user to review
-  and commit — don't do it yourself. Enforced technically for Claude Code via
-  `.claude/settings.json`, not just stated here — see `docs/decisions.org`
-  ADR-009.
+- The agent may commit, push, amend/rebase/reset/clean/rewrite history — but
+  only after proposing the specific command in conversation and getting
+  explicit, in-the-moment permission each time; a past approval doesn't carry
+  forward to the next one. Read-only git commands and diffs need no
+  permission. Enforced technically for Claude Code via `.claude/settings.json`
+  (forces a confirmation prompt, doesn't block outright) — see
+  `docs/decisions.org` ADR-015 (supersedes ADR-009).
 - Never hardcode, print, log, or commit secret values. Credential entry *names*
   are fine to reference; values never are. See `docs/ai/providers.org` for the
   credential architecture.
