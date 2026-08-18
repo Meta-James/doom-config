@@ -13,3 +13,17 @@
   a new ADR (context, drivers, candidates, evidence, decision, consequences,
   rejected alternatives, validation, rollback, revisit condition) rather than
   only stating it in conversation.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub issues on `Meta-James/doom-config`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), unchanged. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context, but not the CONTEXT.md/docs/adr convention — points at this repo's existing `docs/*.org` structure instead. See `docs/agents/domain.md`.
