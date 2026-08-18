@@ -217,10 +217,11 @@ Interim fix for the vterm resize-repaint bug that motivated this is the
   =doom sync= clean, 190 packages. =doom doctor= clean except one expected
   warning (missing =zig=, only needed to compile from source — pre-built
   binaries cover this machine's =x86_64-linux=). See [[file:docs/inventory.org][inventory.org]].
-- [ ] User runs =M-x ghostel= interactively once to trigger the native
+- [X] User runs =M-x ghostel= interactively once to trigger the native
   =libghostty-vt= module's pre-built-binary download
   (=ghostel-module-auto-install=) — needs a real interactive session, not
-  agent-doable.
+  agent-doable. Done 2026-08-13; module downloaded and terminal opened
+  successfully.
 - [ ] Live-verify ghostel actually renders/resizes correctly before flipping
   the backend over.
 - [ ] Set =claude-code-ide-terminal-backend= to ='ghostel= in =config.el=

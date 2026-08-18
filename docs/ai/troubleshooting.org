@@ -102,6 +102,41 @@ assembled with an unexpanded =~=), outside this repo's scope unless it starts
 blocking a real agent workflow in Phase 6, at which point it should be fixed at
 the shell-profile level, not worked around again in Elisp.
 
+* OPEN: agent's Bash-tool checks reported installed packages as missing
+:PROPERTIES:
+:ID:       tshoot-agent-shell-system-state
+:END:
+
+During [[id:adr-app-launcher][ADR-014]], the agent ran =which wmctrl xdotool= (reported both
+missing), then separately =dpkg -s libpoppler-glib-dev= (reported not
+installed) and told the user both needed installing. The user directly
+corrected this afterward: both packages were already installed on the real
+machine at the time of *both* checks. A follow-up =command -v xdotool=/
+=dpkg -s xdotool= *did* find =xdotool= correctly — inconsistent with the
+first =which= check on the same machine, same session.
+
+The agent's first guess — "sandboxed shell, restricted =$PATH="" — does not
+hold up: the user stated plainly it has nothing to do with =PATH=, and the
+later, correct =xdotool= check ran with the same (default, non-
+=dangerouslyDisableSandbox=) invocation style as the first, wrong one. No
+sandbox-vs-not pattern actually distinguishes the wrong checks from the
+right ones.
+
+*Impact*: a future agent cannot treat its own Bash-tool =dpkg=/=which=/
+=command -v= output as ground truth for whether something is installed on
+this machine — at least not without corroboration. Concretely seen so far:
+both a false-negative (=xdotool=, =which=) and a reproducible-but-still-wrong
+negative (=libpoppler-glib-dev=, =dpkg -s=, which normally doesn't produce
+false negatives — it reads a local database, not =PATH=).
+
+*Not yet fixed, cause not determined.* Until root-caused, treat any "X is
+not installed" conclusion reached solely via the agent's own shell as
+provisional: prefer asking the user directly, or checking through a live
+connection to the user's actual session (e.g. the =mcp__emacs-tools__*=
+MCP tools, which do reach the user's real running Emacs — confirmed via
+=claude-code-ide-mcp-project-info= returning the real project/buffer) over
+re-running more agent-shell commands that may be checking the wrong thing.
+
 * CONFIRMED: Doom's tree-sitter module grammar-install advice is broken on Emacs 30.x
 :PROPERTIES:
 :ID:       tshoot-treesitter-confirmed

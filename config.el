@@ -432,6 +432,37 @@ region/buffer/project-file context already."
 ;; doesn't show a buffer that's stale since the last manual `elfeed-update'.
 (add-hook 'elfeed-search-mode-hook #'elfeed-update)
 
+;; App launcher: SPC o l -- raise-or-launch external GUI apps, plus a couple
+;; of "the Emacs command *is* the app" bindings (calc, proced) that need no
+;; process launching at all. This is a plain process launcher, not a window-
+;; manager change -- EXWM itself stays deferred to its own future roadmap
+;; phase per ADR-002 (docs/decisions.org). PDFs and images get no binding
+;; here: both already auto-open via `find-file'/Dired -- PDFs through the
+;; `pdf' module's pdf-tools (once its `epdfinfo' helper has `libpoppler-
+;; glib-dev' to compile against), images through the built-in `image-mode'.
+(defun my/launch-or-focus (app)
+  "Focus a running window for APP, or launch APP as a new process.
+APP is used both as the shell command to run and as the (best-effort,
+substring) WM_CLASS pattern passed to `xdotool' when looking for an
+already-running instance to focus instead of spawning a duplicate. Falls
+back to always launching a fresh process if `xdotool' isn't on PATH, or no
+matching window is found."
+  (interactive)
+  (let ((win (and (executable-find "xdotool")
+                   (ignore-errors
+                     (car (process-lines "xdotool" "search" "--class" app))))))
+    (if win
+        (call-process "xdotool" nil nil nil "windowactivate" win)
+      (start-process app nil app))))
+
+(map! :leader
+      (:prefix ("o l" . "launch")
+       :desc "Firefox"                  "f" (cmd! (my/launch-or-focus "firefox"))
+       :desc "Discord"                  "d" (cmd! (my/launch-or-focus "discord"))
+       :desc "VLC"                      "v" (cmd! (my/launch-or-focus "vlc"))
+       :desc "Calculator (calc)"        "c" #'calc
+       :desc "Process monitor (proced)" "t" #'proced))
+
 ;; Inline completion: Copilot overlay + Next Edit Suggestions.
 ;; TAB/C-TAB below are copilot.el's own default bindings (`copilot-completion-map'
 ;; and `copilot-nes-mode-map'), not re-bound here -- both are activated via

@@ -1637,3 +1637,229 @@ reversible by just running =doom sync --env= again.
   this local pattern-match workaround.
 - The user ever wants a real =CLAUDE_*=-prefixed env var set permanently;
   add it explicitly after the strip block per the Consequences note above.
+
+* ADR-014: =SPC o l= external-app launcher, xdotool-based raise-or-launch
+:PROPERTIES:
+:ID:       adr-app-launcher
+:STATUS:   Implemented, live-verified (Firefox confirmed directly; Discord/
+           VLC share the same =my/launch-or-focus= mechanism, calc/proced
+           are plain built-in Emacs commands — not separately retested)
+:DATE:     2026-08-13
+:END:
+:LOGBOOK:
+- Note taken on [2026-08-13] \\
+  User restarted Emacs and confirmed =SPC o l f= now works. Root cause of
+  the earlier failure was [[id:tshoot-daemon-validation][tshoot-daemon-validation]] as suspected — the
+  long-running daemon hadn't picked up the =config.el= change, not a bug in
+  =my/launch-or-focus= or the =map!= block. =:STATUS:= moved to
+  =live-verified=. The =xdotool=/=libpoppler-glib-dev= evidence retraction
+  above stands as its own separate, still-open item — that discrepancy's
+  cause remains undetermined regardless of this fix.
+- Note taken on [2026-08-13] \\
+  User reported =SPC o l f= "did not work," and directly corrected two
+  Evidence claims below: =xdotool= and =libpoppler-glib-dev= were *both*
+  already installed on the real machine at the time the agent checked, and
+  the "sandboxed shell restricted =PATH=" explanation the agent gave for the
+  =xdotool= discrepancy was wrong ("it has nothing to do with path" — user's
+  words). The agent's =dpkg -s=/=which=/=command -v= checks in this session
+  do not reliably reflect this machine's real installed-package state; root
+  cause of the discrepancy is *not determined* — the agent is not
+  re-asserting a corrected cause, only retracting the wrong one. See
+  [[id:tshoot-agent-shell-system-state][troubleshooting.org]] for the
+  general write-up. Evidence bullets below left visibly struck through
+  rather than deleted, per this repo's "don't imply more confidence than the
+  work supports" convention — the *retraction* is the record, not a quietly
+  fixed-up version of events.
+
+  Most likely actual cause of the reported =SPC o l f= failure: the
+  already-documented [[id:tshoot-daemon-validation][tshoot-daemon-validation]]
+  gotcha — the user's long-running Emacs daemon does not auto-reload
+  =config.el=, and =doom sync='s own output ("Restart Emacs for changes to
+  take effect") was not relayed as an action item when this ADR was first
+  written up. Told the user to restart Emacs (or =M-x doom/reload=) and
+  retest. Not yet confirmed either way.
+:END:
+
+** Context
+User wants leader-key bindings to open external GUI apps (Firefox, Discord,
+VLC, originally also KiCad and Thunderbird/HexChat) from inside Emacs, and
+explicitly wants apps replaced with an Emacs-native equivalent wherever one
+is genuinely solid, rather than just adding a launcher key for everything.
+This ADR records the decisions from a structured grill (same format as
+[[id:adr-rss-elfeed][ADR-012]]/[[id:adr-email-mu4e][ADR-011]]) plus the implementation.
+
+** Decision drivers
+- [[id:adr-remove-exwm][ADR-002]]: EXWM is deliberately deferred to its own future roadmap phase
+  (unmet revisit condition) — this feature must not depend on EXWM or
+  reintroduce window-manager scope.
+- [[id:std-doom-first][standards.org]]: extend Doom's existing =SPC o= ("open") leader namespace
+  rather than inventing a parallel one.
+- [[id:std-no-scope-creep][standards.org]]: don't bind every inventoried app "just in case" — scope to
+  apps the user actually confirmed wanting, per-app, in conversation.
+- User confirmed directly (not inferred, across a multi-round grill): GUI
+  apps only (no terminal tools); bind external app + Emacs alternative
+  side-by-side during a transition rather than committing to one
+  permanently; raise-or-launch (focus an existing window) over always
+  spawning a duplicate, where cheaply feasible; a new =SPC o l= sub-prefix
+  ("launch") rather than consuming top-level =SPC o= letters one at a time;
+  final per-app scope: Firefox, Discord, VLC as external launches; calculator
+  and task manager replaced outright by =calc=/=proced= (no external
+  binding at all); PDF viewer (Atril) and image viewer dropped entirely once
+  it became clear =pdf-tools=/=image-mode= already auto-handle those file
+  types; Thunderbird/HexChat/rcirc, LibreOffice, mpv/EMMS, and everything
+  else inventoried explicitly declined.
+
+** Candidates
+| Decision point            | Candidates considered                              | Fate |
+|----------------------------+-----------------------------------------------------+------------------------------------------------------------------|
+| Window-management approach | EXWM (embed app windows in Emacs) / plain external =start-process= + optional raise-focus | *Plain external process* accepted — EXWM's revisit condition ([[id:adr-remove-exwm][ADR-002]]) isn't met; this feature doesn't need it |
+| Leader placement           | New sub-prefix =SPC o l= / individual top-level =SPC o= letters | *=SPC o l=* accepted — keeps the top-level =o= namespace's remaining free letters (=p e E D s=) unconsumed, groups all launchers under one which-key menu |
+| Raise-or-launch mechanism  | =xdotool= / =wmctrl= / no raise (always spawn)      | *=xdotool=* accepted — user confirmed it was already installed on this machine throughout (see Evidence/LOGBOOK re: the agent's own checks being unreliable here), more capable/actively maintained than =wmctrl= |
+| Replace vs. coexist policy | Emacs alternative replaces external app outright / bind both during a transition | *Both, during transition* accepted (user's explicit choice) as the general policy — except where the Emacs alternative needs zero install and is obviously sufficient (=calc=, =proced=), where it was accepted as an outright replacement instead |
+| PDF viewer (Atril)         | Bind as launcher / bind as file-picker fallback / contextual "open in Atril" command inside =pdf-view-mode=/Dired / no binding at all | *No binding* accepted (user's explicit choice) — =pdf-tools= (already-declared =pdf= Doom module, [[id:inv-binaries][inventory.org]]) already auto-opens =.pdf= files via =find-file=/Dired once its =epdfinfo= helper can compile |
+| Image viewer                | Bind Ristretto/display / no binding                | *No binding* accepted — built-in =image-mode= already auto-handles images via =find-file=/Dired, same pattern as PDFs |
+| KiCad                      | Bind a launcher key                                 | *Dropped* — confirmed not installed anywhere on this system (no binary, snap, or desktop file); out of scope until actually installed |
+
+** Evidence
+- =grep -n "^\* ADR-\|:ID:\|:STATUS:"= plus a full read of the relevant
+  sections of this file confirmed ADR-002's EXWM removal and its unmet
+  revisit condition ("when the EXWM/window-manager phase... starts" —
+  [[id:docs-roadmap][roadmap.org]]'s Future phases list still carries it unscheduled).
+- Read =~/.config/emacs/sources/doom+/modules/config/default/+evil-bindings.el:676-744=
+  (the evil-bindings variant, since this config runs =(evil +everywhere)=):
+  confirmed live =SPC o= bindings in this config (=A a b d f F r R - t T m=)
+  and that =p P e E o O s D l= are free (gated on modules not active here —
+  =+dirvish=/=neotree=/=treemacs=, =:term eshell=, =:os macos=,
+  =:tools docker=, =:tools llm=, none enabled per =init.el=).
+- Enumerated installed GUI apps via =.desktop= files under
+  =/usr/share/applications=, =~/.local/share/applications=, and snap/flatpak
+  equivalents (no flatpak present). Confirmed Firefox installed as a snap
+  (=/snap/bin/firefox=); confirmed *KiCad is not installed* — no binary, no
+  snap, no =.desktop= file anywhere on the system.
+- +First raise-or-launch tooling check (=which wmctrl xdotool=, sandboxed
+  shell) wrongly reported both missing. A later check
+  (=dpkg -s xdotool=, =command -v xdotool=, =xdotool --version=) found
+  =xdotool 3.20160805.1= apparently installed at =/usr/bin/xdotool= (dated
+  April 2024) — the =which= result was assumed to be a false negative from
+  that shell invocation's restricted =PATH=+ *Retracted, 2026-08-13: user
+  confirmed =xdotool= was already installed the whole time, and that the
+  "restricted =PATH="" explanation is wrong. Why the agent's own =which=
+  check returned nothing is genuinely unknown — see
+  [[id:tshoot-agent-shell-system-state][troubleshooting.org]]. No install was
+  needed or performed for =xdotool= either way.*
+- +=dpkg -s libpoppler-glib-dev=: confirmed genuinely not installed. =gcc=,
+  =make=, =pkg-config=, =libpng-dev=, =zlib1g-dev= all confirmed present.
+  =find ... -iname epdfinfo*=: only the =pdf-tools= build's C source
+  (=epdfinfo.c=/=.h=) exists, no compiled binary yet — =pdf-tools= genuinely
+  can't run until =libpoppler-glib-dev= is installed and =epdfinfo= is built
+  (triggered automatically on first =.pdf= visit once the library exists).+
+  *Retracted, 2026-08-13: user confirmed =libpoppler-glib-dev= was already
+  installed at the time of this check too. The agent's =dpkg -s= result is
+  not trusted as ground truth for this machine going forward — see
+  [[id:tshoot-agent-shell-system-state][troubleshooting.org]].*
+- =init.el:104=: =pdf= module already active (not commented out) — installing
+  a "PDF Emacs alternative" was already decided at some earlier point in this
+  project, not a new decision made here; this ADR only newly discovers and
+  records the missing system-library gap.
+- =sudo -n apt-get install ...= and =sudo -n true=: both fail ("a password is
+  required") — same constraint as [[id:adr-email-mu4e][ADR-011]]/[[id:adr-rss-elfeed][ADR-012]], confirmed again.
+  This finding about the sudo/TTY constraint itself still stands (it's about
+  the agent's shell access, not about package state); what's retracted above
+  is only the =dpkg -s= conclusion that =libpoppler-glib-dev= needed
+  installing at all — per the user, it didn't.
+- Initially told the user =docs/ai/keybindings.org= would be the doc to
+  update for these bindings; on inspection that file is scoped specifically
+  to the AI subsystem (=SPC a=, title "AI Subsystem — Keybindings"), not a
+  general keybindings reference. Corrected course: no general
+  =docs/keybindings.org= exists in this repo — the established pattern for
+  this kind of small, self-contained addition is this ADR plus a
+  [[id:inv-binaries][inventory.org]] entry, matching how [[id:adr-rss-elfeed][ADR-012]]'s =mpv=/=yt-dlp= were
+  tracked, not a dedicated keybindings doc or a new roadmap phase.
+
+** Decision
+- =config.el= (new section, directly after the =elfeed=/RSS block, matching
+  this repo's flat-section style for subsystems too small to warrant a
+  =config/*.el= split per [[id:std-no-scope-creep][std-no-scope-creep]]): a =my/launch-or-focus= helper
+  (=xdotool search --class= to find a running instance and =windowactivate=
+  it, else =start-process=) plus:
+  =(map! :leader (:prefix ("o l" . "launch")
+    :desc "Firefox" "f" (cmd! (my/launch-or-focus "firefox"))
+    :desc "Discord" "d" (cmd! (my/launch-or-focus "discord"))
+    :desc "VLC"     "v" (cmd! (my/launch-or-focus "vlc"))
+    :desc "Calculator (calc)" "c" #'calc
+    :desc "Process monitor (proced)" "t" #'proced))=
+- No changes to =init.el=/=packages.el= — every package involved (=pdf=
+  module, built-in =calc=/=proced=) was already declared/available; no new
+  Emacs package was installed for this ADR.
+- System dependency: =libpoppler-glib-dev= (apt) — required for =pdf-tools='s
+  =epdfinfo= to compile, not for anything under =SPC o l= directly. Per the
+  user, already installed on this machine; no install action needed (see
+  LOGBOOK retraction above).
+- =docs/inventory.org=: =xdotool= and =libpoppler-glib-dev= added to the
+  External binaries table ([[id:inv-binaries][inv-binaries]]) as present, cross-linked to
+  this ADR.
+- No =docs/roadmap.org= change — this doesn't start or consume the "EXWM (or
+  another Emacs-centred window-management approach)" future-phase bullet
+  (explicitly doesn't touch EXWM), and is small enough (a handful of =map!=
+  bindings on top of already-declared modules) not to warrant its own
+  tracked phase, consistent with [[id:std-no-scope-creep][std-no-scope-creep]].
+
+** Consequences
+- =SPC o l f/d/v= depend on =xdotool= remaining installed; if it's ever
+  removed, =my/launch-or-focus= silently falls back to always spawning a
+  fresh process (no raise-or-launch, no error) rather than failing outright.
+- =SPC o l c/t= have no external-process dependency at all — pure Emacs,
+  can't go stale the way a binary-backed binding can.
+- =libpoppler-glib-dev= is already installed (per user) — =pdf-tools='s
+  =epdfinfo= build should succeed on first =.pdf= visit; not yet actually
+  confirmed working end-to-end.
+- =SPC o l= namespace has room to grow (=a b c d e f g h i j k l m n o p q r
+  s u w x y z= minus =f d v c t= all still free) if more apps get added
+  later without needing another design round.
+- The "bind both, drop the external one once validated" transition this ADR
+  encodes for future apps is a policy, not a mechanism — nothing currently
+  automates "you've confirmed the Emacs alternative is good enough, remove
+  the external binding"; that stays a manual per-app follow-up decision.
+
+** Rejected alternatives
+See Candidates table above.
+
+** Validation
+- =doom sync=: clean, 190 packages up to date. =doom doctor=: 47 modules, 153
+  packages, one pre-existing unrelated warning (ghostel/zig, tracked
+  separately in [[id:inv-binaries][inventory.org]]) — no new warnings from this change.
+  =config.el= confirmed to parse cleanly (=read=-loop over all top-level
+  forms, 41 forms, no error) — note per [[id:tshoot-daemon-validation][tshoot-daemon-validation]] that none of
+  this actually *runs* =config.el= the way a real interactive session does,
+  so it doesn't prove the =map!= forms work, only that they parse.
+- *2026-08-13:* user reported =SPC o l f= "did not work" in their live
+  session; root cause suspected as [[id:tshoot-daemon-validation][tshoot-daemon-validation]] (daemon needs
+  restart to pick up =config.el=). User restarted Emacs, confirmed
+  =SPC o l f= works. Closed — see LOGBOOK. Discord/VLC (same mechanism) and
+  calc/proced (trivial built-ins) not separately retested; low risk given
+  the shared code path already confirmed working.
+- =libpoppler-glib-dev=/=xdotool= install status: no longer pending — see
+  LOGBOOK, user confirmed both already installed.
+
+** Rollback
+Remove the =my/launch-or-focus= defun and the =SPC o l= =map!= block from
+=config.el=. =xdotool=/=libpoppler-glib-dev=, if installed, can be removed
+independently via the system package manager — nothing else in this config
+depends on either.
+
+** Revisit when
+- *Done 2026-08-13, see LOGBOOK:* user restarted Emacs, confirmed =SPC o l
+  f= works. =:STATUS:= is =live-verified=.
+- The =xdotool=/=libpoppler-glib-dev= agent-shell discrepancy itself
+  ([[id:tshoot-agent-shell-system-state][troubleshooting.org]]) gets root-caused — update that entry, not this
+  ADR, since it's a general agent-tooling issue, not specific to this
+  feature.
+- The EXWM future-phase bullet ([[id:docs-roadmap][roadmap.org]]) actually starts — reconsider
+  whether =SPC o l= app windows should be embedded via EXWM instead of
+  raised via =xdotool=.
+- Any app currently bound "both ways" (none yet — Firefox/Discord/VLC have
+  no Emacs alternative, =calc=/=proced= already replaced their external app
+  outright) gets a real Emacs alternative later; re-grill that app
+  specifically rather than assuming the transition policy resolves itself.
+- The user wants more apps added to =SPC o l=, or KiCad (or an EDA
+  alternative) actually gets installed on this machine.
