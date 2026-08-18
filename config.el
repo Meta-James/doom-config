@@ -134,9 +134,25 @@
 (add-hook 'window-setup-hook
           (lambda () (+my/maximize-frame (selected-frame))))
 
+;; Only take over a bare `emacsclient -c' frame (e.g. a terminal alias that
+;; pops a blank Emacs frame) with the dashboard. `server-visit-files' has
+;; already switched the frame to any requested file by the time this hook
+;; runs, so unconditionally forcing the dashboard here would stomp on it --
+;; concretely, this broke `git commit' from Magit: `with-editor' opens
+;; COMMIT_EDITMSG via `emacsclient', this hook fired and swapped that buffer
+;; out for the dashboard ~0.1s later, and `q' (which buries/quits the
+;; dashboard) revealed the COMMIT_EDITMSG buffer sitting underneath -- see
+;; docs/ai/troubleshooting.org::tshoot-dashboard-stomps-commit-buffer.
 (add-hook 'server-after-make-frame-hook
           (lambda ()
-            (run-with-timer 0.1 nil #'+dashboard/open (selected-frame))))
+            (let ((frame (selected-frame)))
+              (run-with-timer
+               0.1 nil
+               (lambda ()
+                 (when (frame-live-p frame)
+                   (with-selected-frame frame
+                     (unless buffer-file-name
+                       (+dashboard/open frame)))))))))
 
 (add-to-list 'default-frame-alist '(undecorated . t))
 

@@ -505,3 +505,45 @@ via plain =buffer-string= (with text properties for faces/colors intact).
 a real graphical frame first — the vterm-era assumption that a frame-less
 daemon is good enough for any terminal-backend test no longer holds now that
 a second, GPU-rendering backend is in use.
+
+* RESOLVED: dashboard silently replaced the Magit commit-message buffer
+:PROPERTIES:
+:ID:       tshoot-dashboard-stomps-commit-buffer
+:END:
+:LOGBOOK:
+- Resolved [2026-08-18 Tue]
+:END:
+
+*Symptom*: committing via Magit, the frame that opened to edit the commit
+message showed the dashboard instead. Pressing =q= (which buries/quits the
+dashboard buffer) revealed the actual =COMMIT_EDITMSG= buffer underneath, as
+if it had been open the whole time.
+
+*Root cause*: the 43b3bcc "Fixed maximization bug on Ubuntu" commit
+(=config.el=) hooked =server-after-make-frame-hook= to force the dashboard
+open on *every* client frame emacsclient creates, via
+=(run-with-timer 0.1 nil #'+dashboard/open (selected-frame))= — with no
+guard for frames that were created to edit a specific file. Traced Emacs's
+own =server.el= (=server-execute=): it calls =server-visit-files= and
+=server-switch-buffer= to display the requested file *before*
+=server-after-make-frame-hook= runs, so at hook time the frame is already
+showing the right buffer. But =+dashboard/open= (=ui/dashboard/autoload.el=)
+does an unconditional =(switch-to-buffer (doom-fallback-buffer))= in the
+frame's only window, so the deferred 0.1s timer swapped the dashboard in
+over whatever was already there. Magit's commit flow hits this because
+=with-editor= has =git commit= shell out to =emacsclient COMMIT_EDITMSG=,
+which creates exactly such a frame.
+
+*Fix*: guard the timer callback so it only opens the dashboard when the
+frame's current buffer isn't already visiting a file
+(=(unless buffer-file-name (+dashboard/open frame))=) — this preserves the
+original intent (a bare =emacsclient -c= frame with nothing requested still
+gets the dashboard) while leaving file-editing frames (commit messages, and
+anything else opened by name via emacsclient) alone.
+
+*Takeaway*: any hook on =server-after-make-frame-hook= that unconditionally
+takes over the frame's window is a landmine for every other feature that
+opens files through emacsclient (with-editor/Magit here, but equally
+=git rebase -i= or any other =$EDITOR=-via-emacsclient caller) — gate on
+whether the frame already has something real displayed, not just on "a new
+client frame was created".
