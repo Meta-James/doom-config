@@ -27,3 +27,7 @@ Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `
 ### Domain docs
 
 Single-context, but not the CONTEXT.md/docs/adr convention — points at this repo's existing `docs/*.org` structure instead. See `docs/agents/domain.md`.
+
+### Engineering skills
+
+Curated default subset of `mattpocock-skills` (`tdd`, `mattpocock-skills:code-review`, `codebase-design`, `writing-for-agents`, `diagnosing-bugs`, `domain-modeling`), scoped to this repo's meta-docs layer per ADR-016. See `docs/agents/skills.md` — in particular, always invoke `mattpocock-skills:code-review` by its full name; a different, built-in `code-review` skill also exists.

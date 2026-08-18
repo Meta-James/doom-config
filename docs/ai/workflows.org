@@ -116,6 +116,12 @@ surfaced a new backend-specific gotcha: ghostel needs a real graphical (X11)
 frame to function, unlike vterm's plain-PTY approach (see
 [[id:tshoot-ghostel-needs-x-frame][troubleshooting.org]]).
 
+*=tdd= skill (recommended, not default, per [[id:adr-mattpocock-skills-adoption][ADR-016]])*: for well-specified
+feature work with a clear, testable behavior, prefer writing the test first
+via the =tdd= mattpocock-skill. This does not replace the plan → edit → test →
+Ediff-review default above — exploratory/UI work (most edits in this repo)
+keeps the existing workflow.
+
 * Review (existing tools, no new package)
 :PROPERTIES:
 :ID:       wf-review

@@ -1939,3 +1939,150 @@ never commits or pushes." Re-open [[id:adr-permission-enforcement][ADR-009]]'s s
 - Claude Code's =ask=/=deny= permission-rule semantics change in a way that
   could silently narrow or widen what these patterns match or how the prompt
   behaves.
+
+* ADR-016: Adopt a curated mattpocock-skills subset as the default engineering toolkit
+:PROPERTIES:
+:ID:       adr-mattpocock-skills-adoption
+:STATUS:   Accepted, implemented
+:DATE:     2026-08-18
+:END:
+
+** Context
+Commit =2a4e8ca= ("Set up mattpocock engineering skills config") installed
+the =mattpocock-skills= Claude Code plugin and wired up only its meta layer —
+issue-tracker conventions (=docs/agents/issue-tracker.md=), a triage-label
+mapping (=docs/agents/triage-labels.md=), and a domain-docs pointer
+(=docs/agents/domain.md=) — via =CLAUDE.md='s "## Agent skills" section. None
+of the plugin's actual engineering-workflow skills (=tdd=,
+=diagnosing-bugs=, =domain-modeling=, =codebase-design=, =code-review=,
+=prototype=, =research=, =resolving-merge-conflicts=, =wizard=,
+=writing-for-agents=, =grilling=) were ever adopted, and no ADR recorded that
+partial decision or reconciled it against [[id:adr-skill-policy][ADR-010]] ("scaffold ADR-writing
+only, defer the rest").
+
+User request (2026-08-18, via =/mattpocock-skills:grill-me=): "I want this
+repo to better reflect Matt Pocock's philosophy." A structured grill session
+clarified this to mean: adopt a curated subset of the mattpocock-skills
+plugin as the repo's documented default toolkit, scoped to the meta-docs/
+AI-tooling layer only (not the Elisp config itself), so future feature work
+goes more smoothly.
+
+** Decision drivers
+- User's explicit motivation: repo cleanup so future feature additions are
+  smoother, not a general aspiration to maximize skill adoption.
+- [[id:std-no-scope-creep][std-no-scope-creep]] — curate rather than blanket-adopt all eleven skills.
+- =CLAUDE.md='s own rule: any new architectural decision gets an ADR, not just
+  conversation.
+- =AGENTS.md='s "one tool per responsibility" rule, tested directly by the
+  =code-review= name collision (see Evidence).
+- Existing, deliberate decisions this must not silently reopen:
+  =docs/agents/domain.md='s "no separate CONTEXT.md" call, and
+  =docs/ai/workflows.org='s test-after (not test-first) default.
+
+** Candidates
+| Candidate | Fate |
+|-----------+------------------------------------------------------------|
+| Adopt all 11 mattpocock-skills as default toolkit | Rejected — =wizard=/=prototype=/=research=/=resolving-merge-conflicts=/=grilling= aren't obviously recurring in a personal Emacs-config repo; blanket adoption is the scope creep [[id:adr-skill-policy][ADR-010]] already pushed back on |
+| Adopt none; leave the plugin installed but undocumented | Rejected — leaves the gap this ADR exists to close (partial, unreconciled adoption) unresolved |
+| Curate a subset mapped to recurring repo work, scoped to the meta-docs layer only | *Accepted* |
+
+** Evidence
+- =grep -rniE "tdd\|domain.modeling\|codebase.design\|diagnosing.bugs\|deep module"=
+  across all =.org=/=.md= files in the repo returned zero hits before this
+  change — none of the engineering skills were referenced anywhere.
+- Two distinct =code-review=-named skills are simultaneously available in
+  this session: the built-in =code-review= skill (correctness/simplification/
+  efficiency findings, =--fix=/=--comment=/=ultra= modes — already referenced
+  by =CLAUDE.md='s "Session-specific guidance" section for =/code-review
+  ultra=) and =mattpocock-skills:code-review= (parallel Standards-vs-Spec
+  review). Confirmed directly against the session's available-skills
+  listing.
+- =docs/agents/domain.md= line 6 ("This repo does not use the CONTEXT.md /
+  docs/adr/ convention") and =docs/ai/workflows.org='s "Full agentic coding"
+  section ([[id:wf-agent][wf-agent]], plan → edit → test → Ediff review) were both read in
+  full and confirmed to describe positions this decision must not silently
+  override.
+- =docs/roadmap.org= and =PROJECT.org= were checked (grep for
+  "MCP"/"mattpocock"/"agent skills") — confirmed Phase 1 is fully closed and
+  neither file tracks this as open work.
+
+** Decision
+Adopt six of the eleven mattpocock-skills as this repo's documented default
+engineering toolkit: =tdd=, =mattpocock-skills:code-review=,
+=codebase-design=, =writing-for-agents=, =diagnosing-bugs=,
+=domain-modeling=. Not adopted into the default toolkit (still installed,
+just not documented as go-to): =prototype=, =research=,
+=resolving-merge-conflicts=, =wizard=, =grilling=.
+
+Specifically:
+- New =docs/agents/skills.md= documents the six, their scope, and how each
+  reconciles with existing repo conventions.
+- =CLAUDE.md='s "## Agent skills" section gets a new "### Engineering
+  skills" entry pointing to it.
+- =tdd= is documented as the *recommended* approach for well-specified
+  feature work, not a replacement of =docs/ai/workflows.org='s existing
+  test-after default ([[id:wf-agent][wf-agent]]) — exploratory/UI work keeps the current
+  workflow.
+- =domain-modeling= is scoped to sharpening terminology within the existing
+  =docs/*.org=/ADR log; =docs/agents/domain.md='s "no separate CONTEXT.md"
+  decision stands, unreopened.
+- The =code-review= name collision is resolved by treating both skills as
+  genuinely distinct (defect/cleanup-finder vs. Standards-vs-Spec
+  conformance) and documenting both, with =mattpocock-skills:code-review=
+  always invoked by its full namespaced name to avoid ambiguity — satisfying
+  =AGENTS.md='s "clearly distinct, frequently-useful role" bar for a second
+  tool.
+- This is a standalone documentation update — no new =docs/roadmap.org=/
+  =PROJECT.org= phase opened for it (Phase 1 is fully closed; this isn't a
+  multi-step initiative on that scale).
+- Scope is the meta-docs/AI-tooling layer only (=CLAUDE.md=,
+  =docs/agents/*.md=, =docs/ai/workflows.org=, =docs/decisions.org=) —
+  =init.el=/=packages.el=/=config.el= and the Elisp config itself are
+  untouched.
+
+This *extends*, not contradicts, [[id:adr-skill-policy][ADR-010]]: ADR-010 scoped "don't build
+more custom skills"; this decision adopts a pre-built third-party plugin's
+skills, a different category of work.
+
+** Consequences
+- Agents working in this repo now have a documented, curated set of
+  engineering skills to reach for, with explicit guidance on scope and when
+  each applies — closing the partial, undocumented-adoption gap this ADR
+  exists to record.
+- Two =code-review=-named skills coexist by design; anyone (human or agent)
+  invoking "code-review" from memory must disambiguate — mitigated by
+  requiring the full namespaced form for mattpocock's version in all docs.
+- =docs/ai/workflows.org='s [[id:wf-agent][wf-agent]] section gains a note about =tdd= as a
+  recommended-not-default path; the underlying workflow itself is otherwise
+  unchanged.
+- Five mattpocock-skills (=prototype=, =research=,
+  =resolving-merge-conflicts=, =wizard=, =grilling=) remain installed via the
+  plugin but outside the documented default toolkit — available if a future
+  need arises, per the Revisit condition below.
+
+** Rejected alternatives
+See Candidates table above.
+
+** Validation
+- =grep -n "tdd\|codebase-design\|writing-for-agents\|diagnosing-bugs\|domain-modeling\|mattpocock-skills:code-review" docs/agents/skills.md CLAUDE.md=
+  confirms all six are referenced.
+- Not live-tested: no session in this repo has yet invoked any of the six
+  skills end-to-end since this decision landed; the first real use of each is
+  its live validation.
+
+** Rollback
+Remove =docs/agents/skills.md=, revert the =CLAUDE.md= "### Engineering
+skills" entry and the =docs/ai/workflows.org= =tdd= note, and this decision
+reduces back to the pre-existing partial state (plugin installed, only
+issue-tracker/triage-labels/domain-docs wired up) that ADR-010 itself never
+anticipated.
+
+** Revisit when
+- Any of the five non-adopted skills (=prototype=, =research=,
+  =resolving-merge-conflicts=, =wizard=, =grilling=) turns out to recur often
+  enough in real use to be worth curating in too.
+- The =code-review= name collision causes an actual mistake (wrong skill
+  invoked) despite the full-name convention — signal to reconsider the
+  "pick one as canonical" candidate.
+- This repo opens a new roadmap phase for AI-tooling work, at which point
+  this ADR's "standalone update" framing should be revisited alongside it.
