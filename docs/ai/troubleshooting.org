@@ -624,11 +624,12 @@ reproduction beat re-reading the same (in this case wrong) source-tracing
 argument a second time — don't trust a "traced the source" root cause
 without a runtime check that actually observes the failure state.
 
-* OPEN: =+mu4e-msg-gmail-p= never actually detects either Gmail account
+* RESOLVED: =+mu4e-msg-gmail-p= never actually detected either Gmail account
 :PROPERTIES:
 :ID:       tshoot-mu4e-gmail-p-slash-mismatch
 :END:
 :LOGBOOK:
+- Resolved [2026-08-20 Thu]
 - Logged [2026-08-20 Thu], found while adding the =spam= mu4e mark (see
   =config.el='s "Spam:" comment block)
 :END:
@@ -661,16 +662,38 @@ and truly depends on X-GM-LABELS retagging to reflect correctly in
 Gmail's own UI — nothing currently in this config exercises that path
 enough to have surfaced the bug through breakage.
 
-*Not fixed here*: the =spam= mark added alongside this entry deliberately
-sidesteps =+mu4e-msg-gmail-p= entirely (plain =mu4e--server-move= into
-"[Gmail]/Spam", which Gmail's IMAP server already interprets correctly as
-a spam report) rather than depending on it. Fixing the predicate for real
-means either storing =+mu4e-gmail-accounts= cdrs without the leading slash
-(=\"ualberta\"= instead of =\"/ualberta\"=) or adding "personal" — pick a
-convention when someone confirms it's worth doing, since it changes live
-trash/refile/flag behavior on both Gmail accounts.
+*Note*: the =spam= mark added alongside this entry deliberately sidesteps
+=+mu4e-msg-gmail-p= entirely (plain =mu4e--server-move= into "[Gmail]/Spam",
+which Gmail's IMAP server already interprets correctly as a spam report)
+rather than depending on it — that choice stands even after the fix below;
+a spam report is exactly the kind of thing a real-mailbox move already
+handles correctly, no retagging needed.
 
-*Revisit condition*: before touching Gmail label behavior for real in this
-config (custom label sync, X-GM-LABELS-dependent search/filters, etc.), or
-if starring/trashing/archiving on either Gmail account is ever observed
-behaving unexpectedly.
+*Fix*: store =+mu4e-gmail-accounts= cdrs as the slash-less root maildir
+(what =+mu4e-msg-gmail-p= actually compares against), and list *both*
+accounts, not just ualberta:
+#+begin_src emacs-lisp
++mu4e-gmail-accounts '(("mrniceguyjames@gmail.com" . "personal")
+                        ("jcook@ualberta.ca" . "ualberta"))
+#+end_src
+Verified live: =(+mu4e-msg-gmail-p '(:maildir "/personal/Inbox"))= and the
+=/ualberta/Inbox= equivalent both now return non-nil, =/tricca/Inbox=
+correctly still returns nil, and =mu4e-sent-messages-behavior= (which has
+its own, unaffected =@gmail.com\'= literal check for personal) still
+resolves to =delete= for personal/ualberta and =sent= for tricca.
+
+*Consequence*: trash/refile/flag/unflag on personal and ualberta now
+actually route through =+mu4e-gmail-fix-flags-h='s X-GM-LABELS retagging
+(the module's originally-intended path — "emails won't be moved at all,
+only their flags/labels are changed... Gmail will handle the rest") instead
+of silently falling through to the plain-IMAP-move/flag paths they'd been
+using by accident. Those paths happened to produce correct-looking results
+before (Gmail honors plain moves into its real Trash/All-Mail mailboxes and
+the standard =\Flagged= flag directly), so this is not expected to change
+observable behavior, but it's a real behavior change on both live accounts
+worth knowing about if anything about trashing/archiving/starring looks
+different going forward.
+
+*Revisit condition*: n/a — resolved. If a third Gmail-backed account gets
+added later, remember to list it here explicitly too (the "gmail" substring
+fallback only helps if the local maildir is literally named "gmail").

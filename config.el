@@ -442,11 +442,20 @@ region/buffer/project-file context already."
         message-sendmail-f-is-evil t
         message-sendmail-extra-arguments '("--read-envelope-from")
         message-send-mail-function #'message-send-mail-with-sendmail
-        ;; ualberta.ca is Google Workspace, not @gmail.com/a "gmail" maildir
-        ;; name, so the +gmail flag's address/maildir matching wouldn't catch
-        ;; it on its own -- list it explicitly so it still gets the Gmail
-        ;; IMAP integrations (labels-as-folders, auto-expunge handling).
-        +mu4e-gmail-accounts '(("jcook@ualberta.ca" . "/ualberta"))
+        ;; Neither personal's nor ualberta's maildir root is literally named
+        ;; "gmail" (they're named by account label, not provider), so
+        ;; `+mu4e-msg-gmail-p's `(string-match-p "gmail" root-maildir)'
+        ;; fallback never catches either one -- both need to be listed here
+        ;; explicitly to get the Gmail IMAP integrations (X-GM-LABELS
+        ;; retagging for trash/refile/flag, auto-expunge handling). The cdr
+        ;; must be the *root maildir* with no leading slash -- what
+        ;; `+mu4e-msg-gmail-p' actually computes and compares against.
+        ;; Previously only ualberta was listed, and with a leading slash
+        ;; ("/ualberta") that never matched the slash-less comparison, so
+        ;; this silently never worked for either account; see
+        ;; docs/ai/troubleshooting.org::tshoot-mu4e-gmail-p-slash-mismatch.
+        +mu4e-gmail-accounts '(("mrniceguyjames@gmail.com" . "personal")
+                                ("jcook@ualberta.ca" . "ualberta"))
         ;; Background fetch; per-account maildirs are under ~/.mail/<label>/.
         mu4e-update-interval 60)
 
@@ -457,15 +466,13 @@ region/buffer/project-file context already."
   ;; over IMAP. Gmail treats a move into "[Gmail]/Spam" as a spam report
   ;; and trains its filter from it, the same way moving into Trash/All Mail
   ;; already works for the built-in trash/refile marks -- deliberately NOT
-  ;; using the doom+ mu4e module's X-GM-LABELS retag path (its
-  ;; `+mu4e-msg-gmail-p', used to route trash/refile/flag through that
-  ;; path, compares a slash-less root maildir against `+mu4e-gmail-accounts'
-  ;; entries that are stored WITH a leading slash -- e.g. "ualberta" vs
-  ;; "/ualberta" -- so it silently returns nil for both personal and
-  ;; ualberta today; a pre-existing bug, separate from this change, flagged
-  ;; but not fixed here). tricca (plain IMAP via Gandi, not Gmail) has no
-  ;; folder wired up: that account has never synced yet and its server-side
-  ;; folder layout (if any spam/junk folder exists at all) is unverified.
+  ;; using the doom+ mu4e module's X-GM-LABELS retag path (`+mu4e-msg-gmail-p'
+  ;; + `+mu4e-gmail-fix-flags-h', fixed above for trash/refile/flag): a spam
+  ;; report is exactly the kind of thing a real-mailbox move already handles
+  ;; correctly, no retagging needed. tricca (plain IMAP via Gandi, not
+  ;; Gmail) has no folder wired up: that account has never synced yet and
+  ;; its server-side folder layout (if any spam/junk folder exists at all)
+  ;; is unverified.
   ;;
   ;; `s' marks a message as spam, following the same pattern doom+'s mu4e
   ;; module already uses for refile (see its config.el): a plain
