@@ -623,3 +623,54 @@ current-buffer state as a proxy for "what's this frame showing"; go through
 reproduction beat re-reading the same (in this case wrong) source-tracing
 argument a second time — don't trust a "traced the source" root cause
 without a runtime check that actually observes the failure state.
+
+* OPEN: =+mu4e-msg-gmail-p= never actually detects either Gmail account
+:PROPERTIES:
+:ID:       tshoot-mu4e-gmail-p-slash-mismatch
+:END:
+:LOGBOOK:
+- Logged [2026-08-20 Thu], found while adding the =spam= mu4e mark (see
+  =config.el='s "Spam:" comment block)
+:END:
+
+*Symptom*: the doom+ mu4e module's Gmail-label integration (X-GM-LABELS
+retagging on trash/refile/flag/unflag, see its =config.el='s
+=+mu4e-gmail-fix-flags-h=) is meant to kick in for any message whose root
+maildir is either literally named "gmail" or listed in
+=+mu4e-gmail-accounts=. Neither the =personal= nor the =ualberta= account
+actually triggers it, confirmed live: =(+mu4e-msg-gmail-p '(:maildir
+"/ualberta/Inbox"))= returns nil against the current config.
+
+*Root cause*: =+mu4e-msg-gmail-p= computes a slash-*less* root maildir
+(=\"ualberta\"=) and compares it with =(member root-maildir (mapcar #'cdr
++mu4e-gmail-accounts))=. But =config.el= sets =+mu4e-gmail-accounts= to
+=(("jcook@ualberta.ca" . "/ualberta"))= — cdr *with* a leading slash. =
+"ualberta" ≠ "/ualberta"=, so the =member= check always fails; neither
+account's root maildir literally contains the substring "gmail" either, so
+the other branch fails too.
+
+*Why this hasn't been more visible*: trash/refile fall through to
+=mu4e--server-move='s plain-IMAP-move path when this predicate is nil, and
+Gmail's IMAP server already treats a move into its real Trash/All-Mail
+mailboxes correctly without needing the X-GM-LABELS extension — so those
+two marks still work, just not through the intended path. =flag=/=unflag=
+(starring) use the standard IMAP =\Flagged= flag, which Gmail also
+honors directly, so those likely still work too. The gap would only bite
+for something that has *no* standard-IMAP-flag or real-mailbox equivalent
+and truly depends on X-GM-LABELS retagging to reflect correctly in
+Gmail's own UI — nothing currently in this config exercises that path
+enough to have surfaced the bug through breakage.
+
+*Not fixed here*: the =spam= mark added alongside this entry deliberately
+sidesteps =+mu4e-msg-gmail-p= entirely (plain =mu4e--server-move= into
+"[Gmail]/Spam", which Gmail's IMAP server already interprets correctly as
+a spam report) rather than depending on it. Fixing the predicate for real
+means either storing =+mu4e-gmail-accounts= cdrs without the leading slash
+(=\"ualberta\"= instead of =\"/ualberta\"=) or adding "personal" — pick a
+convention when someone confirms it's worth doing, since it changes live
+trash/refile/flag behavior on both Gmail accounts.
+
+*Revisit condition*: before touching Gmail label behavior for real in this
+config (custom label sync, X-GM-LABELS-dependent search/filters, etc.), or
+if starring/trashing/archiving on either Gmail account is ever observed
+behaving unexpectedly.

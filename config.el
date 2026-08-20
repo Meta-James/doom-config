@@ -448,7 +448,55 @@ region/buffer/project-file context already."
         ;; IMAP integrations (labels-as-folders, auto-expunge handling).
         +mu4e-gmail-accounts '(("jcook@ualberta.ca" . "/ualberta"))
         ;; Background fetch; per-account maildirs are under ~/.mail/<label>/.
-        mu4e-update-interval 60))
+        mu4e-update-interval 60)
+
+  ;; Spam: Gmail already filters spam server-side into "[Gmail]/Spam", and
+  ;; mbsync mirrors it locally (Patterns * in ~/.mbsyncrc), so there's
+  ;; nothing to "create" there for the personal/ualberta accounts -- just
+  ;; give mu4e a way to *use* it, by physically moving the message into it
+  ;; over IMAP. Gmail treats a move into "[Gmail]/Spam" as a spam report
+  ;; and trains its filter from it, the same way moving into Trash/All Mail
+  ;; already works for the built-in trash/refile marks -- deliberately NOT
+  ;; using the doom+ mu4e module's X-GM-LABELS retag path (its
+  ;; `+mu4e-msg-gmail-p', used to route trash/refile/flag through that
+  ;; path, compares a slash-less root maildir against `+mu4e-gmail-accounts'
+  ;; entries that are stored WITH a leading slash -- e.g. "ualberta" vs
+  ;; "/ualberta" -- so it silently returns nil for both personal and
+  ;; ualberta today; a pre-existing bug, separate from this change, flagged
+  ;; but not fixed here). tricca (plain IMAP via Gandi, not Gmail) has no
+  ;; folder wired up: that account has never synced yet and its server-side
+  ;; folder layout (if any spam/junk folder exists at all) is unverified.
+  ;;
+  ;; `s' marks a message as spam, following the same pattern doom+'s mu4e
+  ;; module already uses for refile (see its config.el): a plain
+  ;; `mu4e--server-move' clearing the New flag.
+  (defconst +mu4e-spam-accounts '("personal" "ualberta")
+    "Root maildirs with a Gmail-style Spam folder wired up for the `spam' mu4e mark.")
+
+  (defun +mu4e-get-spam-folder (msg)
+    "Resolve MSG's account's Gmail Spam folder, e.g. \"/personal/[Gmail]/Spam\".
+Errors for any account not listed in `+mu4e-spam-accounts'."
+    (let ((root (replace-regexp-in-string
+                 "/.*" "" (substring (mu4e-message-field msg :maildir) 1))))
+      (if (member root +mu4e-spam-accounts)
+          (concat "/" root "/[Gmail]/Spam")
+        (mu4e-error "No spam folder configured for the %s account" root))))
+
+  (setf (alist-get 'spam mu4e-marks)
+        (list :char '("s" . "☠")
+              :prompt "sspam"
+              :dyn-target (lambda (_target msg) (+mu4e-get-spam-folder msg))
+              :action (lambda (docid _msg target)
+                        (mu4e--server-move docid (mu4e--mark-check-target target) "-N"))))
+
+  ;; The stock "Unread messages" bookmark (`u') searches every maildir, so
+  ;; unread mail Gmail already filed as spam would otherwise surface right
+  ;; next to real unread mail. `maildir:/Spam/' matches any maildir ending
+  ;; in "Spam" (see mu-query(7) MAILDIR), which covers both Gmail accounts'
+  ;; "[Gmail]/Spam" in one clause.
+  (when-let* ((bm (seq-find (lambda (bm) (equal (plist-get bm :name) "Unread messages"))
+                             mu4e-bookmarks)))
+    (plist-put bm :query "flag:unread AND NOT flag:trashed AND NOT maildir:/Spam/")))
 
 (set-email-account! "personal"
   '((mu4e-sent-folder    . "/personal/[Gmail]/Sent Mail")
