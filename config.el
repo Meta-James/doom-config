@@ -135,14 +135,20 @@
           (lambda () (+my/maximize-frame (selected-frame))))
 
 ;; Only take over a bare `emacsclient -c' frame (e.g. a terminal alias that
-;; pops a blank Emacs frame) with the dashboard. `server-visit-files' has
-;; already switched the frame to any requested file by the time this hook
-;; runs, so unconditionally forcing the dashboard here would stomp on it --
-;; concretely, this broke `git commit' from Magit: `with-editor' opens
-;; COMMIT_EDITMSG via `emacsclient', this hook fired and swapped that buffer
-;; out for the dashboard ~0.1s later, and `q' (which buries/quits the
-;; dashboard) revealed the COMMIT_EDITMSG buffer sitting underneath -- see
-;; docs/ai/troubleshooting.org::tshoot-dashboard-stomps-commit-buffer.
+;; pops a blank Emacs frame) with the dashboard -- never a frame that was
+;; asked to visit a specific file, e.g. Magit's `git commit' opening
+;; COMMIT_EDITMSG via `with-editor'/`emacsclient'. The guard has to inspect
+;; FRAME's *window*, not `buffer-file-name': `select-frame'/
+;; `with-selected-frame' select the frame (and its window), but do NOT
+;; sync `current-buffer' to that window's buffer -- `buffer-file-name' here
+;; reads whatever buffer happened to be current in this timer callback's
+;; execution context, which has nothing to do with FRAME. Confirmed live
+;; (2026-08-20): even with COMMIT_EDITMSG correctly showing in the frame,
+;; `(with-selected-frame frame (unless buffer-file-name ...))' saw a
+;; stale/unrelated current-buffer and opened the dashboard anyway. A prior
+;; fix (69a66c2) added this timer+guard for the same symptom but checked
+;; `buffer-file-name' the same wrong way, so it never actually worked --
+;; see docs/ai/troubleshooting.org::tshoot-dashboard-stomps-commit-buffer.
 (add-hook 'server-after-make-frame-hook
           (lambda ()
             (let ((frame (selected-frame)))
@@ -150,8 +156,9 @@
                0.1 nil
                (lambda ()
                  (when (frame-live-p frame)
-                   (with-selected-frame frame
-                     (unless buffer-file-name
+                   (unless (buffer-file-name
+                            (window-buffer (frame-selected-window frame)))
+                     (with-selected-frame frame
                        (+dashboard/open frame)))))))))
 
 (add-to-list 'default-frame-alist '(undecorated . t))

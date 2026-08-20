@@ -546,39 +546,80 @@ a second, GPU-rendering backend is in use.
 :ID:       tshoot-dashboard-stomps-commit-buffer
 :END:
 :LOGBOOK:
+- Resolved [2026-08-20 Thu] — previous "Resolved" state (2026-08-18) was
+  premature: the guard it added never actually worked, for a different
+  reason than originally diagnosed. See second root-cause note below.
 - Resolved [2026-08-18 Tue]
 :END:
 
 *Symptom*: committing via Magit, the frame that opened to edit the commit
 message showed the dashboard instead. Pressing =q= (which buries/quits the
 dashboard buffer) revealed the actual =COMMIT_EDITMSG= buffer underneath, as
-if it had been open the whole time.
+if it had been open the whole time. Reliably reproducible on every commit,
+not intermittent.
 
-*Root cause*: the 43b3bcc "Fixed maximization bug on Ubuntu" commit
-(=config.el=) hooked =server-after-make-frame-hook= to force the dashboard
-open on *every* client frame emacsclient creates, via
+*Original root cause* (2026-08-18, incomplete): the 43b3bcc "Fixed
+maximization bug on Ubuntu" commit (=config.el=) hooked
+=server-after-make-frame-hook= to force the dashboard open on *every* client
+frame emacsclient creates, via
 =(run-with-timer 0.1 nil #'+dashboard/open (selected-frame))= — with no
 guard for frames that were created to edit a specific file. Traced Emacs's
 own =server.el= (=server-execute=): it calls =server-visit-files= and
 =server-switch-buffer= to display the requested file *before*
 =server-after-make-frame-hook= runs, so at hook time the frame is already
-showing the right buffer. But =+dashboard/open= (=ui/dashboard/autoload.el=)
-does an unconditional =(switch-to-buffer (doom-fallback-buffer))= in the
-frame's only window, so the deferred 0.1s timer swapped the dashboard in
-over whatever was already there. Magit's commit flow hits this because
-=with-editor= has =git commit= shell out to =emacsclient COMMIT_EDITMSG=,
-which creates exactly such a frame.
+showing the right buffer. Fixed (69a66c2) by guarding the timer callback
+with =(with-selected-frame frame (unless buffer-file-name (+dashboard/open
+frame)))=.
 
-*Fix*: guard the timer callback so it only opens the dashboard when the
-frame's current buffer isn't already visiting a file
-(=(unless buffer-file-name (+dashboard/open frame))=) — this preserves the
-original intent (a bare =emacsclient -c= frame with nothing requested still
-gets the dashboard) while leaving file-editing frames (commit messages, and
-anything else opened by name via emacsclient) alone.
+*That fix never actually worked* — root-caused for real on 2026-08-20 by
+reproducing against a live Emacs (instrumented =magit-commit-create= in a
+scratch repo, with advice on =+dashboard/open= comparing state at the
+failure point). Two things were wrong:
+
+1. =server-execute='s ordering claim only holds for =server-visit-files=
+   (which loads the buffer into memory) — it does *not* cover
+   =server-switch-buffer= (which actually displays it in the frame's
+   window). Reading the real source: =run-hooks
+   'server-after-make-frame-hook= fires *before* =server-switch-buffer=, not
+   after. So at hook time the frame's window is still showing whatever was
+   there previously, not the new file — the original fix's premise was
+   backwards.
+2. The guard's own check compounded this: =(with-selected-frame frame
+   (unless buffer-file-name ...))= reads =buffer-file-name= against
+   *=current-buffer=*, and =select-frame= (which =with-selected-frame=
+   expands to) does *not* sync =current-buffer= to the frame's selected
+   window — only actually switching to a window's buffer does that. Live
+   evidence: at the exact moment =+dashboard/open= ran, the frame's window
+   was correctly showing =COMMIT_EDITMSG= (confirmed via
+   =(buffer-file-name (window-buffer (frame-selected-window frame)))= →
+   the real path), while bare =buffer-file-name= in that same timer
+   callback read =nil= against an unrelated current buffer. The check was
+   testing the wrong thing regardless of timing, so no delay would have
+   fixed it.
+
+*Real fix*: check the frame's selected window's buffer directly, never
+=current-buffer=:
+#+begin_src emacs-lisp
+(unless (buffer-file-name (window-buffer (frame-selected-window frame)))
+  (with-selected-frame frame
+    (+dashboard/open frame)))
+#+end_src
+Verified live against a scratch git repo across three consecutive
+=magit-commit-create= calls (the original bug's failure mode specifically
+needed a *second* commit in the session, once =COMMIT_EDITMSG= already had
+a live buffer to revisit) — =COMMIT_EDITMSG= stayed on screen at t+0.05
+through t+0.5s on every attempt, no dashboard stomp.
 
 *Takeaway*: any hook on =server-after-make-frame-hook= that unconditionally
 takes over the frame's window is a landmine for every other feature that
 opens files through emacsclient (with-editor/Magit here, but equally
 =git rebase -i= or any other =$EDITOR=-via-emacsclient caller) — gate on
 whether the frame already has something real displayed, not just on "a new
-client frame was created".
+client frame was created". And more generally: =select-frame=/
+=with-selected-frame= change which frame and window are *selected*, not
+which buffer is *current* — never read =(buffer-file-name)= or other
+current-buffer state as a proxy for "what's this frame showing"; go through
+=(window-buffer (frame-selected-window FRAME))= explicitly. A live
+reproduction beat re-reading the same (in this case wrong) source-tracing
+argument a second time — don't trust a "traced the source" root cause
+without a runtime check that actually observes the failure state.
