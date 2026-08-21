@@ -697,3 +697,77 @@ different going forward.
 *Revisit condition*: n/a — resolved. If a third Gmail-backed account gets
 added later, remember to list it here explicitly too (the "gmail" substring
 fallback only helps if the local maildir is literally named "gmail").
+
+* RESOLVED (local patch, not upstream): claude-code-ide.el's MCP HTTP server crashed the process filter on any unrecognized JSON-RPC method
+:PROPERTIES:
+:ID:       tshoot-claude-code-ide-json-rpc-error-uncaught
+:END:
+:LOGBOOK:
+- Logged and patched [2026-08-21 Fri], hit at the start of an ordinary
+  session (no unusual request in flight)
+:END:
+
+*Symptom*: an unprompted, uncaught error appeared in =*Messages*= at session
+start: =error in process filter:
+claude-code-ide-mcp-http-server--handle-post: peculiar error: -32601,
+"Method not found"=. Nothing in this repo's own config triggered it — it
+came from the vendored =claude-code-ide= package's MCP HTTP server handling
+a request from the =claude= CLI.
+
+*Root cause*: =claude-code-ide-mcp-http-server.el= (in
+=~/.config/emacs/.local/straight/repos/claude-code-ide.el/=, pulled via this
+repo's =packages.el= =:host github :repo "manzaltu/claude-code-ide.el"=
+recipe) signals a custom =json-rpc-error= condition at three call sites —
+=--dispatch= on an unrecognized top-level method (line ~193), =--handle-tools-call=
+on an unknown tool name (~228), =--validate-args= on a missing required
+argument (~301) — but the symbol was never registered via =define-error=.
+An unregistered condition has no =error-conditions= property, so Emacs's
+own =(get 'json-rpc-error 'error-conditions)= returns nil; the =condition-case=
+around the request handler (=--handle-post=) only catches
+=json-parse-error=, =quit=, and =error=, none of which match an
+unregistered symbol. The signal escapes the =condition-case= entirely and
+propagates out of the process filter, where Emacs's default error printer
+falls back to "peculiar error: SYMBOL, DATA..." for exactly this
+case — a signal whose car isn't a recognized error type. Net effect: instead
+of the client getting a proper JSON-RPC error response for an unsupported
+method (e.g. a =resources/list= or similar call the CLI's MCP client sends
+that this server's =--dispatch= doesn't implement), the whole request
+handler crashes.
+
+*Fix* (patched directly in the straight repo checkout, not this repo — see
+"Durability" below):
+#+begin_src emacs-lisp
+;; After (defvar claude-code-ide-mcp-server--current-session-id):
+(define-error 'json-rpc-error "JSON-RPC error")
+
+;; In claude-code-ide-mcp-http-server--handle-post's condition-case, added
+;; before the existing (error ...) clause:
+(json-rpc-error
+ (claude-code-ide-debug "JSON-RPC error: %s" (error-message-string err))
+ (claude-code-ide-mcp-http-server--send-json-error
+  request nil (nth 1 err) (nth 2 err)))
+#+end_src
+=define-error='s default parent is =error=, so this alone would already stop
+the crash (the existing generic =error= clause would catch it); the
+dedicated clause additionally preserves the original JSON-RPC error code and
+message instead of re-wrapping everything as a generic =-32603 "Internal
+error: ..."=. Verified via =doom sync= (recompiled the stale =.elc= — the
+build dir's =.el= is a symlink to the repo, but Emacs's default
+=load-prefer-newer=-nil behaviour would otherwise keep loading the old
+compiled version) followed by a clean =doom doctor=.
+
+*Durability*: this is a patch to vendored upstream source
+(=manzaltu/claude-code-ide.el=), not to anything in this repo, so it isn't
+captured by this repo's own git history. It lives in straight's local repo
+checkout and will survive an ordinary =doom sync=, but a future =doom
+upgrade= (or any operation that re-pulls/resets that straight repo from
+upstream) will silently drop it and reintroduce the crash.
+
+*Revisit condition*: if =doom upgrade= (or =SPC h p u=/=doom sync -u=)
+touches the =claude-code-ide= package, re-check whether
+=claude-code-ide-mcp-http-server.el= still lacks a =json-rpc-error=
+=define-error= and a matching =condition-case= clause in =--handle-post=
+before assuming this is fixed; re-apply this patch if so, or drop this entry
+if upstream has since fixed it properly (worth filing as an upstream issue/PR
+against =manzaltu/claude-code-ide.el= rather than re-patching locally
+forever — not done yet, no explicit go-ahead given for opening one).
