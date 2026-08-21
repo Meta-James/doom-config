@@ -56,8 +56,10 @@ hand:
 
 - =:completion= corfu +orderless +icons, vertico (Company → Corfu 2026-08-18,
   see [[id:adr-corfu-migration][ADR-021]])
-- =:ui= doom, dashboard, hl-todo, ligatures, modeline, ophints, popup +defaults,
-  vc-gutter +pretty, vi-tilde-fringe, workspaces
+- =:ui= doom, dashboard, hl-todo, indent-guides, ligatures, minimap, modeline,
+  ophints, popup +defaults, tabs, vc-gutter +pretty, vi-tilde-fringe,
+  workspaces, zen +focus (indent-guides/minimap/tabs/zen added 2026-08-21,
+  see [[id:adr-ui-rice-pass][ADR-022]])
 - =:editor= evil +everywhere, file-templates, fold, format +onsave, snippets
 - =:emacs= dired +icons, electric, undo, vc
 - =:term= ghostel (sole terminal backend since 2026-08-17, [[id:adr-terminal-backend-ghostel][ADR-014]];

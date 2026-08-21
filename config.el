@@ -211,6 +211,73 @@
         doom-modeline-time nil           ; set to t if you want a clock
         doom-modeline-battery nil))      ; set to t on laptops
 
+;; --- Rice pass (docs/decisions.org ADR-022) -------------------------------
+;; Theme stays doom-zenburn; this section covers font, transparency, cursor
+;; motion feedback, zen-mode focus dimming, and the dashboard banner.
+
+;; Font: "JetBrains Mono" (plain, via apt's `fonts-jetbrains-mono' -- the
+;; Nerd-patched variant needed GitHub, which this sandbox couldn't reach) for
+;; both faces; `:ui zen's mixed-pitch-mode wants a variable-pitch font to
+;; switch to. Icon glyph coverage doesn't need the primary font itself to be
+;; Nerd-patched: `Symbols Nerd Font Mono' (already installed, and exactly
+;; what `nerd-icons.el' pairs with any regular font as a fallback) covers
+;; that via Emacs's normal fontset fallback. `M-x describe-font' confirms
+;; this actually took effect.
+(setq doom-font (font-spec :family "JetBrains Mono" :size 13)
+      doom-variable-pitch-font (font-spec :family "JetBrains Mono" :size 13))
+
+;; Transparency: native Emacs 29+ alpha-background compositing -- no external
+;; compositor needed (confirmed: this build is Cairo-enabled). Unfocused
+;; frames fade further so the active window visually pops.
+;; `after-focus-change-function' (not the obsolete-since-27.1
+;; `focus-in-hook'/`focus-out-hook') is the correct modern hook, and it fires
+;; per-frame-list rather than assuming a single frame, which matters here
+;; since Emacs runs as a daemon with frames created via emacsclient.
+(add-to-list 'default-frame-alist '(alpha-background . 92))
+(defun +my/rice-update-frame-alpha ()
+  "Fade every unfocused frame's alpha-background; keep the focused one clearer."
+  (dolist (frame (frame-list))
+    (set-frame-parameter frame 'alpha-background
+                          (if (eq frame (selected-frame)) 92 80))))
+(add-function :after after-focus-change-function #'+my/rice-update-frame-alpha)
+
+;; Cursor motion feedback: pulsar (animated colored pulse) instead of Doom's
+;; plain :ui nav-flash blink module (disabled in init.el) -- running both
+;; would double-fire on the same events. Pulsar's own default
+;; `pulsar-pulse-functions' already covers the common Evil big-motion
+;; commands (evil-goto-line, evil-scroll-*, evil-window-top/bottom, etc.) and
+;; `other-window' -- only `switch-to-buffer' was missing from that list.
+(use-package! pulsar
+  :hook (doom-first-input . pulsar-global-mode)
+  :config
+  (setq pulsar-delay 0.06
+        pulsar-iterations 8
+        pulsar-face 'pulsar-cyan)
+  (add-to-list 'pulsar-pulse-functions 'switch-to-buffer))
+
+;; Dashboard: ASCII banner spelling this machine's hostname, generated at
+;; render time via `figlet' (a tiny, standard Unix tool -- matches this
+;; config's existing pattern of shelling out to well-known external tools,
+;; e.g. ruff/black/xdotool elsewhere in this file) rather than a hand-rolled
+;; Elisp font table or a hardcoded name, so the banner stays correct if this
+;; config is ever used on a different machine. Overrides
+;; `+dashboard-ascii-banner-fn' (a doom `+' variable, so no `after!' wrapper
+;; needed, matching the exemption already documented above). Falls back to
+;; plain `(system-name)' text if `figlet' isn't installed, rather than
+;; erroring the dashboard.
+(defun +my/dashboard-hostname-banner-fn ()
+  "Return an ASCII banner of `(system-name)', rendered via figlet."
+  (propertize
+   (if (executable-find "figlet")
+       (string-trim-right
+        (shell-command-to-string
+         (format "figlet -f standard %s"
+                 (shell-quote-argument (system-name)))))
+     (system-name))
+   'face '+dashboard-banner))
+(setq +dashboard-ascii-banner-fn #'+my/dashboard-hostname-banner-fn)
+;; --- end rice pass ---------------------------------------------------------
+
 ;; Save minibuffer history (Vertico likes this)
 (after! savehist
   (savehist-mode 1))

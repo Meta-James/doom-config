@@ -56,3 +56,8 @@
 (package! claude-code-ide
   :recipe (:host github :repo "manzaltu/claude-code-ide.el"))
 (package! vulpea)
+
+;; Rice pass (docs/decisions.org ADR-022): animated cursor-motion pulse,
+;; replacing the plain nav-flash blink Doom's :ui nav-flash module would
+;; otherwise provide.
+(package! pulsar)

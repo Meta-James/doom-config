@@ -2904,3 +2904,231 @@ would still be independently true even under Company).
   a offline/local model alongside Copilot) — that would be a new ADR, not an
   amendment to this one, since it's a different decision (adding an engine)
   from this one (swapping one deprecated engine for its replacement).
+
+* ADR-022: UI "rice" pass — font, transparency, cursor pulses, zen/indent-
+  guides/minimap/tabs modules, dynamic dashboard banner
+:PROPERTIES:
+:ID:       adr-ui-rice-pass
+:STATUS:   Implemented, partially live-verified (doom sync/doctor clean,
+           figlet banner output spot-checked against the real hostname;
+           transparency/pulsar/zen-focus visuals not yet confirmed in the
+           user's actual running daemon)
+:DATE:     2026-08-21
+:END:
+
+** Context
+The user asked, via a =/grilling= session (the =mattpocock-skills= plugin's
+interrogative design-tree skill), to "rice" this Emacs config — make it visually
+richer — rather than continue the config's prior UI minimalism (no prior ADR
+covered theming/UI at all). The session mapped the request into a design
+tree over several rounds: aesthetic direction (heavy, r/unixporn-style
+flourish, not minimal polish), whether to keep the existing theme, font
+choice, which specific chrome/motion extras were in scope, and tolerance for
+new packages. A follow-up request (after the plan was confirmed and mid-
+implementation) asked to make the dashboard banner derive from the machine's
+hostname dynamically rather than being hardcoded, since the config may run on
+a different machine later.
+
+** Decision drivers
+- User's explicit answers during grilling: keep =doom-zenburn= (no reason to
+  change a working, deliberate choice); heavy-flourish direction including
+  transparency, custom dashboard art, animated cursor, and (once offered the
+  full extras list) all of indent-guides/minimap/tabs/zen-mode too; willing
+  to accept a small number of well-known new packages, proposed individually
+  before install (=AGENTS.md= hard rule: package installs need explicit,
+  current-turn approval, not inferred from a broader prior approval)
+- =AGENTS.md=/=.claude/rules/doom-emacs.md=: Doom-first (module flags over
+  hand-rolled equivalents where a module already exists), one clean
+  =doom sync= + =doom doctor= after any module/package change
+  - =docs/agents/skills.md=/=CLAUDE.md=: new architectural decisions get
+  recorded here, not left only in conversation
+- Repo-wide plaintext/diffable convention (org files, elisp, no binary
+  blobs) — relevant to rejecting an image-based dashboard logo
+- Portability: the user does not want the dashboard banner hardcoded to this
+  one machine's name
+
+** Candidates
+| Area | Candidate | Fate |
+|------+-----------+------|
+| Cursor motion feedback | Doom's built-in =:ui nav-flash= (plain line-blink, no new package) | Rejected — doesn't match the "animated cursor" flourish the user asked for |
+| Cursor motion feedback | =pulsar= (animated colored pulse) | *Chosen* — matches the flourish direction; running it alongside nav-flash would double-fire on the same events, so nav-flash stays disabled |
+| Dashboard banner | Doom's default ASCII logo, recolored | Not chosen — user specifically wanted the machine's hostname depicted, not the stock logo |
+| Dashboard banner | Raster image logo (binary asset) | Rejected — breaks this repo's plaintext/diffable convention; the odd one out among otherwise all-text config |
+| Dashboard banner | Hardcoded hand-drawn ASCII art for the literal string "yogurt" | Superseded — worked, but the user asked afterward for portability across machines |
+| Dashboard banner | Hand-rolled Elisp block-letter font table covering A-Z/0-9/hyphen, rendering =(system-name)= | Rejected (user's explicit choice between two presented options) — self-contained but a few hundred lines of hardcoded glyph data to write and maintain |
+| Dashboard banner | Shell out to the external =figlet= tool with =(system-name)= at render time | *Chosen* (user's explicit choice) — matches this config's existing pattern of calling well-known external tools (ruff, black, xdotool) via =call-process=/=shell-command-to-string=; far less code; falls back to plain =(system-name)= text if =figlet= isn't installed |
+| Font | Full Nerd-patched "JetBrainsMono Nerd Font" (=ryanoasis/nerd-fonts= GitHub release) | Rejected, not by choice — GitHub (=github.com=, =api.github.com=) is unreachable from the agent's sandboxed Bash tool even with sandbox restrictions lifted (DNS resolution times out); only =raw.githubusercontent.com= resolved |
+| Font | Plain "JetBrains Mono" via apt's =fonts-jetbrains-mono=, paired with the already-installed =Symbols Nerd Font Mono= for icon glyph fallback | *Chosen* — apt's Ubuntu archive mirror was reachable even when GitHub/MELPA were not; icon glyph coverage doesn't require the primary font itself to be Nerd-patched, since =nerd-icons.el= pairs any regular font with exactly this dedicated glyph-only fallback font by design |
+| Theme | Switch away from =doom-zenburn= | Rejected — deliberate, already-working choice; no stated dissatisfaction with it |
+
+** Evidence
+- *Facts checked before asking the user anything*, per the grilling method
+  (never ask for a fact retrievable directly): =init.el= module list read
+  directly — =indent-guides=, =minimap=, =nav-flash=, =doom-quit=, =zen=,
+  =emoji=, =tabs=, =treemacs=/=neotree= all disabled; =doom-theme= already
+  =doom-zenburn=; =doom-font=/=doom-variable-pitch-font= unset (system
+  default); only =Symbols Nerd Font Mono= present system-wide
+  (=fc-list | grep -ic nerd= → 1).
+- *Transparency feasibility*: =emacs --version= → 30.1; build-feature check
+  → =cairo=t pgtk=nil=; session is GUI over X11 (=DISPLAY=:0.0=,
+  =WAYLAND_DISPLAY=unset), Emacs itself running as a =systemd --user=
+  daemon (confirmed via =systemctl --user status emacs.service=); no
+  compositor process found (=picom=/=compton=/=xcompmgr= all absent) — not a
+  blocker, since Emacs 29+ Cairo builds composite =alpha-background=
+  internally without needing one.
+- *Zen =+focus= prerequisite*: =init.el= line 100 confirms =:tools lsp= is
+  enabled (plain =lsp-mode=, not =+eglot=) — the =+focus= flag's enhanced
+  LSP-aware dimming (per =ui/zen/README.org=) has its prerequisite already
+  met, no extra module needed.
+- *Module→package mapping read directly from each module's =packages.el=*
+  (=~/.config/emacs/sources/doom+/modules/ui/{minimap,tabs,zen,indent-guides}/packages.el=):
+  minimap → =demap=; tabs → =centaur-tabs=; indent-guides → =indent-bars=;
+  zen → =writeroom-mode= + =mixed-pitch= always, plus =focus= and (since
+  =:tools lsp -eglot= is active) =lsp-focus= under the =+focus= flag — all
+  Doom-declared/pinned, no manual =package!= needed for any of these; only
+  =pulsar= (not tied to any module) needed a manual =package!= entry in this
+  repo's own =packages.el=.
+- *Dashboard override mechanism read from source*
+  (=ui/dashboard/config.el=): =+dashboard-ascii-banner-fn= is a plain
+  =defcustom= (no =provide=/feature to hang an =after!= block on regardless
+  — config.el's own file loads unconditionally after all modules), so a bare
+  =setq= is correct and sufficient, matching the =after!=-exemption already
+  documented in this repo's =config.el= for "doom variables (which start
+  with 'doom-' or '+')."
+- *Network reachability, tested directly, not assumed*: =curl= to
+  =github.com=, =api.github.com=, =melpa.org=, =stable.melpa.org= all timed
+  out (exit 000) from the agent's Bash tool, both with and without
+  =dangerouslyDisableSandbox=; =raw.githubusercontent.com= (301) and
+  =archive.ubuntu.com= (200) both resolved and responded. Consistent with a
+  domain-allowlist firewall rather than a total network outage. The user's
+  own shell (via =!= prefix) had full network — font and =figlet= installs,
+  and =doom sync= itself (which needed =github.com=/=melpa.org= for
+  =pulsar=/=demap=/=centaur-tabs=/=indent-bars=/=writeroom-mode=/
+  =mixed-pitch=/=focus=/=lsp-focus=), were run from there instead of from
+  the agent's sandboxed tool.
+- *=pulsar='s actual public API checked against source* after install
+  (=~/.config/emacs/.local/straight/repos/pulsar/pulsar.el=), since the
+  config was written before the package was fetched: =pulsar-pulse= is
+  =(make-obsolete-variable 'pulsar-pulse nil "1.3.0")= — obsolete/no-op in
+  the installed version, removed from this repo's config rather than left
+  in as a silent no-op that would warn on doctor/compile. =pulsar-delay=,
+  =pulsar-iterations=, =pulsar-face=, =pulsar-pulse-functions=,
+  =pulsar-global-mode=, and the =pulsar-cyan= face all confirmed present.
+  =pulsar-pulse-functions='s own default list (read directly, lines 69-145)
+  already covers =evil-goto-first-line=, =evil-goto-line=,
+  =evil-scroll-down/up=, =evil-scroll-page-down/up=,
+  =evil-window-top/bottom=, and =other-window= — only =switch-to-buffer= was
+  actually missing and needed adding, not the fuller list originally
+  planned before checking the source.
+- *Font family name verified against what was actually installed*, not
+  assumed from the package name: =fc-list | grep -i jetbrains= after the
+  user's apt install showed the family is "JetBrains Mono" (with a space),
+  not "JetBrainsMono Nerd Font" — the =doom-font=/=doom-variable-pitch-font=
+  spec in =config.el= was corrected to match before considering this done;
+  the original wrong value would have silently fallen back to a default
+  font with no error.
+- *=doom sync= output*, pasted by the user: "No packages need attention" /
+  "All 194 packages are up-to-date" on the final successful run (prior runs
+  hit transient network failures per the user, hence re-running); all 8 new
+  packages' build directories confirmed present directly
+  (=~/.config/emacs/.local/straight/build-30.1/{pulsar,demap,centaur-tabs,indent-bars,writeroom-mode,mixed-pitch,focus,lsp-focus}=)
+  rather than trusting the sync log alone.
+- *=doom doctor=* run twice (before and after the font-family fix): both
+  clean — "Everything seems fine, happy Emacs'ing!," 50 modules, 159
+  packages, =Symbols Nerd Font Mono= detected under the font check both times.
+- *=figlet= output spot-checked* directly: =figlet -f standard "$(hostname)"=
+  against the real hostname (=yogurt=) produced a correctly-shaped ASCII
+  banner.
+
+** Decision
+- =init.el=: enabled =indent-guides=, =minimap=, =tabs=, and
+  =(zen +focus)= under =:ui=; left =nav-flash=/=doom-quit=/=emoji=/
+  =treemacs=/=neotree= disabled (out of scope — not requested).
+- =packages.el=: added =(package! pulsar)=.
+- =config.el=, new "rice pass" section:
+  - =doom-font=/=doom-variable-pitch-font= set to =(font-spec :family
+    "JetBrains Mono" :size 13)=.
+  - =default-frame-alist= gets =(alpha-background . 92)=; a
+    =+my/rice-update-frame-alpha= function, hung on
+    =after-focus-change-function= (the modern, non-obsolete hook, correct
+    for a daemon with multiple emacsclient frames), sets each frame's
+    =alpha-background= to 92 when it's the selected frame and 80 otherwise.
+  - =use-package! pulsar= hooked on =doom-first-input= to enable
+    =pulsar-global-mode=; =pulsar-delay=/=pulsar-iterations=/=pulsar-face=
+    ('pulsar-cyan') set, plus =switch-to-buffer= added to
+    =pulsar-pulse-functions=.
+  - =+my/dashboard-hostname-banner-fn=: renders =(system-name)= via
+    =figlet -f standard=, falling back to plain =(system-name)= text if
+    =figlet= isn't on =PATH=; assigned to =+dashboard-ascii-banner-fn=.
+- System packages (installed by the user directly, not by the agent, since
+  both needed either =sudo= or reachable-only-from-the-user's-shell
+  network): =fonts-jetbrains-mono=, =figlet=.
+
+** Consequences
+- The dashboard banner degrades gracefully (plain hostname text, not an
+  error) on any machine/checkout where =figlet= isn't installed — this repo
+  now has one place (=+my/dashboard-hostname-banner-fn=) that assumes an
+  optional external tool, following the same =executable-find= guard pattern
+  already used for =ruff=/=xdotool= elsewhere in =config.el=.
+- Icon glyph rendering (modeline, corfu, dired, etc.) depends on
+  =Symbols Nerd Font Mono= remaining installed, not on =doom-font= itself —
+  a fact worth remembering if =doom-font= is ever changed again to some
+  other plain (non-Nerd) family; it will not silently break icons as long as
+  that fallback font stays present.
+- =docs/inventory.org='s =:ui= module line needs updating to list
+  =indent-guides=, =minimap=, =tabs=, =(zen +focus)= (done alongside this
+  ADR, cross-referencing this entry, matching how ADR-021 updated it for the
+  completion-engine swap).
+- Genuine gap left open: transparency, the pulsar pulse animation, and
+  zen-mode's =+focus= dimming have not been visually confirmed in the user's
+  actual running Emacs daemon — only mechanically verified (=doom doctor=
+  clean, source-level API correctness, =figlet= output correctness). The
+  user needs to restart/reload Emacs and actually look at it.
+- The Nerd-patched font gap (plain "JetBrains Mono" instead of the
+  Nerd-patched variant) is an accepted, environment-forced compromise, not a
+  deliberate aesthetic choice — see Revisit when.
+
+** Rejected alternatives
+See Candidates table above.
+
+** Validation
+- =doom sync=: clean (run from the user's shell; the agent's sandboxed Bash
+  tool cannot reach =github.com=/=melpa.org=), all 8 new packages' build
+  directories confirmed present directly by the agent afterward.
+- =doom doctor=: clean, run twice (before and after the font-family
+  correction), both times "Everything seems fine, happy Emacs'ing!."
+- =figlet -f standard "$(hostname)"= output spot-checked directly against
+  the real hostname.
+- Not yet done: visual confirmation in the user's real, running Emacs
+  session (restart/reload required for =doom-font=/module changes to take
+  effect) that transparency, pulsar pulses, zen =+focus= dimming, the
+  minimap, and centaur-tabs all render and behave as intended.
+
+** Rollback
+- Revert =init.el= flags: disable =indent-guides=/=minimap=/=tabs=/=zen=,
+  re-enable =nav-flash= if the plain blink is preferred back, then
+  =doom sync=.
+- Remove the "rice pass" section from =config.el= (font/transparency/
+  pulsar/dashboard-banner =setq='s and function definitions) to fall back to
+  Doom's stock font resolution, opaque frames, no cursor-pulse, and Doom's
+  default ASCII logo.
+- Remove =(package! pulsar)= from =packages.el=, then =doom sync= to purge it.
+- System packages (=fonts-jetbrains-mono=, =figlet=) can stay installed
+  harmlessly even if the config using them is reverted, or be removed with
+  =sudo apt remove=.
+
+** Revisit when
+- The agent's sandbox (or a future environment) can actually reach
+  =github.com=/=api.github.com= — install the real Nerd-patched
+  "JetBrainsMono Nerd Font" and swap =doom-font=/=doom-variable-pitch-font=
+  to it, matching the family name actually shipped by that release rather
+  than assuming one.
+- The user actually uses this config for a while and finds transparency,
+  the pulsar pulse, or zen =+focus= dimming distracting rather than
+  pleasant — each is an independent, easily-reverted =setq=/module-flag, not
+  a reason to unwind this whole ADR.
+- This config is ever checked out on a different machine — the dashboard
+  banner (hostname-driven) and icon-fallback-font approach (not tied to a
+  specific primary font) were both deliberately designed for that case
+  already, but worth confirming =figlet= and =Symbols Nerd Font Mono= are
+  present there too.
