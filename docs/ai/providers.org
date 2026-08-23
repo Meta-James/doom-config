@@ -48,7 +48,7 @@ the OpenAI registry includes the current =gpt-5.x=/=o3=/=o4= generation.
 
 Default backend/model: Anthropic / =claude-sonnet-5= (matches cloud-first +
 "best engineering workflow, not cheapest" per [[id:std-cloud-first][standards.org]]). OpenAI
-configured as a secondary backend, selectable via =gptel-menu= (=SPC a m=).
+configured as a secondary backend, selectable via =gptel-menu= (=SPC o l m=, [[id:adr-llm-module-owns-ai-keys][ADR-028]]).
 Gemini not configured — explicit user decision, not an oversight.
 
 * Known gaps

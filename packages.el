@@ -49,7 +49,7 @@
 ;; ...Or *all* packages (NOT RECOMMENDED; will likely break things)
 ;; (unpin! t)
 ;; (package! seq :recipe (:type built-in))
-(package! gptel)
+;; gptel is declared (and pinned) by `:tools llm' -- don't re-declare it here.
 (package! copilot
   :recipe (:host github :repo "copilot-emacs/copilot.el" :files ("*.el")))
 (package! perfect-margin)

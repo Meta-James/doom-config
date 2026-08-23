@@ -141,10 +141,14 @@ The EXWM/window-manager phase of the long-term roadmap actually starts (see
 * ADR-003: =SPC a= becomes the AI namespace outright
 :PROPERTIES:
 :ID:       adr-ai-leader-namespace
-:STATUS:   Implemented
+:STATUS:   Superseded by ADR-028 [2026-08-23]
 :DATE:     2026-07-20
 :END:
 :LOGBOOK:
+- State "Superseded" from "Implemented" [2026-08-23 Sat] — [[id:adr-llm-module-owns-ai-keys][ADR-028]] retires
+  the =SPC a= namespace in favour of =:tools llm='s own =SPC o l= map and
+  restores =embark-act= at =SPC a=. The discoverability driver below survives
+  intact; only the chosen prefix changed.
 - State "Implemented" from "Accepted"  [2026-07-20 Mon] — Phase 4
 :END:
 
@@ -2534,13 +2538,19 @@ on top of them.
   versions further, since they may now cover the same ground more
   completely.
 
-* ADR-020: =SPC o l= external-app launcher, xdotool-based raise-or-launch
+* ADR-020: =SPC o L= external-app launcher, xdotool-based raise-or-launch
 :PROPERTIES:
 :ID:       adr-app-launcher
-:STATUS:   Implemented, live-verified (Firefox confirmed directly; Discord/VLC share the same =my/launch-or-focus= mechanism, calc/proced are plain built-in Emacs commands — not separately retested)
+:STATUS:   Implemented, live-verified at =SPC o l=; re-prefixed to =SPC o L= by ADR-028 and not re-verified at the new prefix
 :DATE:     2026-08-13
 :END:
 :LOGBOOK:
+- Amended [2026-08-23 Sat] — prefix moved =SPC o l= → =SPC o L= by
+  [[id:adr-llm-module-owns-ai-keys][ADR-028]]. =SPC o l= belongs to =:tools llm= since [[id:adr-init-flag-audit][ADR-026]] enabled it, and
+  this launcher's =(:prefix ("o l" . "launch"))= form was silently replacing
+  the module's entire gptel keymap — measured, not inferred. The launcher
+  mechanism (=my/launch-or-focus=) is untouched; only the prefix changed, so
+  the live-verification below still covers the behaviour, not the new keys.
 - Note taken on [2026-08-13] \\
   User restarted Emacs and confirmed =SPC o l f= now works. Root cause of
   the earlier failure was [[id:tshoot-daemon-validation][tshoot-daemon-validation]] as suspected — the
@@ -3896,6 +3906,26 @@ refresh token has survived past ~7 days (the specific failure ADR-011 hit).
   default backend and the right-side gptel popup still behave as [[id:adr-gptel-rework][ADR-006]]
   intended. The module also adds =gptel-magit=, =gptel-quick=, and
   =ob-gptel=, which are new capability, not overlap.
+- Caveat resolved, module given precedence [2026-08-23 Sun]: the "load order
+  resolves it in the user's favour" reasoning above was wrong on both counts.
+  (a) The bare =(package! gptel)= in =packages.el= merged nothing — =package!=
+  only merges non-nil keys (=lisp/doom-packages.el=), so the module's
+  =:pin "ebf0f3d"= + =:recipe (:nonrecursive t)= were already what was
+  installed. (b) This repo's =^\*gptel\*= popup rule never matched anything:
+  gptel names its buffer =*<backend-name>*= (=gptel.el:1904=), i.e. =*Claude*=
+  under [[id:adr-gptel-rework][ADR-006]]'s Anthropic default — so the module's predicate rule (any
+  =gptel-mode= buffer) was the only one ever firing, and the live popup is
+  bottom/0.3/=:quit nil=, not ADR-006's right/0.42/=:quit t=. At the user's
+  direction the module now owns gptel outright: =(package! gptel)=,
+  =(setq gptel-default-mode 'org-mode)=, and the dead =set-popup-rule!= were
+  deleted from this repo, leaving only what the module does not do — the
+  =+pass-get-secret= backends, =gptel-directives=, =my/gptel-add-diagnostics=,
+  and the =SPC a= namespace. =SPC a= is kept as-is per [[id:adr-ai-leader-namespace][ADR-003]]; the module's
+  =SPC o l= map is an additional entry point. =doom sync= + =doom doctor= clean
+  (the standing tree-sitter warning only). *Correction, same day:* the "=SPC a=
+  kept, =SPC o l= additional" half of this entry was superseded within the hour
+  by [[id:adr-llm-module-owns-ai-keys][ADR-028]], which also found that =SPC o l= was never actually the module's
+  — [[id:adr-app-launcher][ADR-020]]'s launcher had been shadowing it since this ADR enabled =:tools llm=.
 :END:
 
 ** Context
@@ -4221,3 +4251,152 @@ removing the package.
   pointless in either direction.
 - A future note-management change touches ADR-019's original reasoning, at
   which point both ADRs should be read together rather than separately.
+
+* ADR-028: Retire the =SPC a= AI namespace for =:tools llm='s =SPC o l= map; move the app launcher to =SPC o L= (supersedes ADR-003, amends ADR-020)
+:PROPERTIES:
+:ID:       adr-llm-module-owns-ai-keys
+:STATUS:   Implemented; structurally verified headless, not yet live-verified
+:DATE:     2026-08-23
+:END:
+
+** Context
+Enabling =:tools llm= ([[id:adr-init-flag-audit][ADR-026]]) brought in Doom's own gptel integration: a
+pinned =gptel=, module-level =gptel-default-mode= / =gptel-display-buffer-action=
+/ popup rule, three extra packages (=gptel-magit=, =gptel-quick=, =ob-gptel=),
+and a full =SPC o l= keymap shipped by =:config default +bindings=. This repo
+had independently configured all of the overlapping pieces during Phase 4
+([[id:adr-gptel-rework][ADR-006]]) and [[id:adr-ai-leader-namespace][ADR-003]]. The user asked for the duplication to be removed with the
+module, not this repo, taking precedence.
+
+Auditing the overlap turned up a second, unrelated collision that had been
+silently live since [[id:adr-init-flag-audit][ADR-026]]: [[id:adr-app-launcher][ADR-020]]'s app launcher occupies the *same*
+=SPC o l= prefix the module wants, and wins by load order — so the module's
+entire gptel keymap had never existed in this configuration.
+
+** Decision drivers
+- User instruction, twice restated: the module takes precedence; this repo
+  should carry only what the module does not do.
+- [[id:std-doom-first][standards.org]]: Doom-first — prefer a module's own mechanism over a private
+  reimplementation of it.
+- Two keymaps claiming one prefix is not "harmless aliasing"; =map!='s
+  =:prefix= form *replaces* the prefix keymap, so one of them is dead code.
+- [[id:adr-ai-leader-namespace][ADR-003]]'s actual goal was a short, discoverable, non-nested AI binding. A
+  module-supplied prefix satisfies that goal; it does not have to be =SPC a=.
+
+** Candidates
+| Option | Fate |
+|--------+------|
+| Move launcher to =SPC o L=; module owns =SPC o l=; add this repo's two novel commands into it | *Chosen* — module wins the prefix, launcher keeps a one-keystroke-different home, no keymap is shadowed |
+| Keep launcher at =SPC o l=; hand-rebuild the module's nine gptel bindings under =SPC o a= | Rejected — re-creates by hand exactly the map the module ships, i.e. the duplication this ADR exists to delete |
+| Keep [[id:adr-ai-leader-namespace][ADR-003]]'s =SPC a= namespace; leave the module's map shadowed | Rejected by the user after it was offered — it preserves a permanently-dead module keymap |
+| Delete =SPC a= but leave the two novel commands =M-x=-only | Not offered — fails [[id:adr-ai-leader-namespace][ADR-003]]'s discoverability driver, which this ADR keeps |
+
+** Evidence
+- Module source read directly, not assumed:
+  =~/.config/emacs/sources/doom+/modules/tools/llm/{config,packages,autoload}.el=
+  — it sets =gptel-default-mode 'org-mode=, sets =gptel-display-buffer-action=
+  to nil, registers a =gptel-mode= predicate popup rule, and pins =gptel= to
+  =ebf0f3d= with =:recipe (:nonrecursive t)=.
+- =packages.el='s bare =(package! gptel)= was a no-op: =package!= merges only
+  non-nil keys (=lisp/doom-packages.el=, the =cl-loop for (key value)= form), and
+  =git log -1= in =straight/repos/gptel= showed =ebf0f3d= — the module's pin was
+  already the installed commit.
+- This repo's =(set-popup-rule! "^\*gptel\*" ...)= had never matched anything:
+  =gptel= names its buffer =*<backend-name>*= (=gptel.el:1904=), i.e. =*Claude*=
+  under [[id:adr-gptel-rework][ADR-006]]'s Anthropic default. The live popup was therefore the module's
+  (bottom, =:size 0.3=, =:quit nil=), not [[id:adr-gptel-rework][ADR-006]]'s documented right/0.42.
+- The launcher/module prefix collision was found by *measuring*, not reading:
+  a headless daemon on the working tree returned =nil= for =o l l=, =o l e= and
+  =o l g=, and =o l d= resolved to the Discord launcher closure. The agent had
+  asserted the opposite ("both live, harmless aliases") one turn earlier; that
+  claim was wrong and is retracted here.
+- Post-change headless daemon (=emacs --daemon=kbtest2=,
+  =lookup-key doom-leader-map=): =o l l/e/s/a/f/r/m/o/O/L= resolve to the module's
+  gptel commands, =o l d= → =my/gptel-add-diagnostics=, =o l g= →
+  =claude-code-ide-menu=, =o L f/d/v/c/t= → the launcher, =SPC a= → =embark-act=,
+  =p t= → =my/project-ghostel=.
+- Same daemon, with =gptel= loaded: =backend=Claude=, =model=claude-sonnet-5=,
+  =gptel-default-mode=org-mode=, =gptel-display-buffer-action=nil=, directives
+  list contains =clearer/formal/summarize= — i.e. [[id:adr-gptel-rework][ADR-006]]'s behaviour survives
+  the deletions.
+- =doom sync= and =doom doctor= both clean after the =packages.el= change (the
+  standing "tree-sitter rudimentary before Emacs 31" warning only).
+
+** Decision
+Delete from this repo everything =:tools llm= already does, and give it the
+prefix it ships with:
+- =packages.el=: drop =(package! gptel)=; the module declares and pins it.
+- =config.el=: drop =(setq gptel-default-mode 'org-mode)= and the dead
+  =(set-popup-rule! "^\*gptel\*" ...)=.
+- =config.el=: delete the =SPC a= prefix block *and* its =(map! :leader "a" nil)=
+  unbind, restoring Doom's default =embark-act= at =SPC a=. This supersedes
+  [[id:adr-ai-leader-namespace][ADR-003]].
+- =config.el=: add only the two commands the module's map has no equivalent
+  for, into the module's own prefix — =SPC o l d= =my/gptel-add-diagnostics=,
+  =SPC o l g= =claude-code-ide-menu=.
+- =config.el=: move [[id:adr-app-launcher][ADR-020]]'s launcher from =SPC o l= to =SPC o L=, so it no
+  longer replaces the module's keymap. This amends [[id:adr-app-launcher][ADR-020]].
+- =my/project-ghostel= loses its =SPC a t= alias and keeps its own =SPC p t=
+  binding, which was always the primary one.
+
+What stays in this repo, because the module does not do it: the
+=gptel-make-anthropic= / =gptel-make-openai= backends with =+pass-get-secret=
+keys, the =clearer=/=formal=/=summarize= =gptel-directives=, and
+=my/gptel-add-diagnostics=.
+
+** Consequences
+- Every gptel key moves from =SPC a <x>= to =SPC o l <x>=, and the letters
+  change (=SPC a i= → =SPC o l l=, =SPC a s= → =SPC o l s=, =SPC a a= →
+  =SPC o l a=, =SPC a r= → =SPC o l r=, =SPC a m= → =SPC o l m=, =SPC a d= →
+  =SPC o l d=, =SPC a g= → =SPC o l g=). This is real muscle-memory churn and
+  the main cost of the decision.
+- Four module commands become reachable that previously were not:
+  =gptel-quick= (=o l e=), =gptel-add-file= (=o l f=),
+  =+llm/open-in-same-window= (=o l L=), =gptel-org-set-topic=/=-set-properties=
+  (=o l o=/=o l O=).
+- =embark-act= returns to =SPC a= after having been unbound since [[id:adr-ai-leader-namespace][ADR-003]]
+  (2026-07-20). Nothing in this config depends on =SPC a= any more.
+- The app launcher's keys all shift by one modifier (=SPC o l f= → =SPC o L f=).
+- The chat popup is now the module's geometry (bottom, 0.3, =:quit nil=,
+  no TTL). If [[id:adr-gptel-rework][ADR-006]]'s right/0.42/=:quit t= is still wanted, it must be
+  re-added as a =gptel-mode= *predicate* rule, not a =^\*gptel\*= regexp.
+- =gptel-magit= (=M-g= in a commit buffer, plus a =magit-commit= transient
+  suffix) and =ob-gptel= (=#+begin_src gptel= blocks with completion-at-point)
+  are now live and unconfigured — new capability, not yet exercised.
+- Any future =map!= using =:prefix= under =SPC o= must check the module tree
+  first; this class of silent shadowing is invisible in =config.el= alone.
+
+** Rejected alternatives
+See the Candidates table above.
+
+** Validation
+- Headless daemon binding dump (both before and after), quoted under Evidence —
+  the "after" run is the validation, the "before" run is what exposed the
+  collision.
+- =doom sync= + =doom doctor= clean.
+- =config.el= re-read by =emacs -Q --batch= without a parse error.
+- *Not yet live-verified*: the user has not restarted their long-running Emacs
+  and exercised these keys interactively. Per [[id:tshoot-daemon-validation][tshoot-daemon-validation]] that
+  restart is required before any of this counts as confirmed — a headless
+  daemon proves the bindings exist, not that the workflow feels right.
+
+** Rollback
+- =git revert= the commit; the change is confined to =config.el=,
+  =packages.el=, and docs. =doom sync= afterwards, since =packages.el= is
+  touched.
+- Partial rollback of just the keymap half: restore the =SPC a= block and
+  =(map! :leader "a" nil)=, and change the launcher's =:prefix= back to
+  ="o l"= — accepting that the module's gptel map returns to being dead.
+
+** Revisit when
+- The =SPC o l= vs =SPC o L= distinction proves error-prone in daily use (the
+  two prefixes differ only by shift, and both are "open something") — that is
+  the signal to move the launcher somewhere semantically distinct instead.
+- The user wants [[id:adr-gptel-rework][ADR-006]]'s right-side 0.42 popup back, which now requires
+  overriding the module's predicate rule rather than adding a regexp one.
+- =gptel-magit= or =ob-gptel= gets used in anger and needs configuration, at
+  which point this repo starts carrying module-adjacent config again and the
+  "only what the module doesn't do" boundary needs restating.
+- Doom's =:config default +bindings= changes the =SPC o l= map — the two
+  bindings added here (=d=, =g=) are currently free upstream but are not
+  reserved.

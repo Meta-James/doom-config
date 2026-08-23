@@ -70,9 +70,12 @@ enabled ones.
   rollback)
 - =:checkers= syntax, spell +flyspell +aspell +everywhere, grammar
 - =:tools= direnv, eval +overlay, llm, lookup +dictionary +docsets +offline,
-  lsp +peek, magit +forge, pdf, tree-sitter (=llm= added 2026-08-23; it also
-  declares =gptel=, which =packages.el= declares independently — see
-  [[id:adr-init-flag-audit][ADR-026]]'s LOGBOOK)
+  lsp +peek, magit +forge, pdf, tree-sitter (=llm= added 2026-08-23; it owns
+  =gptel= outright — package pin, =gptel-default-mode=, popup rule, and the
+  =SPC o l= keymap — and also brings =gptel-magit=, =gptel-quick=, =ob-gptel=.
+  This repo's duplicate declarations, its =SPC a= namespace, and the =SPC o l=
+  app launcher that had been shadowing the module's keymap were all resolved
+  2026-08-23; see [[id:adr-llm-module-owns-ai-keys][ADR-028]])
 - =:lang= emacs-lisp, json +lsp +tree-sitter, latex +lsp, markdown +lsp +grip
   +tree-sitter, org +pandoc +roam +gnuplot +jupyter +pretty +noter
   +dragndrop (org-roam alongside Vulpea, Vulpea preferred on every overlap —
@@ -96,7 +99,8 @@ commented out as language modules with no current use (=:lang= =ada=,
 
 | Package        | Recipe                                              | Pinned commit (2026-07-20, post-upgrade) |
 |----------------+------------------------------------------------------+--------------------------------------------|
-| gptel          | MELPA default                                       | =8701e2b= / header version 0.9.9.5        |
+| gptel          | declared by =:tools llm=, not =packages.el=          | =ebf0f3d= / header version 0.9.9.5 (module pin, since 2026-08-23) |
+| gptel-magit / gptel-quick / ob-gptel | =:tools llm=                  | module pins; no config of ours            |
 | copilot        | =(:host github :repo "copilot-emacs/copilot.el" :files ("*.el"))= | =277ca35= / tagged release 0.9.0 |
 | perfect-margin | MELPA default                                       | unrelated to AI work, untouched            |
 | claude-code-ide | =(:host github :repo "manzaltu/claude-code-ide.el")= | Installed Phase 6, 2026-07-20; no tagged release upstream yet (pre-1.0) |

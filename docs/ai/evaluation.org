@@ -29,8 +29,16 @@ this machine's network — none available to this project.
   explicitly invoked)
 
 * Chat (Phase 4)
+
+/Key names below are as verified at the time. [[id:adr-llm-module-owns-ai-keys][ADR-028]] moved the whole AI map
+from =SPC a= to =:tools llm='s =SPC o l= on 2026-08-23; the current keys are in
+[[id:ai-keybindings][keybindings.org]]. Everything marked "user-confirmed live" was confirmed under
+the old keys — the commands and their behaviour are unchanged, but the new
+prefix has not been exercised interactively yet./
+
 - [X] One command opens the default chat surface (=SPC a i= → =gptel=,
-  verified bound in a live headless daemon)
+  verified bound in a live headless daemon; re-keyed to =SPC o l l= by
+  [[id:adr-llm-module-owns-ai-keys][ADR-028]] and re-verified bound in a fresh headless daemon)
 - [X] Chat surface works well in an Org buffer (user-confirmed live)
 - [X] Anthropic and OpenAI backends selectable and correctly configured
   (=gptel-backend=/=gptel-model=/=gptel--known-backends= inspected live);
@@ -38,11 +46,12 @@ this machine's network — none available to this project.
 - [X] Credentials never visible in config or output (=+pass-get-secret=
   resolves both entries to non-empty strings; only type/length checked,
   never printed)
-- [X] Region can be sent intentionally (=SPC a s= → =gptel-send=, bound)
-- [X] Buffer/project-files can be added intentionally (=SPC a a= →
-  =gptel-add=, DWIM, bound)
-- [X] Diagnostics can be added intentionally (=SPC a d= →
-  =my/gptel-add-diagnostics=, new command, bound)
+- [X] Region can be sent intentionally (=SPC a s=, now =SPC o l s= →
+  =gptel-send=, bound)
+- [X] Buffer/project-files can be added intentionally (=SPC a a=, now
+  =SPC o l a= → =gptel-add=, DWIM, bound)
+- [X] Diagnostics can be added intentionally (=SPC a d=, now =SPC o l d= →
+  =my/gptel-add-diagnostics=, this repo's own command, bound)
 - [X] Responses stream correctly (user-confirmed live — headless validation
   alone couldn't observe streaming UX)
 - [X] Cancellation works (user-confirmed live)
@@ -98,7 +107,8 @@ this machine's network — none available to this project.
   server version 1.434.0, installed 1.452.0) and enabled — see [[id:adr-copilot-nes][ADR-007]]
 
 * Agentic coding (Phase 6)
-- [X] Package installed, configured, keybinding resolves (=SPC a g=), CLI
+- [X] Package installed, configured, keybinding resolves (=SPC a g=, now
+  =SPC o l g= per [[id:adr-llm-module-owns-ai-keys][ADR-028]]), CLI
   correctly detected via a local, network-free =claude --version= check —
   all verified in an isolated headless daemon; see [[id:adr-claude-code-ide-install][ADR-008]]
 - [X] *Live smoke test run* (user-approved, real Claude usage, disposable

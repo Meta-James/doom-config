@@ -5,41 +5,56 @@
 :ID:       ai-keybindings
 :END:
 
-Implemented map per [[id:adr-ai-leader-namespace][ADR-003]]/[[id:adr-gptel-rework][ADR-006]]/[[id:adr-claude-code-ide-install][ADR-008]], as of Phase 6. Verified
-live via isolated headless Doom daemons (see
-[[id:tshoot-daemon-validation][troubleshooting.org]]) — every binding below resolves to the
-command shown.
+Implemented map per [[id:adr-llm-module-owns-ai-keys][ADR-028]]/[[id:adr-gptel-rework][ADR-006]]/[[id:adr-claude-code-ide-install][ADR-008]]. Verified via isolated
+headless Doom daemons (see [[id:tshoot-daemon-validation][troubleshooting.org]]) — every
+binding below resolves to the command shown. *Not yet re-verified in the
+user's live session* after the 2026-08-23 re-prefixing.
 
-* Leader: =SPC a= (AI) — implemented
+The AI map moved from =SPC a= to =SPC o l= on 2026-08-23: [[id:adr-llm-module-owns-ai-keys][ADR-028]] handed the
+gptel keys to =:tools llm='s own map and superseded [[id:adr-ai-leader-namespace][ADR-003]]. =SPC a= is
+Doom's default =embark-act= again, and [[id:adr-app-launcher][ADR-020]]'s app launcher moved to
+=SPC o L= to stop shadowing the module's prefix.
 
-| Key       | Command                     | Evil state | Modes  | Rationale |
-|-----------+------------------------------+------------+--------+--------------------------------------------|
-| =SPC a i= | =gptel= (toggle chat popup) | normal     | global | Primary entry point |
-| =SPC a s= | =gptel-send= (send region, get immediate response) | visual/normal | global | Distinct from "add as context" — this gets an answer now |
-| =SPC a a= | =gptel-add= (built-in DWIM: add region/buffer/dired-marked-files/ibuffer-marked as context) | normal | global, Dired, IBuffer | One command, not three — its behavior is already context-sensitive; separate keys for "region"/"buffer"/"project" would have been artificial |
-| =SPC a d= | =my/gptel-add-diagnostics= (new, Flycheck has no gptel integration) | normal | global | Explicit diagnostic context, genuinely not covered by any built-in |
-| =SPC a r= | =gptel-rewrite= (built-in, ediff-based) | visual | global | Replaces the old scratch-buffer copy-paste rewrite flow entirely |
-| =SPC a m= | =gptel-menu= (transient: backend/model/directive/tools) | normal | global | Provider switching frequent enough to deserve a direct key |
-| =SPC a t= | =my/project-ghostel= (=config.el:216-226=; renamed from =my/project-vterm= 2026-08-17, [[id:adr-terminal-backend-ghostel][ADR-014]]) | normal | global | Also still bound at =SPC p t=; two legitimate entry points to the same command, not duplication of logic |
-| =SPC a g= | =claude-code-ide-menu= (transient: session mgmt, navigation, interaction, config, debug) | normal | global | One binding, not two — the transient's own submenus cover launch/stop/status/list-sessions/diff-toggle; no separate "review" key needed since Ediff opens automatically on file changes (=claude-code-ide-use-ide-diff= =t=) |
+* Leader: =SPC o l= (llm) — implemented
 
-No separate =SPC a R= was added — the original sketch assumed a distinct
-review-trigger command would be needed; source inspection during Phase 6
+Most of this map ships with =:tools llm= via =:config default +bindings=
+(=modules/config/default/+evil-bindings.el=); only the two rows marked "this
+repo" are ours (=config.el=).
+
+| Key | Command | Defined by | Rationale |
+|-----+---------+------------+-----------|
+| =SPC o l l= | =gptel= (chat popup) | module | Primary entry point; was =SPC a i= |
+| =SPC o l L= | =+llm/open-in-same-window= | module | Chat in the selected window instead of the popup; no pre-ADR-028 equivalent |
+| =SPC o l s= | =gptel-send= (send region, get immediate response) | module | Distinct from "add as context" — this gets an answer now; was =SPC a s= |
+| =SPC o l a= | =gptel-add= (DWIM: region/buffer/dired-marked/ibuffer-marked as context) | module | One command, not three — its behavior is already context-sensitive; was =SPC a a= |
+| =SPC o l f= | =gptel-add-file= | module | Add a file by name without visiting it; no pre-ADR-028 equivalent |
+| =SPC o l e= | =gptel-quick= | module | One-shot explain-this; no pre-ADR-028 equivalent |
+| =SPC o l r= | =gptel-rewrite= (ediff-based) | module | Replaces the old scratch-buffer copy-paste rewrite flow entirely; was =SPC a r= |
+| =SPC o l m= | =gptel-menu= (transient: backend/model/directive/tools) | module | Provider switching frequent enough to deserve a direct key; was =SPC a m= |
+| =SPC o l o= / =O= | =gptel-org-set-topic= / =gptel-org-set-properties= | module | Scope context to an Org heading / persist gptel config as properties; no pre-ADR-028 equivalent |
+| =SPC o l d= | =my/gptel-add-diagnostics= (Flycheck has no gptel integration) | this repo | Explicit diagnostic context, genuinely not covered by any built-in; was =SPC a d= |
+| =SPC o l g= | =claude-code-ide-menu= (transient: session mgmt, navigation, interaction, config, debug) | this repo | One binding, not two — the transient's own submenus cover launch/stop/status/list-sessions/diff-toggle; no separate review key needed since Ediff opens automatically on file changes (=claude-code-ide-use-ide-diff= =t=); was =SPC a g= |
+| =SPC p t= | =my/project-ghostel= (renamed from =my/project-vterm= 2026-08-17, [[id:adr-terminal-backend-ghostel][ADR-014]]) | this repo | Was also aliased at =SPC a t=; [[id:adr-llm-module-owns-ai-keys][ADR-028]] dropped the alias, this was always the primary binding |
+
+No separate review-trigger key was added — the original sketch assumed a
+distinct one would be needed; source inspection during Phase 6
 ([[id:adr-claude-code-ide-install][ADR-008]]) found Ediff review is automatic, and the transient menu already
 exposes everything else (stop, list sessions, switch buffer, toggle window)
-under =SPC a g='s own submenus rather than needing top-level leader keys.
+under =SPC o l g='s own submenus rather than needing top-level leader keys.
 
 * What changed from the original sketch
 
 The Phase 1 proposal assumed three separate thin wrapper commands would be
-needed for region/buffer/project context (=SPC a s=/=b=/=p=). Source inspection
+needed for region/buffer/project context (=SPC a s=/=b=/=p=, under the
+then-current [[id:adr-ai-leader-namespace][ADR-003]] namespace). Source inspection
 during Phase 4 ([[id:adr-gptel-rework][ADR-006]]) found gptel already ships =gptel-add= — a single
 DWIM command whose behavior depends on where it's invoked from (region active →
 add region; in Dired with marks → add those files/directories recursively; in
 IBuffer → add marked buffers; otherwise → add current buffer). Three keys
 mapped to context-sensitive behavior that doesn't vary by which key was pressed
-would have been artificial, so this collapsed to one binding (=SPC a a=) plus
-the still-distinct =SPC a s= (immediate send, not context-add).
+would have been artificial, so this collapsed to one binding (=SPC a a=, now
+=SPC o l a=) plus the still-distinct send key (=SPC a s=, now =SPC o l s= —
+immediate send, not context-add).
 
 * Completion — verified (Phase 5, re-verified for Corfu in [[id:adr-corfu-migration][ADR-021]])
 
@@ -104,14 +119,25 @@ daemon): an actual live Copilot suggestion/NES-edit, and a real Corfu popup
 built from genuine LSP/dabbrev candidates (not simulated keymap state),
 appearing and being accepted/dismissed/cycled as expected.
 
-* Conflicts resolved by ADR-003
+* Conflicts resolved by ADR-003 (historical — reversed by ADR-028)
 
 - =SPC a= previously unbound Doom's default =embark-act= binding. Confirmed via
   the original code being dead ([[id:tshoot-dead-keybind-code][troubleshooting.org]]) — Embark-act was, in
-  practice, still live at =SPC a= right up until this phase actually flattened
-  the namespace. Now genuinely gone, live-verified.
-- The intermediate "apps" prefix layer is removed; AI commands sit directly
-  under =SPC a=.
+  practice, still live at =SPC a= right up until Phase 4 actually flattened
+  the namespace. *Reversed 2026-08-23 by [[id:adr-llm-module-owns-ai-keys][ADR-028]]*: the unbind is deleted and
+  =embark-act= is back at =SPC a=.
+- The intermediate "apps" prefix layer is removed; AI commands sat directly
+  under =SPC a= until [[id:adr-llm-module-owns-ai-keys][ADR-028]] moved them to =SPC o l=.
+
+* Conflict resolved by ADR-028
+
+[[id:adr-app-launcher][ADR-020]]'s app launcher used =(:prefix ("o l" . "launch"))=, which since
+[[id:adr-init-flag-audit][ADR-026]] enabled =:tools llm= had been *replacing* the module's entire
+=SPC o l= gptel keymap — =map!='s =:prefix= form installs a fresh prefix
+keymap rather than merging into an existing one, and =config.el= loads after
+all modules. Measured in a headless daemon: =o l l=, =o l e= and =o l g= all
+returned nil, while =o l d= resolved to the Discord launcher closure. The
+launcher moved to =SPC o L=; nothing else was needed.
 
 * Alternatives considered and rejected
 

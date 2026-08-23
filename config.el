@@ -468,13 +468,15 @@ Does not write to disk unless you save."
   (evil-escape-mode 1))
 
 ;; AI: chat and focused transformation via gptel.
+;; `:tools llm' owns gptel itself -- its package pin, `gptel-default-mode',
+;; `gptel-display-buffer-action' and popup rule, the `SPC o l' keybinds, plus
+;; gptel-magit/gptel-quick/ob-gptel. Only backend credentials and directives
+;; live here; don't restate module defaults.
 ;; Credentials come from Doom's `:tools pass' module (`+auth' flag), never
 ;; hand-rolled shell wrappers. See docs/ai/providers.org for the full
 ;; credential map and docs/decisions.org ADR-003/004 for why the leader
 ;; namespace and provider choices look like this.
 (after! gptel
-  (setq gptel-default-mode 'org-mode)
-
   ;; Anthropic is the default backend. `:models' is deliberately omitted on
   ;; both backends below -- gptel ships and maintains its own current model
   ;; registry (gptel--anthropic-models / gptel--openai-models), so omitting
@@ -500,10 +502,7 @@ Does not write to disk unless you save."
   (setf (alist-get 'formal gptel-directives)
         "Rewrite the following in a more formal tone. Return only the rewritten text.")
   (setf (alist-get 'summarize gptel-directives)
-        "Summarize the following in 3-5 bullet points.")
-
-  (set-popup-rule! "^\\*gptel\\*"
-    :side 'right :size 0.42 :quit t :select t :ttl nil))
+        "Summarize the following in 3-5 bullet points."))
 
 (defun my/gptel-add-diagnostics ()
   "Add the current buffer's Flycheck diagnostics to gptel's context.
@@ -530,20 +529,16 @@ region/buffer/project-file context already."
     (gptel-context--add-buffer buf)
     (message "Added %d diagnostic(s) to gptel context." (length errors))))
 
-;; SPC a is the AI namespace outright (see docs/decisions.org ADR-003) --
-;; this permanently removes Doom's default `embark-act' binding at SPC a,
-;; confirmed acceptable since Embark's leader shortcut isn't needed here.
-(map! :leader "a" nil)
+;; AI keys live in `:tools llm''s own `SPC o l' prefix (bound by :config
+;; default +bindings, which covers gptel/gptel-send/gptel-add/gptel-add-file/
+;; gptel-quick/gptel-rewrite/gptel-menu/gptel-org-set-topic+properties).
+;; Only the two commands that map has no equivalent for are added, into the
+;; same prefix -- the former `SPC a' namespace and its `embark-act' unbind
+;; are gone. See docs/decisions.org ADR-028 (supersedes ADR-003).
+;; `my/project-ghostel' is unaffected: still `SPC p t' (see above).
 (map! :leader
-      (:prefix ("a" . "AI")
-       :desc "Chat (popup)"           "i" #'gptel
-       :desc "Send region"            "s" #'gptel-send
-       :desc "Add context (region/buffer/files)" "a" #'gptel-add
-       :desc "Add diagnostics context" "d" #'my/gptel-add-diagnostics
-       :desc "Rewrite/transform"      "r" #'gptel-rewrite
-       :desc "Model/provider/directive menu" "m" #'gptel-menu
-       :desc "Agent (Claude Code)"    "g" #'claude-code-ide-menu
-       :desc "Project ghostel"        "t" #'my/project-ghostel))
+      :desc "Add diagnostics to context" "o l d" #'my/gptel-add-diagnostics
+      :desc "Agent (Claude Code)"        "o l g" #'claude-code-ide-menu)
 
 ;; Email: mu4e (+org +gmail +mbsync). Sync via mbsync (isync), send via
 ;; msmtp. Credentials never live here: the plain-password account resolves
@@ -666,7 +661,7 @@ Errors for any account not listed in `+mu4e-spam-accounts'."
 ;; doesn't show a buffer that's stale since the last manual `elfeed-update'.
 (add-hook 'elfeed-search-mode-hook #'elfeed-update)
 
-;; App launcher: SPC o l -- raise-or-launch external GUI apps, plus a couple
+;; App launcher: SPC o L -- raise-or-launch external GUI apps, plus a couple
 ;; of "the Emacs command *is* the app" bindings (calc, proced) that need no
 ;; process launching at all. This is a plain process launcher, not a window-
 ;; manager change -- EXWM itself stays deferred to its own future roadmap
@@ -689,8 +684,11 @@ matching window is found."
         (call-process "xdotool" nil nil nil "windowactivate" win)
       (start-process app nil app))))
 
+;; Moved off `SPC o l' 2026-08-23: that prefix belongs to `:tools llm' since
+;; the module was enabled, and this `:prefix' form was silently replacing the
+;; module's whole gptel map (see docs/decisions.org ADR-028).
 (map! :leader
-      (:prefix ("o l" . "launch")
+      (:prefix ("o L" . "launch")
        :desc "Firefox"                  "f" (cmd! (my/launch-or-focus "firefox"))
        :desc "Discord"                  "d" (cmd! (my/launch-or-focus "discord"))
        :desc "VLC"                      "v" (cmd! (my/launch-or-focus "vlc"))

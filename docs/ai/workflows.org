@@ -14,11 +14,19 @@ phase lands.
 :ID:       wf-chat
 :END:
 
-=SPC a i= opens/toggles a gptel popup (right side, 0.42 width). Default backend
-is Anthropic (=claude-sonnet-5=); switch provider/model/directive via
-=gptel-menu= (=SPC a m=). Send region for an immediate response with =SPC a s=;
-add region/buffer/project-files/diagnostics as background context (no response
-triggered) with =SPC a a=/=SPC a d=. Org-mode is the default gptel buffer mode,
+=SPC o l l= opens/toggles a gptel popup (=SPC o l L= for the same-window
+variant). Since [[id:adr-llm-module-owns-ai-keys][ADR-028]] the whole chat surface is =:tools llm='s: it owns the
+keymap, =gptel-default-mode=, and the popup rule — bottom, 0.3 height,
+=:select t=, =:quit nil=, no TTL. That replaces [[id:adr-gptel-rework][ADR-006]]'s documented
+right/0.42/=:quit t= rule, which had in fact never fired (it matched
+=^\*gptel\*=, but gptel names the buffer =*Claude*= after the backend).
+
+Default backend is Anthropic (=claude-sonnet-5=); switch provider/model/directive via
+=gptel-menu= (=SPC o l m=). Send region for an immediate response with
+=SPC o l s=; explain the thing at point in one shot with =SPC o l e=
+(=gptel-quick=); add region/buffer/marked-files/a named file/diagnostics as
+background context (no response triggered) with =SPC o l a=/=SPC o l f=/=SPC o
+l d=. Org-mode is the default gptel buffer mode,
 so chat transcripts are themselves Org and can be saved/linked like any other
 document. Live-verified, both structurally (headless daemon: backend/model/
 credentials wire up correctly) and interactively (user-confirmed: streaming,
@@ -40,7 +48,7 @@ something this config does implicitly.
 :ID:       wf-transform
 :END:
 
-=SPC a r= invokes the built-in =gptel-rewrite= on the active region — ediff/diff
+=SPC o l r= invokes the built-in =gptel-rewrite= on the active region — ediff/diff
 -based in-place review, not the old copy-paste-from-scratch-buffer flow. Three
 reusable instructions (=clearer=, =formal=, =summarize=) are registered in
 =gptel-directives= and selectable from =gptel-rewrite='s own transient (its
@@ -93,7 +101,7 @@ designed for it. Treat as unsupported until someone actually tries it.
 :ID:       wf-agent
 :END:
 
-=SPC a g= opens =claude-code-ide-menu=, the single entry point (session
+=SPC o l g= opens =claude-code-ide-menu=, the single entry point (session
 management, navigation, interaction, config, and debug submenus). One Claude
 instance per project (via =project.el= auto-detection). Plan → multi-file edit
 → run formatters/tests → present diff via Ediff (opens automatically,
