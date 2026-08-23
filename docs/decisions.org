@@ -2933,8 +2933,13 @@ would still be independently true even under Company).
 * ADR-022: UI "rice" pass — font, transparency, cursor pulses, zen/indent-guides/minimap/tabs modules, dynamic dashboard banner
 :PROPERTIES:
 :ID:       adr-ui-rice-pass
-:STATUS:   Implemented, partially live-verified (doom sync/doctor clean, figlet banner output spot-checked against the real hostname; transparency/pulsar/zen-focus visuals not yet confirmed in the user's actual running daemon)
+:STATUS:   Implemented, live-verified (transparency, pulsar, zen =+focus=, tabs, and font all confirmed in the user's running daemon 2026-08-23; the minimap alone was never separately exercised)
 :DATE:     2026-08-21
+:END:
+:LOGBOOK:
+- State "Live-verified" from "Implemented"  [2026-08-23 Sun] — user confirmed
+  transparency, pulsar, and zen mode visually after a reload; centaur-tabs
+  confirmed separately via [[id:adr-tabs-new-tab-dashboard][ADR-024]]. Only the minimap went unexercised.
 :END:
 
 ** Context
@@ -3100,11 +3105,10 @@ a different machine later.
   =indent-guides=, =minimap=, =tabs=, =(zen +focus)= (done alongside this
   ADR, cross-referencing this entry, matching how ADR-021 updated it for the
   completion-engine swap).
-- Genuine gap left open: transparency, the pulsar pulse animation, and
-  zen-mode's =+focus= dimming have not been visually confirmed in the user's
-  actual running Emacs daemon — only mechanically verified (=doom doctor=
-  clean, source-level API correctness, =figlet= output correctness). The
-  user needs to restart/reload Emacs and actually look at it.
+- Gap closed 2026-08-23: transparency, the pulsar pulse, and zen mode are all
+  confirmed working in the user's running daemon (see Validation). The minimap
+  is the only piece of this ADR never separately exercised, and it is also the
+  one whose failure would be self-evident on sight.
 - The Nerd-patched font gap (plain "JetBrains Mono" instead of the
   Nerd-patched variant) is an accepted, environment-forced compromise, not a
   deliberate aesthetic choice — see Revisit when.
@@ -3126,10 +3130,28 @@ See Candidates table above.
   correction), both times "Everything seems fine, happy Emacs'ing!."
 - =figlet -f standard "$(hostname)"= output spot-checked directly against
   the real hostname.
-- Not yet done: visual confirmation in the user's real, running Emacs
-  session (restart/reload required for =doom-font=/module changes to take
-  effect) that transparency, pulsar pulses, zen =+focus= dimming, the
-  minimap, and centaur-tabs all render and behave as intended.
+- *Live-verified 2026-08-23*, after the user reloaded Emacs: transparency
+  and pulsar pulses confirmed visually by the user, and corroborated by
+  read-only =emacsclient= queries against their running daemon —
+  =alpha-background= is 92 both on the live frame and in
+  =default-frame-alist= (so new frames inherit it), the build is Cairo/X11
+  (=(featurep 'cairo)= → t, no external compositor needed),
+  =doom-font= resolved to a real "JetBrains Mono" 13 XLFD rather than
+  silently falling back, =pulsar-global-mode= is on with =pulsar-mode= active
+  in 18 buffers (off only in minibuffer/internal buffers, as expected for a
+  globalized mode), =pulsar-cyan= resolves to =#004065=, and =switch-to-buffer=
+  is present in =pulsar-pulse-functions= — the one addition this ADR made to
+  that list.
+- centaur-tabs rendering confirmed separately: see
+  [[id:adr-tabs-new-tab-dashboard][ADR-024]], which required clicking a tab to verify.
+- Zen mode confirmed working by the user the same day. Worth recording for
+  future readers: a daemon query for =writeroom-mode-hook= had errored with
+  "Symbol's value as variable is void" shortly beforehand, which was purely
+  =:ui zen= being deferred and writeroom not yet loaded in that session — a
+  lazy-loading artifact, not a fault, and the toggle worked fine when actually
+  invoked. Don't read that class of void-variable error as breakage.
+- The minimap was not separately confirmed — the one piece of this ADR still
+  resting on mechanical verification alone.
 
 ** Rollback
 - Revert =init.el= flags: disable =indent-guides=/=minimap=/=tabs=/=zen=,
