@@ -177,7 +177,7 @@
 ;;     - Smoother scrolling
 ;;     - Don't bother confirming if you want to leave emacs
 (setq delete-by-moving-to-trash t
-      scroll-margin 8
+      scroll-margin 0                  ; ultra-scroll (:ui smooth-scroll) requires 0
       scroll-conservatively 101
       confirm-kill-emacs nil)
 
