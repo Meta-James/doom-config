@@ -1818,13 +1818,16 @@ no separate binding to undo, per =config/default/+evil-bindings.el='s
 * ADR-015: Agent gains full git commit/push/history-rewrite authority, gated by per-action confirmation prompt
 :PROPERTIES:
 :ID:       adr-agent-git-authority
-:STATUS:   Accepted, live-exercised 2026-08-23 (first agent commits and push; see Validation for the one part the agent cannot observe)
+:STATUS:   Accepted, live-verified 2026-08-23 (first agent commits and push, and the confirmation prompt itself observed firing by the user)
 :DATE:     2026-08-18
 :END:
 :LOGBOOK:
 - State "Live-exercised" from "Accepted"  [2026-08-23 Sun] — first commits and
   push made by the agent under this policy: =c46b781=, =2404b35=, =32835ff=,
   then =git push origin main= (=d44ec74..32835ff=, fast-forward).
+- State "Live-verified" from "Live-exercised"  [2026-08-23 Sun] — the
+  confirmation prompt was observed firing, closing the gap the entry below
+  had left open.
 :END:
 
 ** Context
@@ -1929,17 +1932,24 @@ See Candidates table above.
   =c46b781=, =2404b35=, =32835ff=, pushed as =d44ec74..32835ff=. The
   instructional half of the policy — propose-then-await-approval, no approval
   carried forward between actions — held in practice.
-- *What this does not establish:* whether =.claude/settings.json='s =ask=
-  rules actually produced the confirmation prompt. Approval prompts are shown
-  to the user, not to the agent, so from the agent's side an auto-approved
-  command and a user-approved one are indistinguishable. The technical
-  enforcement layer therefore remains unconfirmed by this run; the user can
-  settle it in one step by telling the agent to make any trivial commit
-  *without* pre-approving it and seeing whether a prompt appears.
-- One unrelated denial did fire during the same session (a compound
+- *Technical enforcement confirmed 2026-08-23*, by the deliberate test the
+  previous version of this section proposed: the agent ran
+  =git commit --allow-empty= with no prior approval for that specific command,
+  and the user observed the confirmation prompt appear and approved it by
+  hand. So =.claude/settings.json='s =ask= rules do match and do gate in
+  practice, not merely in configuration.
+- *Method note for anyone re-testing this:* the observation has to come from
+  the user. Approval prompts render on the user's side, not the agent's, so an
+  auto-approved command and a hand-approved one are indistinguishable in the
+  agent's tool output — an agent cannot self-verify this ADR's enforcement
+  half, and should not claim to have done so.
+- The two empty commits used for the test (=cf4ad3f=, =1b03689=) were
+  discarded afterwards and never pushed.
+- One unrelated denial also fired during the same session (a compound
   =sed ... > tracked-file && git add= call, blocked by the harness's auto-mode
   classifier rather than by these =ask= rules). Noted only so a future reader
-  doesn't mistake it for evidence that this ADR's rules fired.
+  doesn't conflate the two mechanisms: the classifier blocks outright, these
+  rules prompt.
 
 ** Rollback
 Restore ADR-009's =.claude/settings.json= (=deny= block with the same five
