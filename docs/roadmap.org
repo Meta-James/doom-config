@@ -78,7 +78,7 @@ recorded in [[id:docs-inventory][inventory.org]]. Live-verified in the user's
 own interactive session: =SPC o r= opens elfeed, auto-update fires, and
 elfeed-tube transcript/follow-along all confirmed working.
 
-* Phase 4 — Org Agenda and Capture basics (implemented, not yet live-verified)
+* Phase 4 — Org Agenda and Capture basics (live-verified)
 :PROPERTIES:
 :ID:       roadmap-phase-4
 :END:
@@ -92,17 +92,20 @@ mid-scoping) a hand-rolled dailies/backlinks-buffer layer on top of Vulpea
 (installed just before this phase; its own adoption ADR was missing at the
 time and has since been backfilled as [[id:adr-vulpea-note-management][ADR-019]]).
 
-*Status as of 2026-08-18:* implemented and reasoned through against Vulpea's
-actual source and Doom's actual default keybindings, but not yet exercised
-in the user's live session — no capture run, no agenda view opened, no daily
-note or backlinks buffer actually used yet.
+*Status as of 2026-08-23:* live-verified. The user reloaded Emacs and
+exercised all four pieces in their own session — capture templates, the
+agenda view, daily-note creation/visiting, and the backlinks buffer — after
+which =doom doctor= was clean (50 modules, 158 packages). Phase complete; the
+Vulpea layer's one reasoned-but-untested risk (backlinks refreshing on both
+window-selection *and* in-window buffer change) is now confirmed in practice,
+see [[id:adr-vulpea-dailies-backlinks][ADR-018]]'s LOGBOOK.
 
 | Sub-phase                         | Status | Notes |
 |-------------------------------------+----------+---------------------------------------------------------|
-| Agenda files / TODO keywords / capture templates | Implemented | =org-agenda-files= = all of =org-directory= (user's explicit, informed choice — see [[id:adr-org-agenda-capture-basics][ADR-017]]); TODO keywords match =PROJECT.org='s own sequence; capture templates ("t"/"n"/"v") added, "v" creates a real Vulpea-indexed note. See [[id:adr-org-agenda-capture-basics][ADR-017]] |
-| Vulpea dailies                    | Implemented | =daily/YYYY-MM-DD.org= notes via =vulpea-create=, with today/pick-date/previous/next navigation. See [[id:adr-vulpea-dailies-backlinks][ADR-018]] |
-| Vulpea backlinks side buffer      | Implemented | Hand-rolled =org-roam-buffer= equivalent, right-side window, refreshes on window-selection *and* window-buffer change. See [[id:adr-vulpea-dailies-backlinks][ADR-018]] |
-| Live verification                 | Not started | Needs the user's real interactive session: run a capture, open the agenda, create/visit a daily note, toggle the backlinks buffer |
+| Agenda files / TODO keywords / capture templates | Live-verified | =org-agenda-files= = all of =org-directory= (user's explicit, informed choice — see [[id:adr-org-agenda-capture-basics][ADR-017]]); TODO keywords match =PROJECT.org='s own sequence; capture templates ("t"/"n"/"v") added, "v" creates a real Vulpea-indexed note. See [[id:adr-org-agenda-capture-basics][ADR-017]] |
+| Vulpea dailies                    | Live-verified | =daily/YYYY-MM-DD.org= notes via =vulpea-create=, with today/pick-date/previous/next navigation. See [[id:adr-vulpea-dailies-backlinks][ADR-018]] |
+| Vulpea backlinks side buffer      | Live-verified | Hand-rolled =org-roam-buffer= equivalent, right-side window, refreshes on window-selection *and* window-buffer change. See [[id:adr-vulpea-dailies-backlinks][ADR-018]] |
+| Live verification                 | Done | 2026-08-23, in the user's own session after a reload: capture templates run, agenda opened, daily note created/visited, backlinks buffer used. =doom doctor= clean afterward |
 | =docs/inventory.org= backfill      | Done | Added the =vulpea= package row that was missing since its 2026-08-18 install |
 | Vulpea-adoption ADR backfill      | Done | [[id:adr-vulpea-note-management][ADR-019]] (retroactive) records the original Vulpea-vs-org-roam decision that was never itself given an ADR |
 

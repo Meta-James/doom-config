@@ -1818,8 +1818,13 @@ no separate binding to undo, per =config/default/+evil-bindings.el='s
 * ADR-015: Agent gains full git commit/push/history-rewrite authority, gated by per-action confirmation prompt
 :PROPERTIES:
 :ID:       adr-agent-git-authority
-:STATUS:   Accepted, not yet live-verified
+:STATUS:   Accepted, live-exercised 2026-08-23 (first agent commits and push; see Validation for the one part the agent cannot observe)
 :DATE:     2026-08-18
+:END:
+:LOGBOOK:
+- State "Live-exercised" from "Accepted"  [2026-08-23 Sun] — first commits and
+  push made by the agent under this policy: =c46b781=, =2404b35=, =32835ff=,
+  then =git push origin main= (=d44ec74..32835ff=, fast-forward).
 :END:
 
 ** Context
@@ -1917,11 +1922,24 @@ See Candidates table above.
 ** Validation
 - =jq -e '.permissions.ask[]' .claude/settings.json= — valid JSON, all five
   rules present, =deny= key absent.
-- Not live-tested in this session: doing so would mean actually triggering a
-  matched git command and either approving or denying the resulting prompt,
-  which wasn't warranted just to validate this ADR. The first real
-  commit/push in this repo under the new policy is the live validation;
-  update this section (or add a =:LOGBOOK:= entry) once that happens.
+- *First real commit/push under this policy, 2026-08-23* (the live validation
+  this section previously asked for). The agent proposed each command in
+  conversation with its full text, the user approved commits and push
+  explicitly in-the-moment, and three commits plus one push went through:
+  =c46b781=, =2404b35=, =32835ff=, pushed as =d44ec74..32835ff=. The
+  instructional half of the policy — propose-then-await-approval, no approval
+  carried forward between actions — held in practice.
+- *What this does not establish:* whether =.claude/settings.json='s =ask=
+  rules actually produced the confirmation prompt. Approval prompts are shown
+  to the user, not to the agent, so from the agent's side an auto-approved
+  command and a user-approved one are indistinguishable. The technical
+  enforcement layer therefore remains unconfirmed by this run; the user can
+  settle it in one step by telling the agent to make any trivial commit
+  *without* pre-approving it and seeing whether a prompt appears.
+- One unrelated denial did fire during the same session (a compound
+  =sed ... > tracked-file && git add= call, blocked by the harness's auto-mode
+  classifier rather than by these =ask= rules). Noted only so a future reader
+  doesn't mistake it for evidence that this ADR's rules fired.
 
 ** Rollback
 Restore ADR-009's =.claude/settings.json= (=deny= block with the same five
@@ -2090,8 +2108,13 @@ anticipated.
 * ADR-017: Org Agenda and Capture basics
 :PROPERTIES:
 :ID:       adr-org-agenda-capture-basics
-:STATUS:   Accepted, implemented; not yet live-verified
+:STATUS:   Implemented, live-verified (2026-08-23 — captures and the agenda run in the user's own session)
 :DATE:     2026-08-18
+:END:
+:LOGBOOK:
+- State "Live-verified" from "Implemented"  [2026-08-23 Sun] — user reloaded
+  Emacs, ran the capture templates and opened the agenda; both behaved as
+  designed. =doom doctor= clean the same day (50 modules, 158 packages).
 :END:
 
 ** Context
@@ -2211,8 +2234,16 @@ this only changes what points at the tree, not the tree itself.
 * ADR-018: Hand-rolled Vulpea dailies and backlinks buffer
 :PROPERTIES:
 :ID:       adr-vulpea-dailies-backlinks
-:STATUS:   Accepted, implemented; not yet live-verified
+:STATUS:   Implemented, live-verified (2026-08-23 — dailies and the backlinks buffer exercised in the user's own session)
 :DATE:     2026-08-18
+:END:
+:LOGBOOK:
+- State "Live-verified" from "Implemented"  [2026-08-23 Sun] — user created and
+  visited daily notes and used the backlinks buffer. This closes the specific
+  risk this ADR's Evidence reasoned about but could not test: the buffer
+  refreshes on both triggers (window-selection change *and* in-window buffer
+  change), so a =vulpea-find= jump inside the same window updates it rather
+  than leaving stale backlinks on screen.
 :END:
 
 ** Context

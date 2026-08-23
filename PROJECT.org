@@ -198,7 +198,8 @@ ADR-012 for the full decision record.
 - [X] Update ADR-012 =:STATUS:= to =live-verified= (with a =:LOGBOOK:=
   entry) once the above is confirmed
 
-* IN-PROGRESS Phase 4 — Org Agenda and Capture basics
+* DONE Phase 4 — Org Agenda and Capture basics
+CLOSED: [2026-08-23 Sun]
 :PROPERTIES:
 :EFFORT:   2h
 :END:
@@ -230,15 +231,19 @@ full decision records.
   original Vulpea-vs-org-roam decision that had never itself gotten an ADR
   — explicit about what's genuinely known (the one-line =config.el=
   comment) versus reconstructed from Vulpea's own =docs/comparison.org= (found while scoping this phase)
-- [ ] =doom sync=/=doom doctor= clean after these changes
-- [ ] Live-verify in the user's own interactive session: run a capture
+- [X] =doom doctor= clean after these changes (2026-08-23: 50 modules, 158
+  packages, "Everything seems fine"). No =doom sync= needed — this phase
+  changed =config.el= only, no =init.el=/=packages.el= edit
+- [X] Live-verify in the user's own interactive session: run a capture
   ("t"/"n"/"v"), open the agenda (=SPC n a=), create/visit a daily note,
   toggle the backlinks buffer and confirm it refreshes on both a
-  window-switch and an in-window =vulpea-find= jump
-- [ ] Once live-verified, update ADR-017/ADR-018 =:STATUS:= together (both
-  currently "Accepted, implemented; not yet live-verified") with a
-  =:LOGBOOK:= entry each, and move this phase's =roadmap.org= status line
-  from "implemented, not yet live-verified" to "live-verified"
+  window-switch and an in-window =vulpea-find= jump — all confirmed
+  2026-08-23 after an Emacs reload
+- [X] Once live-verified, update ADR-017/ADR-018 =:STATUS:= together (both
+  now "Implemented, live-verified") with a =:LOGBOOK:= entry each, and move
+  this phase's =roadmap.org= status line from "implemented, not yet
+  live-verified" to "live-verified" — done 2026-08-23, including the
+  per-sub-phase rows in that file's status table
 
 * Backlog (untimed, not tied to a phase)
 
