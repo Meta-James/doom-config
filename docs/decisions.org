@@ -3652,3 +3652,205 @@ See Candidates table above.
 - The dashboard stops being =doom-fallback-buffer= (a different fallback, or
   the dashboard module disabled) — the "new tab and emptied frame agree"
   premise is what justifies the target choice, and it would no longer hold.
+
+* ADR-025: Calendar via Doom =:app calendar= — calfw view plus two-way org-gcal sync for both Google accounts
+:PROPERTIES:
+:ID:       adr-calendar-org-gcal
+:STATUS:   Scoped, not yet implemented
+:DATE:     2026-08-23
+:END:
+
+** Context
+"Calendar" has sat in [[id:roadmap-future][roadmap.org]]'s Future-phases list since Phase 1,
+deliberately unscoped. With Phase 4 (Org Agenda and Capture basics) now
+live-verified, the agenda exists but knows nothing about the user's real
+Google calendars, so scheduling still happens outside Emacs entirely.
+
+This entry scopes the phase; it does not implement it. Nothing here has been
+installed or run yet.
+
+Two prior decisions shape it more than anything else:
+
+- [[id:adr-org-agenda-capture-basics][ADR-017]] set =org-agenda-files= to the whole of =org-directory=
+  (=config.el:764=), so *any* org file under =~/org= is picked up by the
+  agenda automatically. A calendar file placed there needs no agenda wiring
+  at all — but equally, anything org-gcal writes there becomes agenda
+  content immediately, correct or not.
+- [[id:adr-email-mu4e][ADR-011]] already established Google OAuth for both mail accounts
+  (=mrniceguyjames@gmail.com= and =jcook@ualberta.ca=, both authorized via
+  =oama authorize google=), including the scar worth remembering: while the
+  Google Cloud consent screen was in Testing mode, refresh tokens silently
+  expired after 7 days. That was fixed by publishing the consent screen, and
+  the same OAuth client (=mail/oauth2-google-client= in =pass=) is the
+  natural credential source here — org-gcal would be its second consumer.
+
+** Decision drivers
+- User's explicit scoping answers, given after being shown the trade-offs:
+  two-way sync (not read-only), both accounts, Doom's module as-is (not
+  hand-picked packages), a dedicated org-gcal-owned directory, and sync on
+  both a manual command and agenda-open.
+- =AGENTS.md= Doom-first: prefer the module over hand-declared packages, even
+  when the module bundles something not strictly needed.
+- =docs/standards.org= =std-no-scope-creep=: scope to a working calendar view
+  plus sync for the two accounts that already exist. Not in scope: CalDAV for
+  non-Google sources, the =tricca=/Gandi account (still blocked, see ADR-011),
+  meeting-invite handling from mu4e, or org-gcal-driven event *creation*
+  workflows beyond what plain org editing gives.
+- =.claude/rules/security.md=: credentials come from =pass= via
+  =+pass-get-secret=, never interpolated into shell strings, never printed.
+- The =:tools pass= =+auth= arrangement from [[id:adr-gptel-rework][ADR-006]] is the established
+  pattern for exactly this and should be reused, not re-invented.
+
+** Candidates
+| Area | Candidate | Fate |
+|------+-----------+------|
+| Overall ambition | Read-only view of Google events in calfw | Rejected (user's explicit choice) — safest, but leaves scheduling itself outside Emacs, which is the actual problem |
+| Overall ambition | Local org only, no Google at all | Rejected — smallest phase, but a calendar view of what the agenda already knows adds little |
+| Overall ambition | *Two-way org-gcal sync* | *Chosen* (user's explicit choice, made with the overwrite risk stated) — events pull into org and edits push back |
+| Packages | Doom =:app calendar= module as-is (calfw, calfw-org/cal/ical, org-gcal) | *Chosen* — Doom-first; org-gcal is wanted here anyway, so the bundling objection is moot |
+| Packages | Hand-declare calfw/calfw-org in =packages.el=, skip org-gcal | Rejected — breaks the Doom-first rule for no benefit once two-way sync is in scope |
+| Accounts | =personal= only | Rejected (user chose both) |
+| Accounts | *Both =personal= and =ualberta=* | *Chosen* — with a known risk that =ualberta= is Google Workspace, whose admins can restrict third-party API access independently of the consent screen; mail working there does not guarantee calendar will |
+| File layout | Single =~/org/calendar.org= for both accounts | Rejected — org-gcal maps one calendar id per file, so two accounts in one file is awkward and makes per-account rollback impossible |
+| File layout | Sync into the existing =todo.org= | Rejected outright — org-gcal rewrites the files it owns; pointing it at a hand-edited file is how real notes get destroyed |
+| File layout | *Dedicated =~/org/calendar/= with =personal.org= and =ualberta.org=* | *Chosen* — org-gcal owns the directory exclusively, nothing hand-written lives there, and per-account rollback is just deleting one file. Picked up by the agenda automatically via ADR-017 |
+| Sync trigger | Manual command only | Rejected (user chose more) — most predictable, but requires remembering to sync |
+| Sync trigger | *Manual command plus auto-sync on agenda open* | *Chosen* (user's explicit choice, made after being told it can delay =SPC n a=) — mirrors the elfeed auto-update-on-open pattern from [[id:adr-rss-elfeed][ADR-012]]; needs the mitigation in Consequences |
+| Sync trigger | Background periodic timer | Rejected — a timer writing to org files while the user may be editing them is the riskiest option under a two-way sync |
+| Credentials | Reuse the existing =mail/oauth2-google-client= pass entry | *Chosen (provisional)* — same Google Cloud OAuth client, already published; needs the Calendar scope added to that client's consent screen |
+| Credentials | Register a second, calendar-only OAuth client | Rejected for now — doubles the consent-screen maintenance that ADR-011 already showed to be the fragile part |
+
+** Evidence
+- *Doom's module read directly*
+  (=~/.config/emacs/sources/doom+/modules/app/calendar/=): =packages.el=
+  declares =calfw= (pinned =24fa167a=) with =calfw-org=/=calfw-cal=/=calfw-ical=,
+  plus =org-gcal= (pinned =7304b592=). =config.el= already provides a full
+  evil keymap for =calfw-calendar-mode-map= and =calfw-details-mode-map=
+  (=D=/=M=/=T=/=W= view switching, =hjkl= navigation, =gr= refresh, =t= today),
+  marks calfw buffers real, and defvars =org-gcal-dir= and =org-gcal-token-file=
+  (=token.gpg= under Doom's profile cache dir). So keybindings and token
+  placement are already handled upstream — this phase should not reimplement
+  them.
+- *Module is currently disabled*: =init.el:187= has =;;calendar= commented out
+  under =:app=.
+- *Agenda pickup needs no work*: =config.el:764= sets
+  =(setq org-agenda-files (list org-directory))=, and =org-directory= is
+  =~/org/= (=config.el:60=). =~/org/= currently holds =daily/=, =doom.org=,
+  =marxism-notes=, =mtg=, =personal=, =test=, =todo.org=, =work= — no
+  =calendar/= yet, so the proposed directory does not collide with anything.
+- *Both accounts are Google-backed*: [[id:adr-email-mu4e][ADR-011]] records =oama authorize google=
+  runs for both =mrniceguyjames@gmail.com= and =jcook@ualberta.ca=, against a
+  single Google Cloud OAuth client stored as =mail/oauth2-google-client=,
+  whose consent screen was moved from Testing to In-production (unverified) on
+  2026-08-06 after the 7-day refresh-token expiry regression.
+- *=gpg= is present* at =/usr/bin/gpg=, which =org-gcal-token-file='s =.gpg=
+  storage requires.
+
+*Gaps in this evidence, stated rather than papered over:*
+
+- *org-gcal's actual API was not verified.* The package is not installed
+  (=~/.config/emacs/.local/straight/repos/= has neither =org-gcal= nor
+  =calfw=), and the agent's sandbox cannot reach =github.com= or =melpa.org=
+  to read its source (the same restriction documented in [[id:adr-ui-rice-pass][ADR-022]]'s
+  Evidence). So every org-gcal variable named in this ADR —
+  =org-gcal-client-id=, =org-gcal-client-secret=, =org-gcal-fetch-file-alist=,
+  =org-gcal-sync= — is *expected*, not confirmed, API. First implementation
+  step is to install and read the source, and correct this ADR if it differs.
+  ADR-022 has direct precedent for why this matters: =pulsar-pulse= was
+  written into the config from memory and turned out to be obsolete in the
+  installed version.
+- *The =pass= entry was not verified to exist by this agent.* =pass= is not on
+  =PATH= in the agent's sandbox and =~/.password-store= is not visible to it,
+  so =mail/oauth2-google-client= is taken from ADR-011's record rather than
+  checked. Verify before relying on it.
+- *Whether =ualberta='s Workspace tenant permits third-party Calendar API
+  access is unknown* and cannot be determined from here.
+
+** Decision
+Scope Phase 5 (Calendar) as:
+
+1. =init.el=: enable =:app calendar=, then =doom sync=.
+2. Google Cloud: add the Calendar scope to the existing OAuth client behind
+   =mail/oauth2-google-client=; re-authorize both accounts. User action, not
+   agent-doable.
+3. =config.el=: set =org-gcal-client-id=/=org-gcal-client-secret= via
+   =+pass-get-secret= from that entry (lazily, no value stored in a variable,
+   per [[id:adr-gptel-rework][ADR-006]]'s pattern), and map
+   =org-gcal-fetch-file-alist= to =~/org/calendar/personal.org= and
+   =~/org/calendar/ualberta.org=.
+4. =config.el=: a leader binding for manual =org-gcal-sync= (always syncs),
+   plus an agenda-open hook gated by a staleness guard — a last-sync
+   timestamp and a minimum-interval variable, skipping the fetch when the
+   data is fresh enough. The threshold value is an implementation detail to
+   settle with the user during the phase, not fixed here.
+5. Live-verify in the user's own session: view renders, events pull down for
+   both accounts, an edit pushes back, and a token survives past the ~7-day
+   mark that bit ADR-011.
+
+** Consequences
+- =~/org/calendar/= becomes org-gcal-owned. Nothing hand-written may live
+  there — that ownership boundary is the entire safety argument for choosing
+  two-way sync, and it holds only as long as it is respected.
+- Auto-sync on agenda open puts a network call in front of =SPC n a=, a
+  binding used many times a day. A staleness guard is therefore *required*,
+  not optional (user's explicit position when this was raised): the
+  agenda-open hook must record the last successful sync time and skip the
+  fetch if it is under a threshold, so opening the agenda repeatedly costs one
+  network call rather than one per open. The manual sync command stays
+  unguarded — an explicit request should always sync. If org-gcal offers an
+  async fetch path, prefer it for the hook as well, so a hung call degrades to
+  stale data instead of a frozen agenda.
+- The Google OAuth client gains a second consumer. A scope change or
+  re-authorization now affects mail *and* calendar together, so an ADR-011-style
+  token regression would break both at once — a real coupling cost of reusing
+  one client, accepted deliberately over doubling consent-screen maintenance.
+- Two-way sync makes this the first part of the config that writes to a
+  remote service rather than to local, git-recoverable files. The blast radius
+  is real but modest, and worth stating precisely rather than dramatically:
+  Google Calendar keeps deleted events in Trash for ~30 days and org-gcal's
+  writes are ordinary event mutations, so a bad sync is usually recoverable by
+  hand. The part that is *not* recoverable is narrower — an event with other
+  attendees emails them on every change, so a spurious edit or delete notifies
+  real people, and restoring the event does not unsend that. Solo events are
+  cheap to get wrong; shared ones are not.
+- calfw's keybindings arrive from Doom's module, so =docs/ai/keybindings.org=
+  is not the right home for them; only the new leader binding for sync is
+  this repo's own.
+
+** Rejected alternatives
+See the Candidates table above, which carries the fate and reason for each.
+
+** Validation
+Nothing to validate yet — this ADR is scope, not implementation. The phase is
+done when, in the user's own session: calfw renders both calendars, an event
+created in Google appears in org after a sync, an edit made in org appears in
+Google, =SPC n a= is not noticeably slower, =doom doctor= is clean, and a
+refresh token has survived past ~7 days (the specific failure ADR-011 hit).
+
+** Rollback
+- =init.el=: re-comment =;;calendar= under =:app=, then =doom sync=.
+- =config.el=: remove the org-gcal credential/file-alist block, the sync
+  binding, and the agenda hook.
+- Delete =~/org/calendar/=. Because org-gcal owns that directory exclusively,
+  deleting it cannot lose hand-written content — the reason the layout was
+  chosen.
+- Per-account rollback is finer-grained: drop one file from
+  =org-gcal-fetch-file-alist= and delete it.
+- Google-side: remove the Calendar scope from the OAuth client's consent
+  screen. Mail keeps working, since it uses a different scope on the same
+  client.
+
+** Revisit when
+- org-gcal's real API turns out to differ from what this ADR assumes — correct
+  this entry rather than silently coding around it.
+- =ualberta='s Workspace admins block Calendar API access, in which case the
+  phase drops to =personal= only and =ualberta= joins =tricca= as a
+  provider-blocked account in [[id:adr-email-mu4e][ADR-011]]'s sense.
+- The agenda becomes noticeably slower to open — revisit the auto-sync
+  trigger before revisiting anything else, since it is the one piece added
+  against a stated performance concern.
+- A non-Google calendar source appears (a CalDAV server, an institutional
+  Exchange calendar), at which point =calfw-ical= and a CalDAV path enter
+  scope and this decision's Google-only assumption needs re-examining.
+- The =tricca=/Gandi account becomes unblocked, since it would need an
+  entirely different sync mechanism from org-gcal.

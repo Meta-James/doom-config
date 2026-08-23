@@ -245,6 +245,54 @@ full decision records.
   live-verified" to "live-verified" — done 2026-08-23, including the
   per-sub-phase rows in that file's status table
 
+* TODO Phase 5 — Calendar
+:PROPERTIES:
+:EFFORT:   3h
+:END:
+Promoted from [[file:docs/roadmap.org][docs/roadmap.org]]'s "Calendar" Future-phases bullet and scoped
+2026-08-23 per =docs/standards.org= =std-no-scope-creep=. See
+[[file:docs/decisions.org][docs/decisions.org]] ADR-025 for the full decision record. Nothing installed yet.
+
+- [ ] *Do this first:* install =:app calendar= and read org-gcal's actual
+  source. ADR-025's Evidence flags every org-gcal variable it names
+  (=org-gcal-client-id=/=-client-secret=/=-fetch-file-alist=/=org-gcal-sync=)
+  as *expected, not confirmed* — the package isn't installed and the agent's
+  sandbox can't reach github/melpa to check. Correct ADR-025 if it differs
+  (ADR-022's obsolete =pulsar-pulse= is the precedent for why)
+- [ ] =init.el=: uncomment =calendar= under =:app= (currently =init.el:187=),
+  then =doom sync=
+- [ ] Google Cloud (user action, not agent-doable): add the Calendar scope to
+  the existing OAuth client behind the =mail/oauth2-google-client= pass entry,
+  re-authorize both accounts. Verify that pass entry actually exists — the
+  agent could not check it (=pass= not on its =PATH=)
+- [ ] =config.el=: =org-gcal-client-id=/=-client-secret= via
+  =+pass-get-secret= (lazy, no value stored in a variable, per ADR-006), and
+  =org-gcal-fetch-file-alist= mapping the two accounts to
+  =~/org/calendar/personal.org= and =~/org/calendar/ualberta.org=
+- [ ] =config.el=: leader binding for manual =org-gcal-sync= (always syncs,
+  unguarded — an explicit request should always fetch)
+- [ ] =config.el=: agenda-open hook gated by a *required* staleness guard —
+  last-sync timestamp plus a minimum-interval variable, so repeatedly opening
+  the agenda costs one network call, not one per open. Settle the threshold
+  value with the user during the phase. Prefer org-gcal's async path here if
+  it has one, so a hung call degrades to stale data rather than a frozen
+  agenda
+- [ ] =doom doctor= clean
+- [ ] Live-verify in the user's own session: calfw renders both calendars, an
+  event created in Google appears in org after sync, an org edit pushes back
+  to Google, =SPC n a= not noticeably slower
+- [ ] Confirm a refresh token survives past the ~7-day mark that bit ADR-011
+  (a calendar-week-later check, not same-day)
+- [ ] Once live-verified, update ADR-025 =:STATUS:= with a =:LOGBOOK:= entry
+  and move the =roadmap.org= Phase 5 status line from "scoped, not
+  implemented" to "live-verified"
+
+Standing risk to keep in view: this is the first part of the config that
+writes to a remote service rather than to local git-recoverable files. Mostly
+recoverable — Google keeps deleted events in Trash ~30 days — but events with
+other attendees notify them on every change, and that mail can't be unsent.
+=~/org/calendar/= is org-gcal-owned; nothing hand-written goes in there.
+
 * Backlog (untimed, not tied to a phase)
 
 ** DONE Migrate claude-code-ide.el's terminal backend from vterm to ghostel

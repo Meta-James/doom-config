@@ -109,6 +109,41 @@ see [[id:adr-vulpea-dailies-backlinks][ADR-018]]'s LOGBOOK.
 | =docs/inventory.org= backfill      | Done | Added the =vulpea= package row that was missing since its 2026-08-18 install |
 | Vulpea-adoption ADR backfill      | Done | [[id:adr-vulpea-note-management][ADR-019]] (retroactive) records the original Vulpea-vs-org-roam decision that was never itself given an ADR |
 
+* Phase 5 — Calendar (scoped, not implemented)
+:PROPERTIES:
+:ID:       roadmap-phase-5
+:END:
+
+Promoted from the "Calendar" Future-phases bullet below and scoped 2026-08-23;
+see [[id:adr-calendar-org-gcal][ADR-025]] for the full decision record. Nothing is installed yet.
+
+Shape: Doom's =:app calendar= module (calfw for the view, org-gcal for sync),
+two-way sync for both existing Google accounts, into a dedicated
+org-gcal-owned =~/org/calendar/= directory, triggered by a manual command and
+on agenda open.
+
+Deliberately out of scope, per =docs/standards.org= =std-no-scope-creep=:
+CalDAV or non-Google sources, the still-blocked =tricca=/Gandi account,
+meeting-invite handling from mu4e, and any event-creation workflow beyond
+plain org editing.
+
+| Sub-phase | Status | Notes |
+|-----------+--------+-------|
+| Enable =:app calendar=, =doom sync= | Not started | Module currently commented out at =init.el:187= |
+| Google Cloud: add Calendar scope, re-authorize both accounts | Not started | User action — reuses the existing =mail/oauth2-google-client= OAuth client from [[id:adr-email-mu4e][ADR-011]], whose consent screen is already published |
+| =config.el=: credentials + =org-gcal-fetch-file-alist= | Not started | Via =+pass-get-secret=, following [[id:adr-gptel-rework][ADR-006]]'s lazy no-value-stored pattern |
+| =config.el=: manual sync binding + agenda-open hook | Not started | Needs a staleness guard so a slow Google call cannot hang =SPC n a= — see [[id:adr-calendar-org-gcal][ADR-025]] Consequences |
+| Verify org-gcal's real API against installed source | Not started | ADR-025 names its expected variables as *unverified* — the package could not be read from the agent's sandbox. Do this first |
+| Live verification | Not started | View renders, events pull for both accounts, an org edit pushes back, agenda not noticeably slower, =doom doctor= clean, and a token survives past ~7 days |
+
+Known risks going in: this is the first part of the config that writes to a
+remote service rather than to local git-recoverable files — though modestly
+so, since Google keeps deleted events in Trash ~30 days; the sharp edge is
+events with other attendees, which email everyone on each change.
+=ualberta='s Workspace tenant may block third-party Calendar API access
+regardless of the consent screen, and the shared OAuth client now couples mail
+and calendar together.
+
 * Future phases (named, not implemented)
 :PROPERTIES:
 :ID:       roadmap-future
@@ -119,7 +154,6 @@ scheduled or scoped yet.
 
 - Git and code review depth beyond Magit/Ediff
 - Documentation and publishing workflows
-- Calendar
 - Communications (IRC, social feeds, etc.) — split out from the old bundled
   "RSS and communications" bullet once RSS itself was scoped; see Phase 3
   above and [[id:adr-rss-elfeed][ADR-012]]'s Context.
