@@ -2485,9 +2485,7 @@ on top of them.
 * ADR-020: =SPC o l= external-app launcher, xdotool-based raise-or-launch
 :PROPERTIES:
 :ID:       adr-app-launcher
-:STATUS:   Implemented, live-verified (Firefox confirmed directly; Discord/
-           VLC share the same =my/launch-or-focus= mechanism, calc/proced
-           are plain built-in Emacs commands — not separately retested)
+:STATUS:   Implemented, live-verified (Firefox confirmed directly; Discord/VLC share the same =my/launch-or-focus= mechanism, calc/proced are plain built-in Emacs commands — not separately retested)
 :DATE:     2026-08-13
 :END:
 :LOGBOOK:
@@ -2708,14 +2706,10 @@ depends on either.
 - The user wants more apps added to =SPC o l=, or KiCad (or an EDA
   alternative) actually gets installed on this machine.
 
-* ADR-021: Migrate in-buffer completion from Company to Corfu; scope the
-  "one completion engine" rule per axis
+* ADR-021: Migrate in-buffer completion from Company to Corfu; scope the "one completion engine" rule per axis
 :PROPERTIES:
 :ID:       adr-corfu-migration
-:STATUS:   Implemented, partially live-verified (TAB-precedence mechanics
-           confirmed in an isolated daemon with simulated overlays; real
-           model-backed Copilot suggestions and real corfu popups from actual
-           LSP/dabbrev candidates not separately re-exercised — see Validation)
+:STATUS:   Implemented, partially live-verified (TAB-precedence mechanics confirmed in an isolated daemon with simulated overlays; real model-backed Copilot suggestions and real corfu popups from actual LSP/dabbrev candidates not separately re-exercised — see Validation)
 :DATE:     2026-08-18
 :END:
 :LOGBOOK:
@@ -2905,14 +2899,10 @@ would still be independently true even under Company).
   amendment to this one, since it's a different decision (adding an engine)
   from this one (swapping one deprecated engine for its replacement).
 
-* ADR-022: UI "rice" pass — font, transparency, cursor pulses, zen/indent-
-  guides/minimap/tabs modules, dynamic dashboard banner
+* ADR-022: UI "rice" pass — font, transparency, cursor pulses, zen/indent-guides/minimap/tabs modules, dynamic dashboard banner
 :PROPERTIES:
 :ID:       adr-ui-rice-pass
-:STATUS:   Implemented, partially live-verified (doom sync/doctor clean,
-           figlet banner output spot-checked against the real hostname;
-           transparency/pulsar/zen-focus visuals not yet confirmed in the
-           user's actual running daemon)
+:STATUS:   Implemented, partially live-verified (doom sync/doctor clean, figlet banner output spot-checked against the real hostname; transparency/pulsar/zen-focus visuals not yet confirmed in the user's actual running daemon)
 :DATE:     2026-08-21
 :END:
 
