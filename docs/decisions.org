@@ -3077,6 +3077,12 @@ a different machine later.
 - The Nerd-patched font gap (plain "JetBrains Mono" instead of the
   Nerd-patched variant) is an accepted, environment-forced compromise, not a
   deliberate aesthetic choice — see Revisit when.
+- This ADR adopted the =:ui tabs= module but decided nothing about how tabs
+  *behave*. The new-tab target (Doom dashboard instead of an =Untitled=
+  buffer) and the tab-management keybindings were decided separately in
+  [[id:adr-tabs-new-tab-dashboard][ADR-024]], which also confirms centaur-tabs renders correctly in the
+  user's real session — closing that one item from this ADR's open visual-
+  confirmation gap (transparency, pulsar, zen =+focus= remain unconfirmed).
 
 ** Rejected alternatives
 See Candidates table above.
@@ -3385,3 +3391,201 @@ Each piece is independently reversible:
   (likely by pointing the systemd user environment at the nvm build).
 - =mattpocock-skills= is updated past =1.2.3=, which would reset the
   =disable-model-invocation= flags discussed alongside this work.
+
+* ADR-024: centaur-tabs — new tab opens the Doom dashboard; add tab-management keybindings
+:PROPERTIES:
+:ID:       adr-tabs-new-tab-dashboard
+:STATUS:   Implemented, live-verified (user clicked the =+= button and exercised the new bindings in their own session, 2026-08-23)
+:DATE:     2026-08-23
+:END:
+
+** Context
+[[id:adr-ui-rice-pass][ADR-022]] enabled Doom's =:ui tabs= module (centaur-tabs) as part of the
+UI rice pass, but recorded no decision about how tabs actually *behave* — it
+scoped only to turning the module on. Two gaps surfaced once the module was
+in daily use:
+
+1. Clicking the =+= button at the right end of the tab bar opens a blank
+   =Untitled= buffer with =buffer-offer-save= set. That buffer has no
+   relation to anything else in this config: it isn't the scratch buffer,
+   isn't the dashboard, and prompts to save on kill. The user wanted the
+   dashboard there instead — it is already =doom-fallback-buffer=, so a new
+   tab and an emptied frame would then agree on what "nothing open" looks
+   like.
+2. centaur-tabs ships no keybindings of its own, and Doom's =:ui tabs=
+   module adds only =gt=/=gT= (=+tabs:next-or-goto=/=+tabs:previous-or-goto=,
+   which take a count — =4gt= jumps to the 4th visible tab). Every other tab
+   operation — jump-to-arbitrary-tab, reorder, switch group, close the rest
+   — needed =M-x=.
+
+** Decision drivers
+- =AGENTS.md= Doom-first: prefer module-provided mechanisms and Doom's own
+  hooks/vars over reimplementation; use =after!=/=map!=, not raw
+  =define-key=/=eval-after-load=.
+- =AGENTS.md= Evil-first: new bindings must fit Doom's modal conventions
+  (=g=-prefixed normal-state operators, leader-prefixed commands under the
+  category they belong to), not fight them.
+- Both the mouse (=+= button) and the interactive-command path must land in
+  the same place — a config where clicking and =M-x= diverge is worse than
+  either behavior alone.
+- Don't shadow a binding the user actually uses. Shadowing something they
+  don't is fine and is the point of a personal config.
+- =docs/standards.org= =std-no-scope-creep=: this is a behavior/binding pass
+  over an already-adopted module, not an occasion to restyle the tab bar.
+
+** Candidates
+| Area | Candidate | Fate |
+|------+-----------+------|
+| New-tab target | Leave the stock =Untitled= buffer | Rejected — unrelated to anything else in this config, and prompts to save on kill (=buffer-offer-save t=) |
+| New-tab target | Doom's scratch buffer (=doom/open-scratch-buffer=) | Rejected — the dashboard is already this config's =doom-fallback-buffer=; sending new tabs to scratch would create a *second* "nothing open" answer |
+| New-tab target | *Doom dashboard* via =+dashboard/open= | *Chosen* — agrees with =doom-fallback-buffer=, and =+dashboard/open= is Doom's own public autoloaded entry point |
+| Interception point | Rebind only the interactive command in =map!= and leave the internals alone | Rejected — the =+= button doesn't go through any user binding; =centaur-tabs-line-format--new-button= wires the mouse event to =centaur-tabs-new-tab--button=, which calls =centaur-tabs--create-new-tab= directly. Rebinding only the command would leave click and =M-x= divergent |
+| Interception point | =advice-add ... :override= on =centaur-tabs--create-new-tab= | *Chosen* — the single chokepoint both entry points funnel through, so one override covers mouse and command together |
+| Tab bar on the dashboard | Keep Doom's =+tabs-disable-centaur-tabs-mode-maybe-h= as-is | Rejected — it hides the tab bar in dashboard buffers, i.e. exactly when the new tab opens, leaving no visible way back to the other tabs. Self-defeating for a button whose whole job is opening a tab |
+| Tab bar on the dashboard | Remove that hook from =+dashboard-mode-hook= | *Chosen* |
+| Tab bar on the dashboard | Remove it from the deprecated =+doom-dashboard-mode-hook= too | Not done — nothing in current Doom runs that deprecated hook name, so removing from =+dashboard-mode-hook= alone is sufficient (see Evidence) |
+| Jump-to-tab binding | =ga= (shadows evil's =what-cursor-position=) | *Chosen* — =what-cursor-position= is a debugging curiosity, tab-jumping is a per-minute operation; =M-x what-cursor-position= and =C-x == both still reach it |
+| Reorder-tab bindings | =g<= / =g>= | *Chosen* — both unbound in evil and in Doom (see Evidence), and the angle direction matches the motion |
+| New-tab leader placement | =SPC t= (toggles) | Rejected — opening a tab isn't a toggle |
+| New-tab leader placement | =SPC b t= (buffers) | *Chosen* — a centaur tab *is* a buffer, so it belongs next to =SPC b N= (new empty buffer) |
+
+** Evidence
+- *Both entry points confirmed to share one chokepoint, read from source*
+  (=~/.config/emacs/.local/straight/repos/centaur-tabs=): the mouse path is
+  =centaur-tabs-functions.el:637-641= (=centaur-tabs-new-tab--button=,
+  which selects the event's window then calls =centaur-tabs--create-new-tab=),
+  and the target itself is =centaur-tabs-functions.el:1367-1381=. A
+  repo-wide grep for =centaur-tabs--create-new-tab= returns exactly those two
+  call sites plus the =defun= — no third path, so a single =:override= is
+  sufficient.
+- *What the stock behavior actually is*: =centaur-tabs--create-new-tab= is
+  context-aware — =eshell-mode= → =(eshell t)=, =vterm-mode= → =(vterm t)=,
+  =term-mode= → =(ansi-term "/bin/bash")=, =eww-mode= → =eww= with a prefix
+  arg — and falls through to =centaur-tabs--create-new-empty-buffer=
+  (=centaur-tabs-functions.el:1359-1365=), which is the =Untitled= buffer
+  with =buffer-offer-save t=. The =:override= discards that context-awareness
+  deliberately (see Consequences).
+- *The dashboard-hook conflict, read from Doom's own module*
+  (=~/.config/emacs/sources/doom+/modules/ui/tabs/config.el=): the module
+  registers =+tabs-disable-centaur-tabs-mode-maybe-h= on
+  =+dashboard-mode-hook=, =+doom-dashboard-mode-hook= (marked =DEPRECATED= in
+  that file), and =+popup-buffer-mode-hook=; the function calls
+  =(centaur-tabs-local-mode)= when the mode is on — and =centaur-tabs-local-mode='s
+  *on* state means "hide the bar in this buffer". So without removing it the
+  bar would vanish the moment the new tab opened.
+- *The dashboard is a singleton buffer*: =+dashboard-name= is ="*doom*"=
+  (=ui/dashboard/config.el:7=) and =+dashboard/open=
+  (=ui/dashboard/autoload.el:9-14=) does =(switch-to-buffer (doom-fallback-buffer))=
+  then =(+dashboard-reload t)= — so repeated clicks select the existing
+  dashboard tab rather than stacking up new ones. Deliberate, not a
+  side effect that needs working around.
+- *Binding-collision check, done against real sources rather than assumed*:
+  =ga= is =what-cursor-position= in evil's own =evil-maps.el:68= — a real
+  shadow, accepted knowingly. =g<= and =g>= return no hits in evil-maps.el
+  or anywhere under Doom's modules — genuinely unbound. Doom's =SPC b= map
+  (=modules/config/default/+evil-bindings.el:393-425=) has =t=, =T=, and
+  lowercase =o= all free; note that Doom binds *uppercase* =SPC b O= to
+  =doom/kill-other-buffers=, so the new =SPC b o= ("kill other tabs in
+  group") sits directly beside its buffer-level analogue rather than
+  clobbering it.
+- *What Doom already provided, so it wasn't re-added*:
+  =ui/tabs/autoload.el= defines =+tabs:next-or-goto=/=+tabs:previous-or-goto=
+  as count-taking =evil-define-command='s, and =editor/evil/config.el:538=
+  binds =gt=. Those were left untouched.
+- *=centaur-tabs-ace-jump= arg semantics read from source*
+  (=centaur-tabs-interactive.el:389-402=): plain call jumps, =C-u= swaps the
+  current tab with the selected one, =C-u C-u= closes the selected tab —
+  which is what the inline comment on the =ga= binding in =config.el=
+  records.
+- *Live verification*: the user exercised this in their own interactive
+  session on 2026-08-23 — the =+= button opens the dashboard with the tab bar
+  still visible, and the new bindings work.
+
+** Decision
+In =config.el= (lines 281-331), inside an =(after! centaur-tabs ...)= block:
+
+- Define =+my/centaur-tabs-new-tab-dashboard=, calling
+  =(+dashboard/open (selected-frame))=, and install it with
+  =(advice-add 'centaur-tabs--create-new-tab :override #'...)= so the =+=
+  button and the interactive command both land on the dashboard.
+- =(remove-hook '+dashboard-mode-hook #'+tabs-disable-centaur-tabs-mode-maybe-h)=
+  so the tab bar stays visible in the buffer the new tab lands in.
+
+And in a =(map! :after centaur-tabs ...)= block:
+
+- Normal state: =ga= → =centaur-tabs-ace-jump=, =g<= →
+  =centaur-tabs-move-current-tab-to-left=, =g>= →
+  =centaur-tabs-move-current-tab-to-right=.
+- Leader, under =SPC b=: =t= → =centaur-tabs--create-new-tab= ("New tab
+  (dashboard)"), =T= → =centaur-tabs-switch-group=, =o= →
+  =centaur-tabs-kill-other-buffers-in-current-group=.
+
+No =init.el=/=packages.el= change — centaur-tabs was already installed and
+pinned by =:ui tabs= ([[id:adr-ui-rice-pass][ADR-022]]).
+
+** Consequences
+- The stock context-awareness of =centaur-tabs--create-new-tab= is gone: a
+  new tab from an =eshell=/=term=/=eww= buffer now opens the dashboard rather
+  than a second shell/browser. The =vterm= branch is moot in this config
+  anyway ([[id:adr-terminal-backend-ghostel][ADR-014]] removed vterm entirely, and
+  centaur-tabs has no ghostel branch), but the eshell/eww cases are a real,
+  knowingly-accepted loss — revisit if the user starts wanting them.
+- This config now carries an =advice-add ... :override= on a *private*
+  (double-dash) upstream function. That is the most upgrade-brittle shape in
+  this repo: a rename or signature change in centaur-tabs silently
+  reintroduces the =Untitled= behavior rather than erroring. Mitigated for
+  now by Doom pinning centaur-tabs (=5ec350da6cacc34ac0efaac17d6ac5031ef82bd4=)
+  — see Revisit when.
+- Removing =+tabs-disable-centaur-tabs-mode-maybe-h= from
+  =+dashboard-mode-hook= means the tab bar is now visible on *every*
+  dashboard, not only dashboards reached via the =+= button. That's the
+  intended trade; popups still hide the bar, since that hook remains on
+  =+popup-buffer-mode-hook= untouched.
+- =ga= no longer runs =what-cursor-position= in normal state. =C-x == and
+  =M-x= still reach it.
+- Fills the behavior/binding gap [[id:adr-ui-rice-pass][ADR-022]] left open — that ADR adopted the
+  tabs module without deciding how tabs behave. It also settles ADR-022's
+  open "centaur-tabs not yet visually confirmed" item as a side effect: tabs
+  demonstrably render, since the user clicked one.
+
+** Rejected alternatives
+See Candidates table above.
+
+** Validation
+- Live-verified by the user in their own interactive session, 2026-08-23: the
+  =+= button opens the Doom dashboard (not =Untitled=), the tab bar stays
+  visible there, and the new bindings behave as described.
+- Source-level checks in Evidence above: single-chokepoint confirmation via
+  grep over centaur-tabs' whole source, hook conflict read from Doom's
+  =:ui tabs= module, and collision checks for =ga=/=g<=/=g>=/=SPC b t T o=
+  against evil's and Doom's actual keymap definitions.
+- No =doom sync= run and no =doom doctor= re-run: this is a =config.el=-only
+  change with no module, package, or pin change, which is outside the scope
+  of =AGENTS.md='s "after any =init.el=/=packages.el= change" /"after any
+  module or package change" rules. Stated explicitly rather than left to be
+  inferred.
+
+** Rollback
+- Delete the =(after! centaur-tabs ...)= and =(map! :after centaur-tabs ...)=
+  blocks from =config.el= (lines 281-331). That restores the stock
+  =Untitled=-buffer new tab, Doom's bar-hiding on the dashboard, and evil's
+  =ga=; =gt=/=gT= are Doom's and are unaffected either way.
+- Partial rollback is safe and independent: dropping just the =advice-add=
+  (and its =remove-hook=) keeps the bindings, and dropping just the =map!=
+  block keeps the dashboard behavior.
+
+** Revisit when
+- Doom unpins or bumps centaur-tabs past
+  =5ec350da6cacc34ac0efaac17d6ac5031ef82bd4= — re-check that
+  =centaur-tabs--create-new-tab= still exists under that name and is still
+  the only path the =+= button takes, since a silent rename degrades to the
+  old =Untitled= behavior with no error.
+- Doom's =:ui tabs= module grows its own new-tab command or binding set
+  upstream — prefer the module's version over this local override, per the
+  Doom-first rule.
+- The user starts using eshell or eww tabs and wants context-aware new-tab
+  back — at that point the =:override= should become a conditional wrapper
+  (dashboard only in the fall-through branch) rather than a blanket replacement.
+- The dashboard stops being =doom-fallback-buffer= (a different fallback, or
+  the dashboard module disabled) — the "new tab and emptied frame agree"
+  premise is what justifies the target choice, and it would no longer hold.

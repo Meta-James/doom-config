@@ -278,6 +278,58 @@
 (setq +dashboard-ascii-banner-fn #'+my/dashboard-hostname-banner-fn)
 ;; --- end rice pass ---------------------------------------------------------
 
+;; centaur-tabs' new-tab button (the `+' at the right end of the tab bar) and
+;; its interactive equivalent both funnel through
+;; `centaur-tabs--create-new-tab', which opens a blank "Untitled" buffer.
+;; Override that single chokepoint so both entry points land on the Doom
+;; dashboard instead -- the dashboard is already this config's fallback buffer
+;; (`doom-fallback-buffer'), so a new tab and an emptied frame agree on what
+;; "nothing open" looks like.
+;;
+;; The dashboard is a singleton buffer (`+dashboard-name', "*doom*"), so this
+;; selects the existing dashboard tab rather than stacking up new ones; that's
+;; deliberate, since `+dashboard-reload' renders into that one buffer.
+(after! centaur-tabs
+  (defun +my/centaur-tabs-new-tab-dashboard (&rest _)
+    "Open the Doom dashboard instead of an Untitled buffer."
+    (interactive)
+    (+dashboard/open (selected-frame)))
+  (advice-add 'centaur-tabs--create-new-tab :override
+              #'+my/centaur-tabs-new-tab-dashboard)
+
+  ;; Doom's `:ui tabs' module installs
+  ;; `+tabs-disable-centaur-tabs-mode-maybe-h' on `+dashboard-mode-hook'; it
+  ;; *enables* `centaur-tabs-local-mode' there, whose on-state means "hide
+  ;; the bar in this buffer". Without removing it the tab bar would vanish
+  ;; the instant the new tab opens, leaving no visible way back to the other
+  ;; tabs -- self-defeating for a button whose whole job is opening a tab.
+  ;;
+  ;; The module adds the same function to `+doom-dashboard-mode-hook' too,
+  ;; but nothing in Doom runs that deprecated name any more, so removing it
+  ;; from `+dashboard-mode-hook' alone is sufficient.
+  (remove-hook '+dashboard-mode-hook #'+tabs-disable-centaur-tabs-mode-maybe-h))
+
+;; centaur-tabs ships no keybindings of its own; Doom's `:ui tabs' module only
+;; adds `gt'/`gT' (`+tabs:next-or-goto', which take a count -- `4gt' jumps to
+;; the 4th visible tab). These fill in the operations that otherwise need M-x.
+;;
+;; `ga' deliberately shadows evil's `what-cursor-position' -- that command is
+;; a debugging curiosity, tab-jumping is a per-minute operation. `M-x
+;; what-cursor-position' and `C-x =' both still reach it.
+;;
+;; New-tab lives under `SPC b' rather than `SPC t' (toggle): a centaur tab
+;; *is* a buffer, so it belongs next to `SPC b N' (new empty buffer), and
+;; opening a tab isn't a toggle.
+(map! :after centaur-tabs
+      :n "ga" #'centaur-tabs-ace-jump           ; C-u swaps, C-u C-u closes
+      :n "g<" #'centaur-tabs-move-current-tab-to-left
+      :n "g>" #'centaur-tabs-move-current-tab-to-right
+      (:leader
+       (:prefix "b"
+        :desc "New tab (dashboard)"  "t" #'centaur-tabs--create-new-tab
+        :desc "Switch tab group"     "T" #'centaur-tabs-switch-group
+        :desc "Kill other tabs (group)" "o" #'centaur-tabs-kill-other-buffers-in-current-group)))
+
 ;; Save minibuffer history (Vertico likes this)
 (after! savehist
   (savehist-mode 1))
