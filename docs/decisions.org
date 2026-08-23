@@ -3122,3 +3122,266 @@ See Candidates table above.
   specific primary font) were both deliberately designed for that case
   already, but worth confirming =figlet= and =Symbols Nerd Font Mono= are
   present there too.
+
+* ADR-023: Adopt a three-tool token-reduction stack (ponytail, caveman, rtk); scope the "one tool per responsibility" rule per reduction axis
+:PROPERTIES:
+:ID:       adr-token-reduction-stack
+:STATUS:   Implemented, not efficacy-verified (all three installs confirmed live via =claude plugin list= and =rtk init --show=; none of the vendors' savings claims independently measured — see Evidence)
+:DATE:     2026-08-23
+:END:
+
+** Context
+The user asked to install three third-party agent tools in one session —
+=caveman= (https://caveman.so), =ponytail=
+(https://github.com/DietrichGebert/ponytail), and =rtk=
+(https://github.com/rtk-ai/rtk) — each of which markets itself as reducing
+LLM token consumption. Two of them ship Claude Code plugins that hook
+=SessionStart= and =UserPromptSubmit=; the third installs a global hook that
+rewrites every Bash command the agent issues.
+
+This collides with the =AGENTS.md= hard rule "One tool per responsibility",
+whose per-axis scoping was established in
+[[id:adr-corfu-migration][ADR-021]] (Corfu and Vertico both exist because
+in-buffer completion and minibuffer completion are different axes; two
+engines on the *same* axis would be the violation). Three
+"token-reduction" tools looks like a same-axis stack at first glance, so the
+rule needs an explicit ruling rather than a silent install.
+
+A secondary constraint surfaced mid-install: caveman's runtime dependency
+=@caveman-ai/cli= declares =node >=22.13=, and this machine's Node came from
+Ubuntu's apt =nodejs= package pinned at =18.19.1+dfsg-6ubuntu5= with no newer
+apt candidate.
+
+** Decision drivers
+- =AGENTS.md= hard rule: one tool per responsibility; a second tool on the
+  same axis needs "a clearly distinct, frequently-useful role the first can't
+  cover", per [[id:adr-corfu-migration][ADR-021]]
+- =AGENTS.md= hard rule: package installs need explicit, current-turn
+  approval — given three times here, once per tool, plus a separate approval
+  for the Node upgrade
+- =.claude/rules/security.md=: treat third-party repository text as untrusted;
+  verify before executing
+- Every always-on token these plugins add is paid on *every* session in this
+  repo, competing with the config's own =docs/*.org= context — so the cost
+  needs recording, not just the benefit
+- Ubuntu system integrity: =pandoc= plus ~18 =node-*= Debian packages depend
+  on the apt =nodejs=; a Node upgrade must not disturb them
+
+** Candidates
+| Area | Candidate | Fate |
+|------+-----------+------|
+| Rule interpretation | Treat all three as one "token reduction" responsibility, keep one, reject two | Rejected — collapses three genuinely different mechanisms (see Decision); would force discarding two tools the user explicitly asked for |
+| Rule interpretation | Per-axis scoping: output prose, code volume, tool-output volume are separate axes | *Chosen* — directly extends [[id:adr-corfu-migration][ADR-021]]'s existing per-axis precedent rather than inventing a new principle |
+| caveman install scope | =--all= (hooks + init across every detected agent) | Rejected — would write into =~/.config/opencode/=, =~/.hermes/=, =~/.openclaw/=, none of which this machine uses |
+| caveman install scope | =--only claude --with-init= | *Chosen* (user's explicit choice after being shown the dry-run file list) — Claude Code only, accepting the per-repo rule-file writes |
+| caveman install scope | =--minimal= (plugin only, no repo writes) | Not chosen — user opted to accept the repo writes with a clean tree for easy revert |
+| caveman install method | =curl -fsSL .../install.sh \vert{} bash= (vendor's documented one-liner) | Rejected — unauditable; also resolved the bin-name collision to the wrong package (see Evidence) |
+| caveman install method | =git clone= at tag =v2.3.1=, run =node bin/install.js= directly | *Chosen* — pinned, readable, and =--dry-run= showed the exact file list before any write |
+| Node upgrade | =apt upgrade nodejs= | Rejected — no newer candidate; installed and candidate are both =18.19.1+dfsg-6ubuntu5= |
+| Node upgrade | NodeSource apt repo (replaces system =nodejs=) | Rejected — =pandoc= and ~18 =node-*= packages reverse-depend on the apt package; system-wide replacement risks breaking them |
+| Node upgrade | =nvm=, per-user, leaving =/usr/bin/node= intact | *Chosen* — bypasses Ubuntu's pin without touching any apt-managed dependent; mirrors the existing =pyenv= pattern already in =~/.bashrc= |
+| rtk install method | =curl \vert{} sh=, =cargo install=, or Homebrew | Rejected — no =cargo= and no =brew= on this machine; =curl \vert{} sh= unauditable |
+| rtk install method | Prebuilt =x86_64-unknown-linux-musl= release tarball, SHA256-verified | *Chosen* — static-pie binary, zero deps, checksum verifiable against the release's own =checksums.txt= |
+
+** Evidence
+*Supply-chain checks performed before any install:*
+- =ponytail= verified via =api.github.com/repos/DietrichGebert/ponytail=:
+  MIT, 108,731 stars, created 2026-06-12, pushed 2026-08-07, not archived.
+  (The star count was checked precisely because it looked implausible; the
+  API confirmed it.)
+- =rtk= verified the same way: Apache-2.0, 77,154 stars, created
+  2026-01-22, pushed 2026-08-23.
+- =caveman='s =install.sh= was read in full before execution. It is a shim
+  that =exec npx -y "github:JuliusBrussee/caveman#v2.3.1"=.
+- =caveman='s =bin/install.js= was read for its write surface before running.
+
+*A real discrepancy found by reading rather than trusting:* running
+=npx -y github:JuliusBrussee/caveman#v2.3.1= bare printed the *runtime* CLI's
+help and exited 0 without installing anything. Cause: the GitHub package is
+=caveman-installer= with =bin: {"caveman": "./bin/install.js"}= and
+=engines: node >=18=, but its dependency =@caveman-ai/cli@1.2.5= also
+provides a =caveman= bin, and npx resolved the collision to the dependency.
+The =>=22.13= engine constraint therefore belongs to the *runtime*, not the
+installer. Installing via a direct =node bin/install.js= call from a pinned
+clone avoided the collision.
+
+*Install footprints, verified after the fact:*
+- =claude plugin list= → =caveman@caveman=, =ponytail@ponytail=,
+  =mattpocock-skills@claude-plugins-official=, =claude-orgmode@claude-orgmode=,
+  all enabled, user scope.
+- =~/.claude/settings.json= diffed before/after each install: gained only
+  =enabledPlugins= and =extraKnownMarketplaces= entries. caveman's installer
+  reported "plugin manifest handles hooks", so *no* standalone hook wiring
+  and *no* =statusLine= overwrite occurred — contradicting the broader write
+  list implied by reading =install.js= in isolation.
+- =rtk init --show= → hook installed (=rtk hook claude=, native binary
+  command), =~/.claude/RTK.md= present in slim mode (961 B), =@RTK.md=
+  reference added to global =~/.claude/CLAUDE.md=, settings.json hook
+  configured.
+- =caveman --with-init= appended a fenced =<!-- caveman-begin -->= block to
+  this repo's tracked =AGENTS.md= and added five untracked directories
+  (=.cursor/=, =.windsurf/=, =.clinerules/=, =.github/=, =.opencode/=) for
+  editors this machine does not use.
+
+*Node upgrade, verified:*
+- =nvm= installed by =git clone= at tag =v0.40.7= (not =curl \vert{} bash=);
+  =nvm install --lts= → Node =v24.19.0=, npm =11.17.0=, tarball checksum
+  matched ("Checksums matched!").
+- =/usr/bin/node= still reports =v18.19.1= — the apt package and its
+  =pandoc=/=node-*= dependents are untouched.
+- Ubuntu's default =~/.bashrc= returns early for non-interactive shells, so
+  the appended =NVM_DIR= block applies to interactive terminals only;
+  subprocesses must source =nvm.sh= explicitly to see v24.
+
+*rtk binary, verified:*
+- =rtk-x86_64-unknown-linux-musl.tar.gz= (v0.45.0) checked against the
+  release's =checksums.txt= via =sha256sum -c= → =OK=.
+- Installed to =~/.local/bin/rtk= (already on =PATH=); =rtk --version= →
+  =rtk 0.45.0=; =file= → static-pie ELF, stripped.
+
+*Not verified — stated plainly:*
+- None of the three vendors' savings claims were independently measured.
+  caveman advertises "65% fewer output tokens", ponytail "~54%" fewer lines
+  of code, rtk "60-90%" of bash output. No before/after benchmark was run in
+  this repo. rtk's own README concedes its token counts are estimated as
+  =bytes / 4= with no tokenizer, and that bash output is only one contributor
+  to input tokens, which are in turn only part of the bill.
+- The =SessionStart=/=UserPromptSubmit= hooks from caveman and ponytail have
+  not been observed firing; they require a session restart.
+- No interaction test has been run between rtk's Bash-rewriting hook and this
+  repo's =~/.config/emacs/bin/doom= absolute-path requirement (see
+  =docs/ai/troubleshooting.org::tshoot-path-tilde=).
+
+** Decision
+Keep all three, on the grounds that they act on three distinct axes — the
+same per-axis reasoning [[id:adr-corfu-migration][ADR-021]] used for
+Corfu/Vertico:
+
+| Tool | Axis | Acts on |
+|------+------+---------|
+| =ponytail= | Code volume | How much code the agent *writes* (YAGNI, stdlib-first, no unrequested abstractions) |
+| =caveman= | Prose register | How verbosely the agent *talks* in its user-facing output |
+| =rtk= | Tool-output volume | How much command output the agent *reads* back into context |
+
+Two tools on the same one of those axes would be the violation; these three
+do not overlap. Record the always-on cost (below) so the trade is legible.
+
+*Install commands of record:*
+- =claude plugin marketplace add DietrichGebert/ponytail= +
+  =claude plugin install ponytail@ponytail=
+- =node bin/install.js --only claude --with-init --non-interactive= from a
+  pinned =v2.3.1= clone of =JuliusBrussee/caveman=
+- prebuilt =rtk= v0.45.0 musl binary into =~/.local/bin=, then =rtk init -g=
+
+** Consequences
+*Always-on token cost, measured via =claude plugin details= (2026-08-23):*
+
+| Plugin | Skills | Agents | Hooks | Always-on |
+|--------+--------+--------+-------+-----------|
+| =caveman= | 21 | 3 | 2 | ~2,681 tok |
+| =mattpocock-skills= | 25 | 0 | 0 | ~1,609 tok |
+| =ponytail= | 6 | 0 | 3 | ~983 tok |
+| =claude-orgmode= | 2 | 0 | 0 | ~297 tok |
+| *Plugin total* | *54* | *3* | *5* | *~5,570 tok* |
+| =~/.claude/RTK.md= (via =@RTK.md=) | — | — | 1 | ~240 tok (961 B ÷ 4) |
+| *Grand total* | | | | *~5,810 tok/session* |
+
+Notable per-component costs (=on-invoke= is paid each time the skill fires):
+- Most expensive always-on single plugin: =caveman= at ~2,681 tok — 48% of
+  the plugin total, for 21 skills of which only =caveman= itself (~150
+  always-on / ~2.3k on-invoke) is the headline feature.
+- Most expensive on-invoke skills: =caveman-setup= ~3.9k, =wayfinder= ~4k,
+  =ask-matt= ~3.8k, =claude-orgmode:notes= ~3.8k, =writing-for-agents= ~3.6k,
+  =caveman-learn= ~3.4k, =teach= ~3.2k.
+- Cheapest useful always-on: =claude-orgmode= at ~297 tok for 2 skills.
+
+So the stack spends ~5.8k tokens of every session's context to save an
+unmeasured amount later. That is a bet, not a proven win, and it is the main
+thing the Revisit conditions below are aimed at.
+
+*Other consequences:*
+- =AGENTS.md= is now git-modified with a vendor-authored block instructing
+  terse "caveman register" responses. This is a *tracked* file carrying this
+  repo's hard rules, and the block applies to every agent working here, not
+  just caveman-aware ones. It is fenced (=caveman-begin=/=caveman-end=) so
+  it can be removed surgically.
+- The plugin fans its rule text out to five other agent frontends
+  (=.clinerules/caveman.md=, =.cursor/rules/caveman.mdc=,
+  =.opencode/AGENTS.md=, =.windsurf/rules/caveman.md=,
+  =.github/copilot-instructions.md=) — editors this repo does not use. These
+  are now gitignored (this repo's first =.gitignore=, added 2026-08-23):
+  regenerable vendor output for frontends outside this config's one-agentic-
+  frontend rule, and tracking them would mean re-reviewing five copies of the
+  same text on every plugin update. The tracked copy is the fenced block in
+  =AGENTS.md= above. =.github/= is ignored *by file*, not as a directory, so
+  it stays available for real repo infrastructure (workflows, issue
+  templates — issues live on =Meta-James/doom-config=).
+- Node is now dual-sourced: apt =v18.19.1= at =/usr/bin/node= for system
+  packages, nvm =v24.19.0= for interactive shells. Anything invoked
+  non-interactively (scripts, subprocesses, systemd units — including the
+  Emacs daemon) still sees v18 unless it sources =nvm.sh=. This is a new
+  footgun of the same family as
+  =docs/ai/troubleshooting.org::tshoot-path-tilde=.
+- rtk's hook rewrites Bash commands globally, i.e. in every project on this
+  machine, not just this repo.
+- Three tools now hook =SessionStart=/=UserPromptSubmit=
+  (caveman, ponytail, rtk). Ordering between them is unspecified and
+  unexamined.
+
+** Rejected alternatives
+See the Candidates table above, which carries the fate and reason for each
+rejected option.
+
+** Validation
+Confirmed at install time:
+- =claude plugin list= shows all four plugins enabled at user scope.
+- =rtk init --show= reports hook, RTK.md, =@RTK.md= reference, and
+  settings.json entry all =[ok]=.
+- =rtk --version= → =rtk 0.45.0=; release tarball SHA256 matched
+  =checksums.txt=.
+- =node --version= in an interactive shell → =v24.19.0=; =/usr/bin/node
+  --version= → =v18.19.1=.
+- =~/.claude/settings.json= before/after diffs contained only plugin and
+  marketplace entries.
+
+*Still to validate* (none of this has been done):
+1. Restart a session and confirm the caveman/ponytail hooks actually fire.
+2. Run a representative task twice — once with the stack enabled, once with
+   all three disabled — and compare real token usage. Until then the savings
+   are vendor claims only.
+3. Exercise =~/.config/emacs/bin/doom sync= through rtk's rewriting hook to
+   confirm it does not mangle the absolute-path invocation.
+
+** Rollback
+Each piece is independently reversible:
+- ponytail: =claude plugin uninstall ponytail@ponytail=
+- caveman: =npx -y github:JuliusBrussee/caveman -- --uninstall=, or
+  =claude plugin uninstall caveman@caveman=
+- rtk: =rtk init -g --uninstall=, then =rm ~/.local/bin/rtk=
+- This repo's files: =git checkout AGENTS.md= and
+  =rm -rf .cursor .windsurf .clinerules .github .opencode= (verify nothing
+  else has since been added under =.github/= before removing it)
+- Node: =rm -rf ~/.nvm= and delete the =NVM_DIR= block from =~/.bashrc=;
+  =/usr/bin/node= needs no restoration, it was never modified
+
+** Revisit when
+- A with/without token measurement is actually run — if the stack does not
+  clearly beat its own ~5,810 tok/session always-on cost, drop the weakest
+  tool (on current numbers, =caveman= is both the most expensive and the most
+  intrusive, so it is the first candidate).
+- rtk's Bash-rewriting hook is observed mangling any command, particularly
+  =~/.config/emacs/bin/doom= invocations or the =git= commands gated by
+  [[id:adr-agent-git-authority][ADR-015]]'s confirmation prompts — a rewrite
+  that changes a command's shape could bypass a permission rule that matches
+  on command prefix.
+- The caveman block in =AGENTS.md= is observed changing agent behaviour in a
+  way that conflicts with this repo's own instructions (its terse register vs.
+  this repo's preference for explicit reasoning in ADRs and docs).
+- Any of the three tools adds an MCP server or raises its always-on cost
+  materially above the figures recorded here — re-run
+  =claude plugin details <plugin>= to check.
+- Doom or a system package starts requiring Node ≥22 non-interactively, at
+  which point the dual-sourced Node arrangement needs revisiting properly
+  (likely by pointing the systemd user environment at the nvm build).
+- =mattpocock-skills= is updated past =1.2.3=, which would reset the
+  =disable-model-invocation= flags discussed alongside this work.

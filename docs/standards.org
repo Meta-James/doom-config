@@ -98,6 +98,15 @@ method, and rollback/removal method.
 - A secondary tool needs a clearly distinct, frequently-useful responsibility the
   primary tool can't cover well — "it's popular" or "it supports another model" is
   not sufficient justification on its own.
+- "Responsibility" is scoped per *axis*, not per broad category. Corfu and
+  Vertico coexist because in-buffer and minibuffer completion are different axes
+  ([[id:adr-corfu-migration][ADR-021]]); ponytail, caveman, and rtk coexist
+  because code volume, prose register, and tool-output volume are different axes
+  ([[id:adr-token-reduction-stack][ADR-023]]). Two tools on the *same* axis is
+  the violation.
+- A tool whose always-on token cost is paid every session must have that cost
+  recorded when it's adopted — see the table in
+  [[id:adr-token-reduction-stack][ADR-023]].
 
 * No premature scope expansion
 :PROPERTIES:

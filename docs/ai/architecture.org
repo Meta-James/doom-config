@@ -59,6 +59,9 @@ No secondary agentic-coding frontend — see [[id:adr-agent-shell-rejected][ADR-
 | Provider/model selection      | gptel-menu           | See [[id:ai-providers][providers.org]] |
 | Diagnostics and status        | Flycheck/LSP (existing) | No change |
 | Documentation                 | This Org tree        | Canonical; CLAUDE.md/AGENTS.md are pointers only |
+| Token reduction: code volume  | ponytail            | How much code the agent writes, [[id:adr-token-reduction-stack][ADR-023]] |
+| Token reduction: prose register | caveman           | How verbosely the agent talks, [[id:adr-token-reduction-stack][ADR-023]] |
+| Token reduction: tool-output volume | rtk           | How much command output the agent reads back, [[id:adr-token-reduction-stack][ADR-023]] |
 
 * Process placement
 
