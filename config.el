@@ -734,10 +734,10 @@ matching window is found."
 
 ;; Note management: Vulpea indexes any org entry (file- or heading-level)
 ;; carrying an `ID' property into its own sqlite database -- titles, tags,
-;; id: links, and description-list metadata -- independently of org-roam
-;; (not installed here; per Vulpea's own docs the two can coexist but serve
-;; the same role, and this config keeps one tool per responsibility). Notes
-;; are picked up from `org-directory' (set above) since
+;; id: links, and description-list metadata. Vulpea 2.x is standalone (its
+;; Package-Requires names emacsql, not org-roam; v1 was the org-roam layer),
+;; so it and org-roam are two independent databases, not a stack. Notes are
+;; picked up from `org-directory' (set above) since
 ;; `vulpea-db-sync-directories' is left at its default. Deferred to first
 ;; input so it never blocks startup; `vulpea-db-autosync-mode' does the
 ;; initial database scan in the background and then watches for changes.
@@ -745,6 +745,29 @@ matching window is found."
   :defer t :after-call doom-first-input-hook
   :config
   (vulpea-db-autosync-mode +1))
+
+;; org-roam runs alongside Vulpea (docs/decisions.org ADR-027), with Vulpea
+;; winning every overlap. Three settings hold that line; each corresponds to
+;; a place the two packages would otherwise both answer the same question:
+;;
+;; 1. Scope. `org-roam-directory' stays at Doom's default (~/org/roam/),
+;;    NOT `org-directory'. Vulpea owns the whole tree; org-roam owns one
+;;    subdirectory inside it. This also keeps the two autosync watchers off
+;;    each other's files for everything outside ~/org/roam/.
+;; 2. In-buffer completion. Doom's org-roam config sets
+;;    `org-roam-completion-everywhere' to t, which installs a
+;;    completion-at-point that offers roam nodes while typing in any org
+;;    buffer -- directly competing with `vulpea-insert'. Turned back off.
+;; 3. Backlinks. `+org-roam-auto-backlinks-buffer' is nil by default, and is
+;;    pinned here so an upstream default-flip can't start auto-opening
+;;    org-roam's right-side buffer on top of `my/vulpea-buffer-toggle''s
+;;    (both claim :side right; see the vulpea backlinks section below).
+;;
+;; org-roam's own commands stay reachable under Doom's stock `SPC n r'
+;; prefix -- this makes Vulpea primary, it doesn't disable org-roam.
+(after! org-roam
+  (setq org-roam-completion-everywhere nil
+        +org-roam-auto-backlinks-buffer nil))
 
 ;; Org Agenda & Capture basics (docs/decisions.org ADR-017). Deliberately
 ;; minimal per docs/standards.org std-no-scope-creep ("don't build the full

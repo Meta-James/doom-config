@@ -37,7 +37,7 @@ dated rather than deleted, so history stays visible.
 
 | Field       | Value                                                          |
 |-------------+-----------------------------------------------------------------|
-| Emacs       | 30.1, native-comp, tree-sitter, pdumper build                   |
+| Emacs       | 30.2, native-comp, tree-sitter, pdumper build (was 30.1 at the 2026-07-20 baseline; 30.2 confirmed 2026-08-23) |
 | Doom recommends | Emacs 27.1–30.2, 30.2 recommended (per doomemacs/doomemacs README, checked 2026-07-20) |
 | Linux       | Ubuntu 24.04.4 LTS (noble), kernel 6.8.0-136-generic             |
 
@@ -46,29 +46,48 @@ dated rather than deleted, so history stays visible.
 :ID:       inv-modules
 :END:
 
-46 modules as of 2026-08-17 (=doom doctor= count; was 43 at 2026-07-20
-baseline, +1 =:app rss= for [[id:adr-rss-elfeed][ADR-012]], +1 =:term ghostel= added
-2026-08-10, -1 =:term vterm= disabled 2026-08-17 once ghostel covered every
-prior use — see [[id:adr-terminal-backend-ghostel][ADR-014]] — remaining growth is =:email=/=:app= modules
-from Phase 2/3 not individually re-itemized here). Full source of truth is
-=init.el= itself — this is a summary, not a duplicate to keep in sync by
-hand:
+55 modules as of 2026-08-23 (=doom doctor= count; was 43 at the 2026-07-20
+baseline). Growth since: =:app rss= ([[id:adr-rss-elfeed][ADR-012]]), =:term ghostel= (2026-08-10)
+minus =:term vterm= (2026-08-17, [[id:adr-terminal-backend-ghostel][ADR-014]]), the =:ui= rice modules
+([[id:adr-ui-rice-pass][ADR-022]]), and the =:email=/=:app= modules from Phases 2-3. Full source of
+truth is =init.el= itself — this is a summary, not a duplicate to keep in
+sync by hand. Flags below reflect the 2026-08-23 flag audit ([[id:adr-init-flag-audit][ADR-026]]);
+=init.el= now annotates every *available* flag per module, not just the
+enabled ones.
 
-- =:completion= corfu +orderless +icons, vertico (Company → Corfu 2026-08-18,
-  see [[id:adr-corfu-migration][ADR-021]])
-- =:ui= doom, dashboard, hl-todo, indent-guides, ligatures, minimap, modeline,
-  ophints, popup +defaults, tabs, vc-gutter +pretty, vi-tilde-fringe,
-  workspaces, zen +focus (indent-guides/minimap/tabs/zen added 2026-08-21,
-  see [[id:adr-ui-rice-pass][ADR-022]])
-- =:editor= evil +everywhere, file-templates, fold, format +onsave, snippets
-- =:emacs= dired +icons, electric, undo, vc
-- =:term= ghostel (sole terminal backend since 2026-08-17, [[id:adr-terminal-backend-ghostel][ADR-014]];
-  =vterm= commented out in =init.el=, not deleted, for easy rollback)
-- =:checkers= syntax, spell +flyspell, grammar
-- =:tools= direnv, eval +overlay, lookup, lsp, magit, pdf, tree-sitter
-- =:lang= emacs-lisp, json, latex, markdown, org, python +lsp +pyenv +poetry
-  +pyright, sh
-- =:config= default +bindings +smartparens
+- =:completion= corfu +orderless +icons +dabbrev, vertico +icons (Company →
+  Corfu 2026-08-18, see [[id:adr-corfu-migration][ADR-021]]; =+dabbrev=/=+icons= added 2026-08-23)
+- =:ui= doom, dashboard, hl-todo, indent-guides, ligatures +extra, minimap,
+  modeline, ophints, popup +defaults +all, smooth-scroll +interpolate, tabs,
+  vc-gutter +pretty, vi-tilde-fringe, workspaces, zen +focus
+  (indent-guides/minimap/tabs/zen added 2026-08-21, see [[id:adr-ui-rice-pass][ADR-022]];
+  smooth-scroll 2026-08-23)
+- =:editor= evil +everywhere, file-templates, fold, format +onsave, snippets,
+  whitespace +guess +trim
+- =:emacs= dired +icons +dirvish, electric, eww, tramp, undo, vc
+- =:term= ghostel +everywhere (sole terminal backend since 2026-08-17,
+  [[id:adr-terminal-backend-ghostel][ADR-014]]; =vterm= commented out in =init.el=, not deleted, for easy
+  rollback)
+- =:checkers= syntax, spell +flyspell +aspell +everywhere, grammar
+- =:tools= direnv, eval +overlay, llm, lookup +dictionary +docsets +offline,
+  lsp +peek, magit +forge, pdf, tree-sitter (=llm= added 2026-08-23; it also
+  declares =gptel=, which =packages.el= declares independently — see
+  [[id:adr-init-flag-audit][ADR-026]]'s LOGBOOK)
+- =:lang= emacs-lisp, json +lsp +tree-sitter, latex +lsp, markdown +lsp +grip
+  +tree-sitter, org +pandoc +roam +gnuplot +jupyter +pretty +noter
+  +dragndrop (org-roam alongside Vulpea, Vulpea preferred on every overlap —
+  see [[id:adr-org-roam-with-vulpea][ADR-027]]), python +lsp +pyenv +poetry +pyright +tree-sitter, sh +lsp
+- =:email= mu4e +org +gmail +mbsync
+- =:app= rss +org +youtube
+- =:config= default +bindings +smartparens +gnupg
+
+Five modules that no longer exist upstream (=:ui hydra=, =:tools prodigy=,
+=:tools rgb=, =:tools taskrunner=, =:app twitter=) were deleted from
+=init.el= on 2026-08-23; ten that do exist but were absent were added the
+same day — five enabled at the user's request (=:emacs eww=, =:emacs tramp=,
+=:editor whitespace=, =:ui smooth-scroll=, =:tools llm=) and five left
+commented out as language modules with no current use (=:lang= =ada=,
+=graphviz=, =janet=, =odin=, =scad=). See [[id:adr-init-flag-audit][ADR-026]].
 
 * Explicit packages (=packages.el=)
 :PROPERTIES:
@@ -117,6 +136,17 @@ hand:
 | yt-dlp  | yes     | =/usr/bin/yt-dlp=, =2024.04.09-1= (apt) — Phase 3, [[id:adr-rss-elfeed][ADR-012]] |
 | xdotool | yes     | =/usr/bin/xdotool=, =3.20160805.1= (apt) — predates this project. The agent's own =which= check first reported it missing; user confirmed it was installed the whole time — see [[id:adr-app-launcher][ADR-020]]'s LOGBOOK and [[id:tshoot-agent-shell-system-state][troubleshooting.org]] |
 | libpoppler-glib-dev | yes | needed for =pdf-tools='s =epdfinfo= helper to compile. The agent's own =dpkg -s= check first reported it missing; user confirmed it was installed the whole time — see [[id:adr-app-launcher][ADR-020]]'s LOGBOOK and [[id:tshoot-agent-shell-system-state][troubleshooting.org]] |
+| grip    | yes     | =~/.local/bin/grip=, =4.6.2= (pipx) — backs =:lang markdown +grip= live preview ([[id:adr-init-flag-audit][ADR-026]]) |
+| jupyter | yes     | =~/.local/bin/jupyter=, jupyterlab =4.6.3= + ipykernel =7.3.0= (pipx, =--include-deps= to expose the =jupyter= entry point) — backs =:lang org +jupyter= ([[id:adr-init-flag-audit][ADR-026]]) |
+| texlab  | yes     | =~/.local/bin/texlab=, =5.26.0=, upstream release binary — LaTeX language server for =:lang latex +lsp= ([[id:adr-init-flag-audit][ADR-026]]) |
+| marksman | yes    | =~/.local/bin/marksman=, =2026-02-08=, upstream release binary — Markdown language server for =:lang markdown +lsp= ([[id:adr-init-flag-audit][ADR-026]]) |
+| bash-language-server | yes | =~/.local/bin/bash-language-server=, =5.6.0= (=npm -g --prefix ~/.local=) — for =:lang sh +lsp=. npm warned =EBADENGINE= against node 18.19.1; the server runs anyway ([[id:adr-init-flag-audit][ADR-026]]) |
+| vscode-json-language-server | yes | =~/.local/bin/vscode-json-language-server= (=vscode-langservers-extracted=, =npm -g --prefix ~/.local=) — for =:lang json +lsp=. Same =EBADENGINE= caveat; starts correctly when given =--stdio= ([[id:adr-init-flag-audit][ADR-026]]) |
+| gnuplot | yes     | =/usr/bin/gnuplot=, =6.0 patchlevel 0= (apt, installed by the user 2026-08-23) — backs =:lang org +gnuplot= |
+| dot (graphviz) | yes | =/usr/bin/dot=, graphviz =2.43.0= (apt, 2026-08-23) — org-roam graph visualization ([[id:adr-org-roam-with-vulpea][ADR-027]]) |
+| sqlite3 (CLI) | yes | =/usr/bin/sqlite3=, =3.45.1= (apt, 2026-08-23) — needed by =:tools lookup +docsets= (dash-docs). Distinct from Emacs' *built-in* sqlite, which is what =magit +forge=, org-roam, and vulpea use |
+| wn (wordnet) | yes | =/usr/bin/wn= (apt =wordnet=, 2026-08-23) — offline thesaurus/definitions for =:tools lookup +offline= (wordnut/synosaurus). =doom doctor= does not check for it |
+| maim    | yes     | =/usr/bin/maim=, =v5.7.4= (apt, 2026-08-23) — screenshot capture for =org-download-clipboard= (=:lang org +dragndrop=); =xclip= (already present) covers the clipboard half on X11 |
 
 Node 18.19.1 initially looked like a possible blocker for
 =copilot-language-server=. Resolved in Phase 5: this install actually uses the
@@ -155,6 +185,10 @@ the AI subsystem, not a full machine audit).
 | =yt-dlp= | Video/transcript fetch backend elfeed-tube-mpv calls into, alongside =mpv= — [[id:adr-rss-elfeed][ADR-012]] | =sudo apt install yt-dlp= — done 2026-08-10 (same install run as =mpv=, same constraint) | Standard =apt= upgrade | Standard =apt remove=; same effect as removing =mpv= above |
 | =libpoppler-glib-dev= | Build dependency for =pdf-tools='s =epdfinfo= server — [[id:adr-app-launcher][ADR-020]] | Already installed, predates this project's involvement — not installed by this project (agent's own =dpkg -s= check wrongly reported it missing at first; see ADR-020's LOGBOOK) | Standard =apt= upgrade | Standard =apt remove=; =pdf-tools= goes back to unable-to-compile =epdfinfo= |
 | ghostel's native module (=libghostty-vt= via a Zig-compiled dynamic module) | Sole terminal backend for claude-code-ide.el and every other terminal use in this config since 2026-08-17, replacing vterm — [[id:adr-terminal-backend-ghostel][ADR-014]] | Elisp package installed via =:term ghostel= (=doom sync=, 2026-08-10); native binary downloaded via =M-x ghostel= (=ghostel-module-auto-install=), confirmed 2026-08-17 — =ghostel-debug-info= shows =Module loaded: yes=, =~/.config/emacs/.local/straight/build-30.2/ghostel/ghostel-module.so= (1,438,328 bytes) | Re-run =M-x ghostel-module-compile/-download= or let the auto-install prompt fire again after an upgrade | Delete the downloaded module file and/or remove =ghostel=/=evil-ghostel= from =init.el='s =:term= block, =doom sync= |
+| =grip= | Live GitHub-style preview for Markdown/Org — =:lang markdown +grip= ([[id:adr-init-flag-audit][ADR-026]]) | =pipx install grip= (user-level, no root) | =pipx upgrade grip= | =pipx uninstall grip=; drop =+grip= from =init.el= and =doom sync= |
+| =jupyter= (jupyterlab + ipykernel) | Kernel/CLI behind =:lang org +jupyter= babel blocks ([[id:adr-init-flag-audit][ADR-026]]) | =pipx install --include-deps jupyterlab= then =pipx inject jupyterlab ipykernel=. =--include-deps= is what exposes the =jupyter= entry point itself — plain =pipx install jupyterlab= only ships =jupyter-lab= | =pipx upgrade jupyterlab= | =pipx uninstall jupyterlab=; drop =+jupyter=, =doom sync=. Note the elisp side also builds a =zmq= native module on first use |
+| =texlab=, =marksman= | LaTeX and Markdown language servers for =+lsp= on those modules ([[id:adr-init-flag-audit][ADR-026]]) | Upstream GitHub release binaries, =install -m755= into =~/.local/bin= (no apt package for either) | Re-download the newer release the same way; neither self-updates | =rm ~/.local/bin/{texlab,marksman}=; drop the =+lsp= flag from that module |
+| =bash-language-server=, =vscode-langservers-extracted= | Shell and JSON language servers for =:lang sh +lsp= / =:lang json +lsp= ([[id:adr-init-flag-audit][ADR-026]]) | =npm install -g --prefix ~/.local <pkg>= — the =--prefix= is deliberate: npm's global prefix here is =/usr/local=, which would need root | =npm install -g --prefix ~/.local <pkg>@latest= | =npm uninstall -g --prefix ~/.local <pkg>=; drop the flag, =doom sync= |
 
 *vterm-module build, done once during Phase 6, historical* (=vterm= is
 disabled since 2026-08-17, [[id:adr-terminal-backend-ghostel][ADR-014]] — kept here as a reproducible record,

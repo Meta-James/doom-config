@@ -2401,11 +2401,22 @@ content) but lose their dedicated navigation commands.
 * ADR-019: Vulpea for note management (retroactive)
 :PROPERTIES:
 :ID:       adr-vulpea-note-management
-:STATUS:   Accepted, implemented; not live-verified (retroactive ADR)
+:STATUS:   Accepted, implemented; not live-verified as its own entry; amended 2026-08-23 by [[id:adr-org-roam-with-vulpea][ADR-027]]
 :DATE:     2026-08-18
+:END:
+:LOGBOOK:
+- Amended [2026-08-23 Sun]: this ADR's choice of Vulpea *instead of* org-roam
+  no longer holds. The user asked for both; org-roam is now enabled via
+  =:lang org +roam=. See [[id:adr-org-roam-with-vulpea][ADR-027]] for the reversal, its cost, and what
+  Vulpea keeps. The reasoning below about why Vulpea was chosen stands as
+  written — only its exclusivity is superseded. Note also that ADR-027 found
+  Vulpea v2 no longer depends on org-roam at all (v1 did), so the two are
+  independent databases rather than layers.
 :END:
 
 ** Context
+*Amended 2026-08-23 — see [[id:adr-org-roam-with-vulpea][ADR-027]]: org-roam now runs alongside Vulpea.*
+
 This is a *retroactive* ADR — =vulpea= was already installed and configured
 in the "Added Vulpea" commit (2026-08-18, same day), which added
 =(package! vulpea)=, a =use-package!= block, and =(n v)= leader bindings to
@@ -3854,3 +3865,359 @@ refresh token has survived past ~7 days (the specific failure ADR-011 hit).
   scope and this decision's Google-only assumption needs re-examining.
 - The =tricca=/Gandi account becomes unblocked, since it would need an
   entirely different sync mechanism from org-gcal.
+
+* ADR-026: =init.el= module-flag audit — annotate every flag, prune dead modules, enable the flags that earn their keep
+:PROPERTIES:
+:ID:       adr-init-flag-audit
+:STATUS:   Implemented; not live-verified
+:DATE:     2026-08-23
+:END:
+:LOGBOOK:
+- Second pass [2026-08-23 Sun]: after reviewing the preference-tier flags, the
+  user enabled =:lang org +pretty +noter +dragndrop=, =:checkers spell
+  +everywhere=, and all five modules this ADR had added commented-out that
+  were not language modules: =:emacs eww=, =:emacs tramp=, =:editor
+  whitespace +guess +trim=, =:ui smooth-scroll +interpolate=, =:tools llm=.
+  The five =:lang= additions (=ada=, =graphviz=, =janet=, =odin=, =scad=)
+  stay commented out. Module count 50 → 55, =doom doctor= package count 176
+  → 188.
+- Pending apt step completed [2026-08-23 Sun]: the user installed =gnuplot=
+  6.0, =graphviz= 2.43.0 (=dot=), =sqlite3= 3.45.1, =wordnet= (=wn=), and
+  =maim= 5.7.4. =doom doctor= is now down to a single warning — the standing
+  "tree-sitter rudimentary before Emacs 31" caveat on =markdown
+  +tree-sitter=, which no action here can clear.
+- Caveat recorded, not yet exercised [2026-08-23 Sun]: =:tools llm= declares
+  its own pinned =gptel= (=tools/llm/packages.el=) while =packages.el=
+  already declares =gptel= unpinned for [[id:adr-gptel-rework][ADR-006]], and =tools/llm/config.el=
+  sets =gptel-display-buffer-action= to nil plus its own =set-popup-rule!=
+  against this repo's =^\*gptel\*= rule in =config.el=. Doom resolves both
+  in the user's favour by load order, but that is reasoning about load
+  order, not an observation — verify in the live session that the Anthropic
+  default backend and the right-side gptel popup still behave as [[id:adr-gptel-rework][ADR-006]]
+  intended. The module also adds =gptel-magit=, =gptel-quick=, and
+  =ob-gptel=, which are new capability, not overlap.
+:END:
+
+** Context
+=init.el= had drifted from Doom's own module tree in three separate ways, none
+of them visible from the file itself. Its comments were Doom's stock
+one-line jokes, which say what a module *is* but never what it can be
+*configured to do* — so the only way to learn a module's available flags was
+to leave the file and read the module's =README.org=. Meanwhile the file
+still listed five modules that no longer exist upstream, and omitted ten that
+do. The user asked for the comments to reflect "every toggle I have access
+to", then, once the flag inventory existed, for the flags worth having to be
+turned on.
+
+** Decision drivers
+- The information already exists in this machine's checkout
+  (=~/.config/emacs/sources/doom+/modules=); the cost was purely that it
+  wasn't *where the decision is made*. Per =.claude/rules/doom-emacs.md=,
+  module names must be checked against that tree rather than assumed —
+  putting the flag list in =init.el= makes that check the default rather
+  than an act of diligence.
+- =std-no-scope-creep=: annotate and prune first; enabling flags is a
+  separate, explicitly-approved step, not a side effect of documenting them.
+- Existing decisions constrain which flags are eligible: [[id:adr-corfu-migration][ADR-021]] (one engine
+  per completion axis), [[id:adr-terminal-backend-ghostel][ADR-014]] (ghostel is the only terminal), and this
+  repo's live flycheck/doom-modeline/lsp-mode configuration in =config.el=,
+  which several flags would silently replace.
+- Nothing may be enabled whose prerequisite binary is absent without saying
+  so — [[id:adr-rss-elfeed][ADR-012]]'s precedent (=mpv=/=yt-dlp= installed by the user, recorded
+  in inventory) is the pattern to follow, not a warning to live with.
+
+** Candidates
+| Decision point | Candidates | Fate |
+|-----------------+-------------------------------------------------------+------------------------------------------|
+| Where flag lists come from | Doom's online module index / each =README.org= "Module flags" section / each module's own =modulep!= calls / the new =.doommodule= =(flags ...)= form | Used README ∪ self-=modulep!=. The =.doommodule= form is authoritative but only two modules (=lang/org=, =term/ghostel=) have migrated to it in core =ad55ed0=, so it can't be the sole source yet |
+| Annotation format | Separate flag-reference doc / per-line =[+a +b]= suffix / replace the joke descriptions | Per-line suffix, keeping Doom's descriptions — the decision is made on that line, so the data belongs on that line |
+| Modules deleted upstream | Leave commented out / annotate as dead / delete | Deleted, after annotating them first so the removal was reviewable in the diff |
+| Modules missing from the file | Ignore / add commented-out | Added commented-out, with upstream's own =#+subtitle= as the description — an absent line is indistinguishable from a rejected one |
+| Flags that swap an engine (=+flymake=, =+eglot=, =+light=) | Enable / skip | Skipped — each would orphan working =config.el= code (see Evidence) |
+| Flags needing a missing binary | Enable and accept warnings / skip / install the binary first | Install first where the binary was installable, then enable. Two remain pending on =sudo= (see Consequences) |
+
+** Evidence
+- Flag inventory built by script over
+  =~/.config/emacs/sources/doom+/modules/*/*/=: each module's =README.org=
+  "Module flags" section unioned with =grep -rhoE "modulep!\s+\+[a-z...]"=
+  over its own source (self-referential flags only — cross-module
+  =(modulep! :category name +flag)= checks were matched separately so that
+  another module's flags never leak into this one's list).
+- Cross-checking those two sources found exactly three disagreements, all
+  resolved against the source: =emacs/dired +ranger= (=dired/doctor.el:6-7=
+  — "The +ranger flag was removed from this module and does nothing"),
+  =lang/org +roam2= (=org/doctor.el:8-9= — deprecated alias for =+roam=;
+  =lang/org/.doommodule= lists it under =(obsolete)= as =(+roam2 +roam
+  "25.09")=), and =lang/org +uv=, which appears only at
+  =lang/org/.doommodule:115= guarding a =gnuplot= executable check — an
+  upstream typo for =+gnuplot=, not a real flag. All three were excluded
+  from the annotations.
+- Five modules in =init.el= had no counterpart in the module tree: =:ui
+  hydra=, =:tools prodigy=, =:tools rgb=, =:tools taskrunner=, =:app
+  twitter=.
+- Ten modules existed upstream but were absent from =init.el=: =:lang= =ada=,
+  =graphviz=, =janet=, =odin=, =scad=; =:emacs= =eww=, =tramp=; =:editor
+  whitespace=; =:ui smooth-scroll=; =:tools llm=.
+- Engine-swap conflicts were read out of this repo's own =config.el=, not
+  assumed: =+flymake= would displace the flycheck checker chain at
+  =config.el:385-410= (a =python-ruff= checker chained after =lsp=);
+  =+light= would drop =doom-modeline=, which =config.el:184-212= configures
+  in detail; =+eglot= would orphan the =lsp-managed-mode-hook= wiring and
+  =claude-code-ide-diagnostics-backend 'flycheck= at =config.el:730=.
+- Binary prerequisites were checked with =command -v= before deciding, not
+  after: =aspell= and =enchant-2= present (=checkers/spell/config.el:23-28=
+  shows the module already auto-detects aspell, so =+aspell= only pins what
+  was already happening); =pandoc= present; =grip=, =gnuplot=, =jupyter=,
+  =wn=, =texlab=, =marksman=, =bash-language-server=,
+  =vscode-json-language-server=, =dot=, =sqlite3= all absent.
+- =sqlite-open= is =t= on this Emacs (30.2, checked with =emacs -Q
+  --batch=), so =+forge='s historical =emacsql-sqlite= compile cost does not
+  apply here.
+- =+booster= was rejected on a documented version constraint, not taste:
+  =tools/lsp='s README scopes it to "Emacs 29 users only".
+- =doom sync= after the change: exit 0, "All 219 packages are up-to-date"
+  (that figure counts dependencies). =doom doctor='s own package count, the
+  one earlier entries quote, went 158 → 176; module count stayed 50. Doctor
+  reports 4 warnings, all binary-related and all named in Consequences.
+
+** Decision
+- =init.el=: every module line carries a =[+flag ...]= suffix listing the
+  full flag set that module accepts, enabled or not; a line with no bracket
+  takes no flags. A header NOTE states the convention, where the lists came
+  from, and that they must be re-derived after a =doom upgrade= rather than
+  trusted indefinitely.
+- Deleted the five upstream-removed modules; added the ten missing ones
+  commented out, described with upstream's own =#+subtitle=.
+- Enabled, as flags on already-enabled modules: =corfu +dabbrev=, =vertico
+  +icons=, =ligatures +extra=, =popup +all=, =dired +dirvish=, =ghostel
+  +everywhere=, =spell +aspell=, =lookup +dictionary +docsets +offline=,
+  =lsp +peek=, =magit +forge=, =json +lsp +tree-sitter=, =latex +lsp=,
+  =markdown +lsp +grip +tree-sitter=, =org +pandoc +gnuplot +jupyter=,
+  =python +tree-sitter=, =sh +lsp=, =default +gnupg=. (=org +roam= was
+  enabled in the same pass but is its own decision — see [[id:adr-org-roam-with-vulpea][ADR-027]].)
+- Installed the prerequisite binaries that did not need root: =grip= and
+  =jupyter=/=ipykernel= via =pipx=, =bash-language-server= and
+  =vscode-langservers-extracted= via =npm install -g --prefix ~/.local=,
+  =texlab= and =marksman= as upstream release binaries into =~/.local/bin=.
+- Explicitly *not* enabled, each for a stated reason: =+flymake=, =+eglot=,
+  =+light= (would orphan working =config.el=); =+offlineimap= (mutually
+  exclusive with =+mbsync=, [[id:adr-email-mu4e][ADR-011]]); =python +uv= (upstream documents it
+  as incompatible with =+pyenv=); =python +conda= (a second environment
+  manager beside pyenv/poetry, against [[id:adr-corfu-migration][ADR-021]]'s rule); =undo +tree=
+  (upstream calls undo-tree "a little less stable" than the default
+  undo-fu); =format +lsp=; =spell +hunspell=/=+enchant=; =lsp +booster=
+  (Emacs 29 only); =sh +fish=/=+powershell= (user does not use either
+  shell).
+
+** Consequences
+- =init.el= is now the flag reference, which means it is also a thing that
+  can go stale. The header NOTE carries its own provenance (source tree,
+  date, doom core commit) precisely so a future reader can tell whether to
+  trust it — treat a =doom upgrade= as invalidating it.
+- Package count rose 158 → 176 by =doom doctor='s count (219 including
+  dependencies, per =doom sync=). The additions are real subsystems, not
+  cosmetics: org-roam, dirvish, forge (+ ghub/closql/emacsql), lsp-ui,
+  jupyter (+ zmq), grip-mode, dash-docs, wordnut, synosaurus, define-word.
+  Startup cost has not been measured — see Validation.
+- =doom doctor= is *not* clean: 4 warnings remain. Three clear with one
+  =apt= command the agent cannot run (=sudo apt install gnuplot graphviz
+  sqlite3=, for =org-plot/gnuplot=, org-roam's graph view, and dash-docs
+  respectively); =wordnet= belongs in the same command for =+offline='s
+  wordnut backend, which =doom doctor= does not check for. The fourth
+  ("Tree-sitter support before Emacs 31 is rudimentary") is a standing
+  upstream caveat on =markdown +tree-sitter=, not a fixable gap.
+- =popup +all= and =dired +dirvish= are the two changes most likely to feel
+  wrong in daily use rather than fail outright — the first rewrites where
+  stray buffers appear, the second replaces the dired UI. Both are one-flag
+  reversions.
+- =node= is v18.19.1 and npm emitted =EBADENGINE= warnings for both language
+  servers; both nonetheless run (=bash-language-server --version= → 5.6.0;
+  the JSON server's "Connection input stream is not set" is its normal
+  refusal to start without =--stdio=, which lsp-mode supplies). A Node
+  upgrade would remove the warning class entirely and is worth doing on its
+  own terms.
+
+** Rejected alternatives
+See the Candidates table above, which carries the fate and reason for each.
+
+** Validation
+Structural and tooling-level only. =doom sync= exits 0 and =doom doctor=
+reports exactly the four warnings above — no module or package errors. The
+annotation pass was verified non-functional by diffing both files with
+comments stripped ("ACTIVE CODE IDENTICAL") *before* any flag was changed, so
+the annotation and the enabling are separable in review. What has *not*
+happened: no live Emacs session has loaded this configuration. Nothing here
+is live-verified until the user restarts Emacs and exercises, at minimum,
+dirvish, a popup, corfu's dabbrev fallback, forge against this repo, and one
+tree-sitter-backed buffer.
+
+** Rollback
+Per flag, remove it from its module's flag list in =init.el= and =doom
+sync=; nothing else in the repo depends on any of them. To revert the whole
+pass, =git checkout main -- init.el= at the commit before this ADR and =doom
+sync= — the package set shrinks back on its own. The installed binaries are
+independent of the config: =pipx uninstall grip jupyterlab=, =npm uninstall
+-g --prefix ~/.local bash-language-server vscode-langservers-extracted=, and
+=rm ~/.local/bin/{texlab,marksman}=.
+
+** Revisit when
+- A =doom upgrade= lands — the flag annotations are a snapshot of core
+  =ad55ed0= and upstream both adds flags and retires them (=+ranger= and
+  =+roam2= are this pass's own evidence of that).
+- More modules migrate to the =.doommodule= =(flags ...)= form, at which
+  point the annotations can be regenerated from an authoritative list rather
+  than a README-plus-grep union.
+- The =sudo apt install gnuplot graphviz sqlite3 wordnet= step happens —
+  =doom doctor= should then be clean except the Emacs-31 markdown caveat,
+  and =docs/inventory.org= needs those four rows.
+- Startup time becomes noticeable, in which case these new packages are the
+  first place to look, and =org +pretty=-style cosmetics are the cheapest to
+  drop.
+- Emacs 31 becomes available, which resolves the markdown tree-sitter caveat
+  and makes =lsp +booster= irrelevant permanently.
+
+* ADR-027: Run org-roam alongside Vulpea rather than instead of it (amends ADR-019)
+:PROPERTIES:
+:ID:       adr-org-roam-with-vulpea
+:STATUS:   Implemented; not live-verified
+:DATE:     2026-08-23
+:END:
+
+** Context
+[[id:adr-vulpea-note-management][ADR-019]] recorded Vulpea as this config's note-management layer, chosen over
+org-roam. While auditing =init.el='s unused module flags ([[id:adr-init-flag-audit][ADR-026]]), =:lang
+org +roam= came up as a flag that ADR-019 appeared to forbid. The user's
+answer was explicit: "we want org roam and vulpea", and asked for the docs to
+reflect that rather than for the flag to be left off. This ADR records that
+reversal and its cost, and amends ADR-019 instead of quietly contradicting
+it.
+
+** Decision drivers
+- User instruction, given directly and unambiguously after the conflict with
+  ADR-019 was raised.
+- [[id:adr-corfu-migration][ADR-021]]'s "one tool per responsibility" rule is the thing being bent here,
+  so it deserves the same treatment ADR-021 itself gave the completion axis:
+  state precisely what the second tool is for, or admit the rule is being
+  relaxed.
+- Vulpea's existing surface is already load-bearing — the =(n v)= leader
+  prefix, hand-rolled dailies, and the backlinks buffer from [[id:adr-vulpea-dailies-backlinks][ADR-018]], all
+  live-verified 2026-08-23. Whatever org-roam adds, it must not be by
+  displacing those.
+
+** Candidates
+| Decision point | Candidates | Fate |
+|-----------------+-------------------------------------------------------+------------------------------------------|
+| org-roam's status | Not installed (ADR-019 status quo) / replace Vulpea / run both | User chose both |
+| How they share =~/org= | Partition the tree between them / both index all of it | Both index all of it, by default — neither package is configured to exclude the other's notes. This is the choice with the real consequences (see below) |
+| Keybindings | Rebind Doom's =SPC n r= org-roam prefix / leave it stock | Left stock. Vulpea is on =(n v)=, org-roam on =SPC n r=; they do not collide today |
+| ADR-019's fate | Rewrite it / supersede it / amend it | Amended — ADR-019's reasoning about *why Vulpea was chosen* remains accurate history, and rewriting it would erase a real decision point |
+
+** Evidence
+- Read Vulpea's installed source, which corrected an assumption made earlier
+  in the same conversation. =vulpea.el= (v2.7.0) declares
+  =Package-Requires: ((emacs "29.1") (org "9.4.4") (emacsql "4.3.0") (s)
+  (dash))= — *not* org-roam — and =vulpea-db.el:49-63= builds its own
+  =emacsql-sqlite-builtin= database at =vulpea-db-location=. Vulpea v1 was a
+  layer on top of org-roam; v2 is standalone. So this decision installs a
+  *second, independent* note database over the same files, not a supporting
+  library for the one already in use.
+- =grep -n vulpea config.el= confirms the live Vulpea surface this must not
+  disturb: the =use-package!= block with =vulpea-db-autosync-mode=
+  (=config.el:744-747=), the =org-capture= "v" template
+  (=config.el:776-777=), the dailies functions (=config.el:785-842=), and
+  the backlinks buffer below them.
+- =doom sync= installed =org-roam= (present in
+  =~/.config/emacs/.local/straight/build-30.2/org-roam=) with no conflict
+  against =vulpea=, which remains installed.
+- =doom doctor= flags one org-roam-specific gap: =dot= (graphviz) is absent,
+  so org-roam's graph visualization will not render. Its other features do
+  not depend on it.
+- Not checked, and deliberately not guessed at: whether org-roam's
+  autosync and Vulpea's autosync both re-scanning =~/org= on every save
+  produces noticeable duplicated work. Both maintain their own SQLite file
+  and neither knows about the other.
+
+** Decision
+- =init.el=: =:lang (org ... +roam ...)=. Doom's stock org-roam
+  configuration and its =SPC n r= bindings are accepted as-is.
+- =config.el=: an =(after! org-roam ...)= block establishing Vulpea as the
+  preferred tool wherever the two overlap, per the user's explicit
+  instruction ("prefer vulpea when there are conflicts"). Three settings,
+  one per real overlap:
+  1. *Scope* — =org-roam-directory= is left at Doom's =~/org/roam/= default
+     rather than pointed at =org-directory=. Vulpea owns the tree; org-roam
+     owns a subdirectory of it. This is a decision to *not* write a line of
+     config, so it is recorded here and commented there; otherwise a future
+     reader would reasonably "fix" it.
+  2. *In-buffer completion* — Doom sets =org-roam-completion-everywhere= to
+     =t= (=contrib/roam.el:69=), installing a completion-at-point that
+     offers roam nodes while typing in any org buffer, competing directly
+     with =vulpea-insert=. Set back to =nil=.
+  3. *Backlinks* — =+org-roam-auto-backlinks-buffer= is pinned =nil= (also
+     its upstream default) so org-roam's right-side backlinks buffer cannot
+     start auto-opening over =my/vulpea-buffer-toggle='s, which claims the
+     same side.
+- org-roam remains fully reachable under =SPC n r=. This ranks the two
+  tools; it does not cripple one.
+- Vulpea keeps every responsibility it currently holds: the =(n v)= prefix,
+  the "v" capture template, dailies, and the backlinks buffer. org-roam is
+  additive.
+- =docs/decisions.org=: ADR-019 gains a =:LOGBOOK:= entry and an amendment
+  note pointing here, so a reader arriving at ADR-019 first is not misled.
+- [[id:adr-corfu-migration][ADR-021]]'s rule is explicitly relaxed for the note-management axis, and
+  said so here rather than left as an unstated exception.
+
+** Consequences
+- Two independent databases now exist, but *not* over the same files, and
+  this ADR originally said otherwise — corrected here after reading Doom's
+  own org-roam config. =lang/org/contrib/roam.el:62-65= sets
+  =org-roam-directory= to =(expand-file-name "roam" org-directory)=, i.e.
+  =~/org/roam/=, not =org-directory=. Vulpea indexes the whole tree;
+  org-roam indexes one subdirectory of it. The double-scan cost is therefore
+  confined to =~/org/roam/=, and everything else in =~/org= is watched once.
+- "Which finder do I use?" still has an answer, and it is now a configured
+  one rather than a matter of habit: Vulpea. See the precedence rules in the
+  Decision section.
+- org-roam's own capture templates and =org-roam-directory= default apply;
+  a note created through org-roam is ID-bearing and therefore visible to
+  Vulpea's database too (both key on Org IDs), but a note created through
+  Vulpea's =vulpea-create= is not automatically registered in org-roam's
+  =org-roam-node= table unless org-roam's autosync sees the file. Neither
+  direction has been exercised yet.
+- Doom's =SPC n r= prefix is now live where it previously did nothing —
+  worth a line in =docs/ai/keybindings.org= only if the user keeps it.
+- org-roam's graph view works: =graphviz= 2.43.0 was installed by the user
+  on 2026-08-23, clearing the =dot= warning =doom doctor= raised for it.
+
+** Rejected alternatives
+See the Candidates table above.
+
+** Validation
+None yet — this is installed, not exercised. =doom sync= and =doom doctor=
+pass (55 modules, 188 packages, one unrelated warning), and =dot= is now
+installed so org-roam's graph view has its prerequisite, but no live session
+has loaded either package since the change. The decision holds if, in the
+user's own session: =SPC n r f= finds notes, a note created via org-roam and
+one created via =vulpea-create= are both findable afterward (by whichever
+tool the user reaches for), the =(n v)= bindings and backlinks buffer from
+[[id:adr-vulpea-dailies-backlinks][ADR-018]] still behave exactly as they did when live-verified earlier the
+same day, and saving a file in =~/org= does not feel slower with two
+autosync hooks than it did with one.
+
+** Rollback
+Remove =+roam= from =:lang org= in =init.el= and =doom sync=. Vulpea is
+untouched by this decision, so nothing of ADR-018's or ADR-019's work needs
+restoring. org-roam's database file (=org-roam.db= under Doom's local dir)
+can be deleted; it is a cache, and =~/org= itself is never modified by
+removing the package.
+
+** Revisit when
+- The "which finder do I use?" question actually bites — that is the signal
+  to give each tool a stated job (e.g. org-roam for graph/link exploration,
+  Vulpea for capture and dailies) rather than leaving the overlap implicit.
+- Saving in =~/org= becomes slow, in which case disable one autosync before
+  investigating anything else.
+- Vulpea gains, or org-roam loses, a feature that makes the pairing
+  pointless in either direction.
+- A future note-management change touches ADR-019's original reasoning, at
+  which point both ADRs should be read together rather than separately.
