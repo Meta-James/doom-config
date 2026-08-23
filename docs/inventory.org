@@ -46,8 +46,9 @@ dated rather than deleted, so history stays visible.
 :ID:       inv-modules
 :END:
 
-55 modules as of 2026-08-23 (=doom doctor= count; was 43 at the 2026-07-20
-baseline). Growth since: =:app rss= ([[id:adr-rss-elfeed][ADR-012]]), =:term ghostel= (2026-08-10)
+77 modules as of 2026-08-23 (=doom doctor= count; was 43 at the 2026-07-20
+baseline, and 55 earlier the same day before the non-language module sweep,
+[[id:adr-module-sweep-non-lang][ADR-029]]). Growth since: =:app rss= ([[id:adr-rss-elfeed][ADR-012]]), =:term ghostel= (2026-08-10)
 minus =:term vterm= (2026-08-17, [[id:adr-terminal-backend-ghostel][ADR-014]]), the =:ui= rice modules
 ([[id:adr-ui-rice-pass][ADR-022]]), and the =:email=/=:app= modules from Phases 2-3. Full source of
 truth is =init.el= itself — this is a summary, not a duplicate to keep in
@@ -57,20 +58,24 @@ enabled ones.
 
 - =:completion= corfu +orderless +icons +dabbrev, vertico +icons (Company →
   Corfu 2026-08-18, see [[id:adr-corfu-migration][ADR-021]]; =+dabbrev=/=+icons= added 2026-08-23)
-- =:ui= doom, dashboard, hl-todo, indent-guides, ligatures +extra, minimap,
-  modeline, ophints, popup +defaults +all, smooth-scroll +interpolate, tabs,
-  vc-gutter +pretty, vi-tilde-fringe, workspaces, zen +focus
+- =:ui= doom, dashboard, doom-quit, emoji +ascii +github +unicode, hl-todo,
+  indent-guides, ligatures +extra, minimap, modeline, ophints, popup
+  +defaults +all, smooth-scroll +interpolate, tabs, treemacs +lsp, unicode,
+  vc-gutter +pretty, vi-tilde-fringe, window-select +numbers, workspaces,
+  zen +focus
   (indent-guides/minimap/tabs/zen added 2026-08-21, see [[id:adr-ui-rice-pass][ADR-022]];
   smooth-scroll 2026-08-23)
-- =:editor= evil +everywhere, file-templates, fold, format +onsave, snippets,
-  whitespace +guess +trim
-- =:emacs= dired +icons +dirvish, electric, eww, tramp, undo, vc
+- =:editor= evil +everywhere, file-templates, fold, format +onsave, lispy,
+  multiple-cursors, rotate-text, snippets, whitespace +guess +trim, word-wrap
+- =:emacs= dired +icons +dirvish, electric, eww, ibuffer +icons, tramp, undo,
+  vc
 - =:term= ghostel +everywhere (sole terminal backend since 2026-08-17,
   [[id:adr-terminal-backend-ghostel][ADR-014]]; =vterm= commented out in =init.el=, not deleted, for easy
   rollback)
 - =:checkers= syntax, spell +flyspell +aspell +everywhere, grammar
-- =:tools= direnv, eval +overlay, llm, lookup +dictionary +docsets +offline,
-  lsp +peek, magit +forge, pdf, tree-sitter (=llm= added 2026-08-23; it owns
+- =:tools= biblio, collab +tunnel, debugger, direnv, editorconfig, eval
+  +overlay, llm, lookup +dictionary +docsets +offline, lsp +peek, magit
+  +forge, make, pdf, tmux, tree-sitter, upload (=llm= added 2026-08-23; it owns
   =gptel= outright — package pin, =gptel-default-mode=, popup rule, and the
   =SPC o l= keymap — and also brings =gptel-magit=, =gptel-quick=, =ob-gptel=.
   This repo's duplicate declarations, its =SPC a= namespace, and the =SPC o l=
@@ -81,7 +86,9 @@ enabled ones.
   +dragndrop (org-roam alongside Vulpea, Vulpea preferred on every overlap —
   see [[id:adr-org-roam-with-vulpea][ADR-027]]), python +lsp +pyenv +poetry +pyright +tree-sitter, sh +lsp
 - =:email= mu4e +org +gmail +mbsync
-- =:app= rss +org +youtube
+- =:os= macos (macOS only), tty +osc
+- =:app= calendar (packages only — sync unconfigured, [[id:adr-calendar-org-gcal][ADR-025]]), emms,
+  everywhere, irc, rss +org +youtube
 - =:config= default +bindings +smartparens +gnupg
 
 Five modules that no longer exist upstream (=:ui hydra=, =:tools prodigy=,
@@ -91,6 +98,14 @@ same day — five enabled at the user's request (=:emacs eww=, =:emacs tramp=,
 =:editor whitespace=, =:ui smooth-scroll=, =:tools llm=) and five left
 commented out as language modules with no current use (=:lang= =ada=,
 =graphviz=, =janet=, =odin=, =scad=). See [[id:adr-init-flag-audit][ADR-026]].
+
+The 2026-08-23 non-language sweep ([[id:adr-module-sweep-non-lang][ADR-029]]) then enabled 22 more modules —
+the =:ui=, =:editor=, =:emacs=, =:tools=, =:os= and =:app= additions marked
+above — at the user's per-module choice. Offered and declined: =:tools
+docker=, =:tools ein=, =:tools terraform=, =:tools ansible=, =:term eshell=,
+=:ui deft=. Two prerequisite binaries came with it: =tuntox= (for =collab
++tunnel=) and =xdotool= (for =:app everywhere=). None of the 22 has any
+configuration in =config.el=; they run at Doom defaults.
 
 * Explicit packages (=packages.el=)
 :PROPERTIES:
@@ -192,6 +207,8 @@ the AI subsystem, not a full machine audit).
 | =grip= | Live GitHub-style preview for Markdown/Org — =:lang markdown +grip= ([[id:adr-init-flag-audit][ADR-026]]) | =pipx install grip= (user-level, no root) | =pipx upgrade grip= | =pipx uninstall grip=; drop =+grip= from =init.el= and =doom sync= |
 | =jupyter= (jupyterlab + ipykernel) | Kernel/CLI behind =:lang org +jupyter= babel blocks ([[id:adr-init-flag-audit][ADR-026]]) | =pipx install --include-deps jupyterlab= then =pipx inject jupyterlab ipykernel=. =--include-deps= is what exposes the =jupyter= entry point itself — plain =pipx install jupyterlab= only ships =jupyter-lab= | =pipx upgrade jupyterlab= | =pipx uninstall jupyterlab=; drop =+jupyter=, =doom sync=. Note the elisp side also builds a =zmq= native module on first use |
 | =texlab=, =marksman= | LaTeX and Markdown language servers for =+lsp= on those modules ([[id:adr-init-flag-audit][ADR-026]]) | Upstream GitHub release binaries, =install -m755= into =~/.local/bin= (no apt package for either) | Re-download the newer release the same way; neither self-updates | =rm ~/.local/bin/{texlab,marksman}=; drop the =+lsp= flag from that module |
+| =tuntox= | Tox-protocol port forwarding behind =:tools collab= =+tunnel= ([[id:adr-module-sweep-non-lang][ADR-029]]) | Upstream release binary =tuntox-x64= 0.0.10 (=gjedeer/tuntox=) into =~/.local/bin/tuntox=, =chmod +x= — no apt package. sha256 =76beab684624905ee6a0a913489cb2f03a21f37d800d28e7c4001545a09acb8f= | Re-download the newer release the same way; does not self-update | =rm ~/.local/bin/tuntox=; drop the =+tunnel= flag, =doom sync= |
+| =xdotool= (+ =xclip=) | X11 window/keystroke automation =:app everywhere= needs to paste back into the app you invoked it from ([[id:adr-module-sweep-non-lang][ADR-029]]) | =sudo apt install xdotool xclip= — user's own terminal (agent's shell has no TTY for sudo) | Standard =apt= upgrade | Standard =apt remove=; also re-comment =everywhere= in =init.el='s =:app= block and =doom sync= |
 | =bash-language-server=, =vscode-langservers-extracted= | Shell and JSON language servers for =:lang sh +lsp= / =:lang json +lsp= ([[id:adr-init-flag-audit][ADR-026]]) | =npm install -g --prefix ~/.local <pkg>= — the =--prefix= is deliberate: npm's global prefix here is =/usr/local=, which would need root | =npm install -g --prefix ~/.local <pkg>@latest= | =npm uninstall -g --prefix ~/.local <pkg>=; drop the flag, =doom sync= |
 
 *vterm-module build, done once during Phase 6, historical* (=vterm= is

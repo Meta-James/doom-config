@@ -41,8 +41,8 @@
        ;;deft              ; notational velocity for Emacs
        doom                ; what makes DOOM look the way it does
        dashboard           ; a nifty splash screen for Emacs
-       ;;doom-quit         ; DOOM quit-message prompts when you quit Emacs
-       ;;(emoji +unicode)  ; 🙂 [+ascii +github +unicode]
+       doom-quit           ; DOOM quit-message prompts when you quit Emacs
+       (emoji +ascii +github +unicode) ; 🙂 [+ascii +github +unicode]
        hl-todo             ; highlight TODO/FIXME/NOTE/DEPRECATED/HACK/REVIEW
        indent-guides       ; highlighted indent columns
        (ligatures +extra)  ; ligatures and symbols to make your code pretty again [+extra]
@@ -54,11 +54,11 @@
        (popup +defaults +all) ; tame sudden yet inevitable temporary windows [+all +defaults]
        (smooth-scroll +interpolate) ; So smooth you won't believe it's not butter [+interpolate]
        tabs                ; a tab bar for Emacs
-       ;;treemacs          ; a project drawer, like neotree but cooler [+lsp]
-       ;;unicode           ; extended unicode support for various languages
+       (treemacs +lsp)     ; a project drawer, like neotree but cooler [+lsp]
+       unicode             ; extended unicode support for various languages
        (vc-gutter +pretty) ; vcs diff in the fringe [+pretty]
        vi-tilde-fringe     ; fringe tildes to mark beyond EOB
-       ;;window-select     ; visually switch windows [+numbers +switch-window]
+       (window-select +numbers) ; visually switch windows [+numbers +switch-window]
        workspaces          ; tab emulation, persistence & separate workspaces
        (zen +focus)        ; distraction-free coding or writing [+focus]
 
@@ -68,20 +68,20 @@
        fold                ; (nigh) universal code folding
        (format +onsave)    ; automated prettiness [+lsp +onsave]
        ;;god               ; run Emacs commands without modifier keys
-       ;;lispy             ; vim for lisp, for people who don't like vim
-       ;;multiple-cursors  ; editing in many places at once
+       lispy               ; vim for lisp, for people who don't like vim
+       multiple-cursors    ; editing in many places at once
        ;;objed             ; text object editing for the innocent [+manual]
        ;;parinfer          ; turn lisp into python, sort of
-       ;;rotate-text       ; cycle region at point between text candidates
+       rotate-text         ; cycle region at point between text candidates
        snippets            ; my elves. They type so I don't have to
        (whitespace +guess +trim) ; a butler for your whitespace [+guess +trim]
-       ;;word-wrap         ; soft wrapping with language-aware indent
+       word-wrap           ; soft wrapping with language-aware indent
 
        :emacs
        (dired +icons +dirvish) ; making dired pretty [functional] [+dirvish +icons]
        electric            ; smarter, keyword-based electric-indent
        eww                 ; the internet is gross
-       ;;ibuffer           ; interactive buffer management [+icons]
+       (ibuffer +icons)    ; interactive buffer management [+icons]
        tramp               ; remote files at your arthritic fingertips
        undo                ; persistent, smarter undo for your inevitable mistakes [+tree]
        vc                  ; version-control and Emacs, sitting in a tree
@@ -100,29 +100,29 @@
 
        :tools
        ;;ansible           ; allow silly people to focus on silly things
-       ;;biblio            ; Writes a PhD for you (citation needed)
-       ;;collab            ; buffers with friends [+tunnel]
-       ;;debugger          ; FIXME stepping through code, to help you add bugs [+lsp]
+       biblio              ; Writes a PhD for you (citation needed)
+       (collab +tunnel)    ; buffers with friends [+tunnel]
+       debugger            ; FIXME stepping through code, to help you add bugs [+lsp]
        direnv              ; save (or destroy) the environment at your leisure
        ;;docker            ; contain your enthusiasm [+lsp +tree-sitter]
-       ;;editorconfig      ; let someone else argue about tabs vs spaces
+       editorconfig        ; let someone else argue about tabs vs spaces
        ;;ein               ; tame Jupyter notebooks with emacs
        (eval +overlay)     ; run code, run (also, repls) [+overlay]
        llm                 ; when I said you needed friends, I didn't mean...
        (lookup +dictionary +docsets +offline) ; navigate your code and its documentation [+dictionary +docsets +offline +yandex]
        (lsp +peek)         ; M-x vscode [+booster +eglot +peek]
        (magit +forge)      ; a git porcelain for Emacs [+forge]
-       ;;make              ; run make tasks from Emacs
+       make                ; run make tasks from Emacs
        (pass +auth)        ; password manager for nerds [+auth]
        pdf                 ; pdf enhancements
        ;;terraform         ; infrastructure as code [+lsp]
-       ;;tmux              ; an API for interacting with tmux
+       tmux                ; an API for interacting with tmux
        tree-sitter         ; syntax and parsing, sitting in a tree...
-       ;;upload            ; map local to remote projects via ssh/ftp
+       upload              ; map local to remote projects via ssh/ftp
 
        :os
        (:if (featurep :system 'macos) macos) ; improve compatibility with macOS
-       ;;tty               ; improve the terminal Emacs experience [+osc]
+       (tty +osc)          ; improve the terminal Emacs experience [+osc]
 
        :lang
        ;;ada               ; in strong typing we (blindly) trust [+lsp +tree-sitter]
@@ -199,10 +199,10 @@
        ;;(wanderlust +gmail) ; [+gmail +xface]
 
        :app
-       ;;calendar          ; watch your missed deadlines in real time
-       ;;emms              ; a media player for music no one's heard of
-       ;;everywhere        ; *leave* Emacs!? You must be joking
-       ;;irc               ; how neckbeards socialize
+       calendar            ; watch your missed deadlines in real time
+       emms                ; a media player for music no one's heard of
+       everywhere          ; *leave* Emacs!? You must be joking
+       irc                 ; how neckbeards socialize
        (rss +org +youtube) ; emacs as an RSS reader [+org +youtube]
 
        :config

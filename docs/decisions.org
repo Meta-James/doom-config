@@ -3677,8 +3677,15 @@ See Candidates table above.
 * ADR-025: Calendar via Doom =:app calendar= — calfw view plus two-way org-gcal sync for both Google accounts
 :PROPERTIES:
 :ID:       adr-calendar-org-gcal
-:STATUS:   Scoped, not yet implemented
+:STATUS:   Partially implemented — module enabled, sync not configured
 :DATE:     2026-08-23
+:END:
+:LOGBOOK:
+- Module enabled [2026-08-23 Sun]: the non-language module sweep
+  ([[id:adr-module-sweep-non-lang][ADR-029]]) turned on =:app calendar=, so calfw, calfw-org/cal/ical and
+  org-gcal are installed at the module's pins. Only the package half of this
+  ADR is done — no OAuth credentials in =pass=, no
+  =org-gcal-fetch-file-alist=, no =~/org/calendar/= directory yet.
 :END:
 
 ** Context
@@ -3926,6 +3933,14 @@ refresh token has survived past ~7 days (the specific failure ADR-011 hit).
   kept, =SPC o l= additional" half of this entry was superseded within the hour
   by [[id:adr-llm-module-owns-ai-keys][ADR-028]], which also found that =SPC o l= was never actually the module's
   — [[id:adr-app-launcher][ADR-020]]'s launcher had been shadowing it since this ADR enabled =:tools llm=.
+- Sweep continued, one annotation already stale [2026-08-23 Sun]: this ADR
+  stopped at "annotate and prune"; [[id:adr-module-sweep-non-lang][ADR-029]] then walked the user through the
+  disabled *non-language* modules and enabled 22 of them (55 → 77 modules,
+  188 → 230 packages). That pass also found this ADR's flag annotation for
+  =:tools debugger= to be wrong on the day it was written — the module ships
+  =dape= and =tools/debugger/README.org= says it has no flags, not =[+lsp]=.
+  Treat the annotations as dated against doom core =ad55ed0=, exactly as
+  =init.el='s header comment says.
 :END:
 
 ** Context
@@ -4400,3 +4415,191 @@ See the Candidates table above.
 - Doom's =:config default +bindings= changes the =SPC o l= map — the two
   bindings added here (=d=, =g=) are currently free upstream but are not
   reserved.
+
+* ADR-029: Non-language module sweep — enable 22 more Doom modules; drop =confirm-kill-emacs nil= so =doom-quit= can fire
+:PROPERTIES:
+:ID:       adr-module-sweep-non-lang
+:STATUS:   Implemented; not live-verified (both prerequisite binaries installed, =doom doctor= clean)
+:DATE:     2026-08-23
+:END:
+
+** Context
+[[id:adr-init-flag-audit][ADR-026]] annotated every available flag in =init.el= and enabled the flags
+that earned their keep, but deliberately stopped short of turning on modules
+that were merely *available*: its scope was "annotate and prune first,
+enabling is a separate step". That left roughly forty commented-out modules
+whose value the user had never been asked about one at a time. The user asked
+to be walked through the non-language ones — brief description, conflicts
+with what is already on, and which flags to take — and stated a standing
+preference: enable every flag a chosen module offers, even when that means
+installing more system programs.
+
+** Decision drivers
+- The user's explicit selections. This ADR records a preference sweep, not an
+  agent's judgement call about what a config "should" have; every module below
+  was individually chosen.
+- "Every flag enabled, even if I have to install more programs" — so the
+  default is the maximal flag set, and a missing binary is an install task,
+  not a reason to drop a flag. Same pattern as [[id:adr-rss-elfeed][ADR-012]] (=mpv=/=yt-dlp=)
+  and [[id:adr-init-flag-audit][ADR-026]] (=gnuplot=, =graphviz=, =texlab=, =marksman=).
+- Existing decisions still constrain the eligible set: [[id:adr-corfu-migration][ADR-021]] (one engine
+  per completion axis) rules out =:completion company/ivy/helm/ido=;
+  [[id:adr-terminal-backend-ghostel][ADR-014]] keeps =:term shell/term/vterm= off; =:email notmuch/wanderlust=
+  would be a second mail client.
+- Flags must be read out of the module tree, not out of =init.el='s own
+  comments — =.claude/rules/doom-emacs.md=. This sweep found one comment that
+  was already stale (see Evidence).
+- =std-no-scope-creep=: modules the user did not pick stay commented out, and
+  no configuration was written for the newly-enabled ones. They run at their
+  Doom defaults until a specific need appears.
+
+** Candidates
+| Decision point | Candidates | Fate |
+|----------------+------------+------|
+| Which modules to offer | All ~40 disabled non-=:lang= modules, flat | Rejected — the multiple-choice box takes four options per question; a flat list would have been unreadable |
+| Which modules to offer | *Grouped batches, conflicting modules pre-filtered out* | *Chosen* — eight grouped questions; =company=/=ivy=/=helm=/=ido=, =notmuch=/=wanderlust=, =shell=/=term=/=vterm=, =neotree=, =god=, =parinfer= and the =:input= methods were never offered, each because an existing decision or an enabled module already settles that axis |
+| Project drawer | =neotree= | Rejected — same job as treemacs, less capable |
+| Project drawer | *=treemacs +lsp=* | *Chosen by the user*, knowing it overlaps =dired +dirvish= (see Consequences) |
+| =window-select= flags | =+numbers +switch-window= (both) | Rejected — not a valid combination: =ui/window-select/packages.el= installs =switch-window= *instead of* =ace-window= via an =if=, so the two are mutually exclusive |
+| =window-select= flags | *=+numbers= (winum + ace-window)* | *Chosen* — the maximal *compatible* flag set |
+| =doom-quit= vs =confirm-kill-emacs nil= | Enable the module, leave =config.el= alone | Rejected — the module would be silently inert (Evidence) |
+| =doom-quit= vs =confirm-kill-emacs nil= | *Enable the module, delete =confirm-kill-emacs nil= from =config.el=* | *Chosen* — the user picked =doom-quit= after being told it conflicts, so the conflicting setting is what goes |
+| =collab +tunnel= prerequisite | Drop =+tunnel= | Rejected — contradicts the standing "every flag" preference |
+| =collab +tunnel= prerequisite | *Install =tuntox=* | *Chosen* — upstream release binary into =~/.local/bin=, same pattern as =texlab=/=marksman= |
+
+** Evidence
+- *Flags were re-derived from the module tree*, not from =init.el='s
+  annotations: =grep -rhoE '\(modulep! \+[a-z0-9-]+\)'= across each candidate
+  module directory, cross-checked against each =README.org= "Module flags"
+  section. This found one stale annotation: =init.el= described =:tools
+  debugger= as =[+lsp]=, but =tools/debugger/README.org:14-15= says /This
+  module has no flags/ and the module now ships =dape=, not =dap-mode=. The
+  annotation dated from [[id:adr-init-flag-audit][ADR-026]] the same day; it was wrong when written.
+- *=doom-quit= was genuinely inert as configured.*
+  =ui/doom-quit/config.el:41= is =(setq confirm-kill-emacs #'+doom-quit-fn)=,
+  which runs at module-config time; =config.el= then set
+  =confirm-kill-emacs nil= afterwards, and =config.el= loads after modules.
+  The module would have installed a prompt function that the user's own
+  setting immediately overwrote. Removing the =nil= is what makes the chosen
+  module do anything at all.
+- *=window-select='s flags are exclusive*, from
+  =ui/window-select/packages.el=: =(if (modulep! +switch-window) (package!
+  switch-window) (package! ace-window))=. "Every flag" is not achievable here
+  and =+numbers= alone is the maximum.
+- *=:app calendar= is exactly [[id:adr-calendar-org-gcal][ADR-025]]'s module.* =app/calendar/packages.el=
+  declares =calfw= (pinned =24fa167a=) with =calfw-org=/=calfw-cal=/=calfw-ical=
+  and =org-gcal= (pinned =7304b592=) — the packages that ADR-025 scoped but
+  never enabled. Enabling it here delivers ADR-025's package half only; no
+  =org-gcal= credentials, calendar ids, or =~/org/calendar/= files exist yet.
+- *=doom sync= completed clean*: "All 290 packages are up-to-date",
+  "Finished in 2m 12s". =doom doctor= then reported 77 modules / 230 packages,
+  up from 55 / 188 at [[id:adr-init-flag-audit][ADR-026]]'s close.
+- *=doom doctor= flagged exactly two prerequisite gaps*, both from modules
+  enabled here: =x Unmet dependencies: xdotool= (=:app everywhere=) and
+  =! Couldn't find tuntox command= (=:tools collab= =+tunnel=). The standing
+  "tree-sitter rudimentary before Emacs 31" warning on =markdown +tree-sitter=
+  is unrelated and pre-existing.
+- *=tuntox= 0.0.10 installed and confirmed runnable*: upstream release binary
+  =tuntox-x64= into =~/.local/bin/tuntox=, =sha256
+  76beab684624905ee6a0a913489cb2f03a21f37d800d28e7c4001545a09acb8f=,
+  =tuntox -h= prints "Tuntox built from git commit 18b0864c…, toxcore version
+  0.2.13".
+
+** Decision
+Enable these 22 modules in =init.el=, at the flag sets shown:
+
+- =:ui= — =doom-quit=, =(emoji +ascii +github +unicode)=, =(treemacs +lsp)=,
+  =unicode=, =(window-select +numbers)=
+- =:editor= — =lispy=, =multiple-cursors=, =rotate-text=, =word-wrap=
+- =:emacs= — =(ibuffer +icons)=
+- =:tools= — =biblio=, =(collab +tunnel)=, =debugger=, =editorconfig=, =make=,
+  =tmux=, =upload=
+- =:os= — =(tty +osc)=
+- =:app= — =calendar=, =emms=, =everywhere=, =irc=
+
+Delete =confirm-kill-emacs nil= from =config.el='s "better default behavior"
+=setq= so =:ui doom-quit= can install its prompt. Install the two missing
+prerequisite binaries (=tuntox= via upstream release into =~/.local/bin=,
+=xdotool= via apt). Write no configuration for any of the new modules — they
+run at Doom defaults until a concrete need appears.
+
+Explicitly *not* enabled, having been offered and declined: =:tools docker=,
+=:tools ein= (redundant with =:lang org +jupyter= for this user's notebook
+use), =:tools terraform=, =:tools ansible=, =:term eshell=, =:ui deft=
+(superseded by org-roam/Vulpea, [[id:adr-org-roam-with-vulpea][ADR-027]]). These stay commented out with
+their flag annotations intact.
+
+** Consequences
+- *Quitting Emacs now prompts.* This is a deliberate reversal of a
+  long-standing personal setting, and it is the one change here that alters
+  daily muscle memory rather than adding capability.
+- *=treemacs +lsp= is a second file-tree UI next to =dired +icons +dirvish=.*
+  [[id:adr-corfu-migration][ADR-021]]'s "one tool per responsibility" rule is scoped per axis, and the
+  honest reading is that these are adjacent but not identical axes — a
+  persistent project drawer versus a file *manager* — much like Corfu and
+  Vertico. That is a defensible split, not an obviously correct one; if the
+  drawer goes unused, it is the first thing to cut.
+- *=editorconfig= now wins over =:editor whitespace +guess= wherever a
+  =.editorconfig= file exists.* Not a conflict Doom will warn about; it is
+  simply a higher-priority source of indent settings. Worth remembering the
+  next time indentation in some repo "ignores" the guessed style.
+- *=:app calendar= is now installed but unconfigured*, so [[id:adr-calendar-org-gcal][ADR-025]] moves from
+  "no packages" to "packages present, sync not set up". Its remaining work
+  (OAuth client id/secret in =pass=, =org-gcal-fetch-file-alist=, the
+  =~/org/calendar/= directory) is unchanged.
+- *=(tty +osc)= only matters under =emacs -nw=*, which this config does not
+  otherwise target — it is cheap insurance, not a used path.
+- *Nine modules add keybindings this config has never mapped* (treemacs,
+  ibuffer, multiple-cursors, window-select, biblio, debugger, emms, irc,
+  calendar). Doom's own leader bindings cover most; if any collide with this
+  repo's =map!= blocks, the collision will be invisible in =config.el= alone —
+  the same class of problem [[id:adr-llm-module-owns-ai-keys][ADR-028]] hit with =SPC o l=. A headless binding
+  dump is the way to check.
+- *=irc= and =calendar= will want credentials*, which per this repo's rules go
+  through =pass= / =+pass-get-secret=, never into =config.el=.
+
+** Rejected alternatives
+See the Candidates table above.
+
+** Validation
+- =doom sync= clean (2m 12s, 290 packages up to date), quoted under Evidence.
+- =doom doctor= after the sweep: 77 modules, 230 packages, and only the two
+  prerequisite gaps this ADR then closed, plus the pre-existing markdown
+  tree-sitter caveat.
+- =tuntox= installed and runnable (=tuntox -h= output quoted above).
+- =xdotool= and =xclip= installed by the user in their own terminal (the
+  agent's non-interactive shell has no TTY for sudo's password prompt);
+  =which= confirms =/usr/bin/xdotool= and =/usr/bin/xclip=.
+- =doom doctor= re-run after both installs: *no errors, one warning* — the
+  standing "tree-sitter rudimentary before Emacs 31" caveat on =markdown
+  +tree-sitter=, which predates this sweep and no action here can clear.
+- *Not live-verified*: the user's long-running Emacs has not been restarted
+  with these 22 modules active. Per [[id:tshoot-daemon-validation][tshoot-daemon-validation]], nothing here
+  counts as confirmed until that restart happens — in particular the quit
+  prompt, treemacs, and whether any new module's keys collide with this
+  repo's own bindings.
+
+** Rollback
+- Whole sweep: =git revert= the commit, then =doom sync=. The change is
+  confined to =init.el=, =config.el= (one deleted line), and docs.
+- Single module: re-comment its line in =init.el= and =doom sync=. Nothing in
+  =config.el= depends on any of the 22, by design.
+- The quit prompt alone: restore =confirm-kill-emacs nil= in =config.el= *and*
+  re-comment =doom-quit= — leaving both would recreate the inert-module state
+  this ADR diagnosed.
+- =tuntox=: =rm ~/.local/bin/tuntox= and drop the =+tunnel= flag.
+
+** Revisit when
+- The user restarts Emacs and finds a binding collision, a slow startup, or a
+  module that simply is not used — the sweep was chosen from descriptions, so
+  the first real usage pass is the honest filter.
+- =treemacs= goes unused for a month while dirvish stays the file UI — cut
+  treemacs and record it, rather than carrying two drawers.
+- [[id:adr-calendar-org-gcal][ADR-025]]'s sync work starts, at which point =:app calendar= stops being an
+  idle module and needs its credential and file-layout half.
+- =:tools debugger= is actually used: it ships =dape=, and this repo has no
+  =dape= configuration or launch templates for Python (=:lang python +lsp=)
+  yet.
+- A future =doom upgrade= changes any of these modules' flag sets — the flag
+  annotations in =init.el= are dated 2026-08-23 against doom core =ad55ed0=
+  and this sweep already found one that had gone stale within a day.
