@@ -61,3 +61,8 @@
 ;; replacing the plain nav-flash blink Doom's :ui nav-flash module would
 ;; otherwise provide.
 (package! pulsar)
+
+;; Torrents (docs/decisions.org ADR-030): Emacs front-end for a local
+;; transmission-daemon over its RPC API. No Doom module ships a torrent
+;; client, and this is the only maintained Emacs one.
+(package! transmission)

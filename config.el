@@ -659,6 +659,34 @@ Errors for any account not listed in `+mu4e-spam-accounts'."
 ;; doesn't show a buffer that's stale since the last manual `elfeed-update'.
 (add-hook 'elfeed-search-mode-hook #'elfeed-update)
 
+;; Torrents: transmission.el drives a local transmission-daemon over its RPC
+;; API (see docs/decisions.org ADR-030). The daemon runs as a *user* systemd
+;; unit (~/.config/systemd/user/transmission-daemon.service), not the packaged
+;; system unit: that one ships `Type=notify' and times out on this Ubuntu, and
+;; running as `debian-transmission' would leave every download owned by another
+;; user. RPC listens on 127.0.0.1:9091 with authentication off, which is why no
+;; credential lookup appears here -- if auth is ever turned on, the password
+;; comes from auth-source (`:tools pass'), never a literal in this file.
+;; `SPC o t'/`SPC o T' are ghostel's, so torrents take `SPC o B' (BitTorrent).
+(map! :leader :desc "Torrents (transmission)" "o B" #'transmission)
+
+(after! transmission
+  ;; Poll the daemon while these buffers are visible, so the list isn't stale
+  ;; between manual `g' presses. transmission.el's own documented opt-in --
+  ;; it refreshes in these modes only.
+  (setq transmission-refresh-modes '(transmission-mode
+                                     transmission-files-mode
+                                     transmission-info-mode
+                                     transmission-peers-mode)))
+
+;; Hand `magnet:' links to the daemon rather than the default browser, so a
+;; magnet from eww, elfeed, or anywhere else that routes through `browse-url'
+;; is added without a detour through a GUI client.
+(add-to-list 'browse-url-handlers
+             (cons "\\`magnet:"
+                   (lambda (url &optional _new-window)
+                     (transmission-add url))))
+
 ;; App launcher: SPC o L -- raise-or-launch external GUI apps, plus a couple
 ;; of "the Emacs command *is* the app" bindings (calc, proced) that need no
 ;; process launching at all. This is a plain process launcher, not a window-

@@ -801,3 +801,52 @@ before assuming this is fixed; re-apply this patch if so, or drop this entry
 if upstream has since fixed it properly (worth filing as an upstream issue/PR
 against =manzaltu/claude-code-ide.el= rather than re-patching locally
 forever — not done yet, no explicit go-ahead given for opening one).
+
+* RESOLVED (workaround, upstream unfixed): packaged =transmission-daemon.service= times out on startup
+:PROPERTIES:
+:ID:       tshoot-transmission-system-unit
+:END:
+
+*Symptom*: immediately after =sudo apt install transmission-daemon= on Ubuntu
+(transmission =4.0.5=), the service is dead and =systemctl status
+transmission-daemon= reports:
+
+#+begin_example
+Active: failed (Result: timeout) since Sun 2026-08-23 20:07:25 MDT
+Process: ExecStart=/usr/bin/transmission-daemon -f --log-level=error (code=exited, status=0/SUCCESS)
+transmission-daemon.service: start operation timed out. Terminating.
+#+end_example
+
+Note the contradiction that identifies the class of bug: =status=0/SUCCESS=
+on a unit systemd considers *failed*. The daemon was fine; systemd killed it.
+
+*Cause*: the shipped unit is =Type=notify=, so systemd waits for an
+=sd_notify(READY=1)= that this build never sends, then times out after 90s and
+terminates a perfectly healthy process. Nothing is wrong with the
+configuration, the port, or permissions — checking those first is wasted time.
+
+*Confirmation it is not the daemon*: running the identical command in the
+foreground as the user works on the first try — =transmission-remote -l=
+returns the (empty) torrent table straight away.
+
+*Fix used here* ([[id:adr-torrent-transmission][ADR-030]]): don't repair the system unit — run the daemon as a
+*user* unit instead, =~/.config/systemd/user/transmission-daemon.service= with
+=Type=simple=, then =systemctl --user enable --now transmission-daemon=. This
+solves a second problem at the same time: the packaged unit runs as
+=debian-transmission=, which would leave every completed download owned by a
+system account instead of the user.
+
+*Two loose ends this leaves*, both deliberate:
+
+- The system unit stays installed and =enabled=, so it keeps failing at every
+  boot and shows up in =systemctl --failed=. It is harmless (it never binds
+  the port, so it cannot conflict with the user unit). Silencing it means
+  =sudo systemctl mask transmission-daemon=, which needs a root action the
+  agent doesn't take unprompted.
+- A user unit only lives as long as the login session, so seeding stops at
+  logout. =loginctl enable-linger $USER= changes that if it's ever wanted.
+
+*Takeaway*: =Result: timeout= together with =status=0/SUCCESS= means a
+readiness-protocol mismatch (=Type=notify= vs. a daemon that doesn't notify),
+not a broken daemon. Check the unit's =Type== before debugging the service
+itself.

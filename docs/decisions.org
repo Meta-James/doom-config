@@ -4690,3 +4690,158 @@ See the Candidates table above.
 - A future =doom upgrade= changes any of these modules' flag sets — the flag
   annotations in =init.el= are dated 2026-08-23 against doom core =ad55ed0=
   and this sweep already found one that had gone stale within a day.
+
+* ADR-030: Torrent client — =transmission.el= against a user-session =transmission-daemon=
+:PROPERTIES:
+:ID:       adr-torrent-transmission
+:STATUS:   Implemented (not yet live-verified)
+:DATE:     2026-08-23
+:END:
+
+** Context
+The user asked to use Emacs as a torrent client. Nothing in this repo touched
+torrents before this ADR: =grep -rniE 'torrent|transmission|aria2'= across
+=*.el= and =*.org= returned no hits, and no Doom module ships a torrent client,
+so this is a new responsibility rather than a change to an existing one.
+
+The machine already had =qbittorrent 4.6.3-1build2= installed (GUI only, no
+daemon running), which made "reuse what is already installed" the first
+question to answer rather than an afterthought.
+
+** Decision drivers
+- The ladder in the repo's laziness rules: reuse an installed dependency before
+  installing a new one, and write no glue code that a maintained package
+  already provides.
+- "One tool per responsibility" ([[id:adr-corfu-migration][ADR-021]]) — this is a new axis (torrent
+  transfer), not a second client on an existing one, so it does not conflict.
+- Downloads must land in the user's own files, owned by the user. A daemon
+  running as a separate system account creates a permissions problem on every
+  single download.
+- No secret values in =config.el= (=.claude/rules/security.md=).
+- The RPC socket must not be reachable off-host.
+
+** Candidates
+| Candidate | Emacs client | New system package | Fate |
+|-----------+--------------+--------------------+------|
+| =transmission-daemon= + =transmission.el= | Maintained, on MELPA, =tabulated-list-mode= so =evil-collection= covers the bindings for free | Yes — =transmission-daemon= | *Chosen* |
+| Keep =qbittorrent=, drive its WebUI API from Emacs | None found; would mean hand-writing login-cookie handling, =torrents/info=, =torrents/add=, and a list UI | No | Rejected — trades one =apt install= for ~50–100 lines of glue this repo would then own and maintain |
+| =aria2= + =aria2.el= | Exists, less polished than =transmission.el= | Yes — =aria2= | Rejected — same install cost as transmission, weaker Emacs side. Its extra HTTP/FTP download handling is not a need anyone stated |
+| =rtorrent= + =mentor= | Exists, least actively maintained of the three | Yes — =rtorrent= | Rejected — worst maintenance story, no compensating advantage |
+
+Honest gap: the "no maintained Emacs qBittorrent client exists" row rests on
+prior knowledge, not on a live MELPA/GitHub search performed during this work.
+If such a package turns up later, the qBittorrent row deserves re-costing,
+because it would remove the system-package install entirely.
+
+** Evidence
+- =which transmission-daemon aria2c rtorrent deluge= — all empty before the
+  install; =dpkg -l= showed only =qbittorrent 4.6.3-1build2=.
+- The packaged system unit does *not* work on this machine. After the user's
+  =apt install=, =systemctl status transmission-daemon= reported:
+  #+begin_example
+  Active: failed (Result: timeout) since Sun 2026-08-23 20:07:25 MDT
+  transmission-daemon.service: start operation timed out. Terminating.
+  #+end_example
+  The unit is =Type=notify= and the daemon never sent readiness, so systemd
+  killed a process that was otherwise healthy.
+- The same binary run in the foreground as the user works immediately:
+  =transmission-remote -l= returned the (empty) torrent table on first try.
+- Generated user config at =~/.config/transmission-daemon/settings.json=:
+  =rpc-port 9091=, =rpc-authentication-required false=, =rpc-whitelist
+  "127.0.0.1,::1"=, =download-dir "/home/james/Downloads"= — but
+  =rpc-bind-address "0.0.0.0"=, which this ADR changed to =127.0.0.1=.
+- After installing the user unit: =systemctl --user is-active= reports
+  =active=, and =ss -ltnp= shows =LISTEN 127.0.0.1:9091= owned by
+  =transmission-da=, i.e. bound to loopback rather than every interface.
+- Keybinding survey of the live =doom-leader-open-map= (via =emacsclient= and
+  =which-key--get-keymap-bindings=) shows =t=Toggle ghostel popup= and
+  =T=Open ghostel here=, so the mnemonic =SPC o t= was unavailable and
+  =SPC o B= (BitTorrent) was free.
+- =doom sync= clean in 9.5s; =transmission= built to
+  =~/.config/emacs/.local/straight/build-30.2/transmission/=.
+- =doom doctor=: 77 modules, 231 packages, *one warning* — the standing
+  "tree-sitter rudimentary before Emacs 31" caveat on =markdown=, which
+  predates this work (see [[id:adr-module-sweep-non-lang][ADR-029]]).
+- RPC round trip from Emacs, not just from the shell: loading
+  =transmission.el= and calling =(transmission-request "session-get")=
+  returned the daemon's session alist, including =(config-dir
+  . "/home/james/.config/transmission-daemon")= and =(download-dir
+  . "/home/james/Downloads")= — confirming Emacs talks to the *user* daemon.
+
+** Decision
+- =packages.el=: =(package! transmission)=.
+- Run the daemon as a *systemd user unit* at
+  =~/.config/systemd/user/transmission-daemon.service=, =Type=simple=,
+  =ExecStart=/usr/bin/transmission-daemon -f --log-level=error=,
+  =Restart=on-failure=. This sidesteps the =Type=notify= timeout *and* the
+  =debian-transmission= file-ownership problem in one move.
+- Harden =~/.config/transmission-daemon/settings.json= by binding RPC to
+  =127.0.0.1= instead of =0.0.0.0=. The whitelist already restricted callers;
+  the bind address makes it structural rather than policy.
+- =config.el=: bind =SPC o B= to =transmission=, set
+  =transmission-refresh-modes= inside =after!= so the list/file/peer buffers
+  poll while visible, and register a =browse-url-handlers= entry so any
+  =magnet:= link resolves to =transmission-add= instead of the default
+  browser.
+- No credential lookup in =config.el=, because RPC authentication is off on a
+  loopback-only socket. If authentication is ever enabled, the password comes
+  from auth-source via =:tools pass=, never a literal.
+
+** Consequences
+- The failed *system* =transmission-daemon.service= is still installed and
+  =enabled=. It will keep failing at each boot — harmless (it never binds the
+  port, so it cannot conflict with the user unit) but it leaves a red unit in
+  =systemctl --failed=. Masking it needs =sudo= and is left as a follow-up for
+  the user rather than done silently.
+- The user unit lives as long as the login session. Seeding will stop at
+  logout unless =loginctl enable-linger= is turned on. Not enabled here: no
+  one asked for post-logout seeding, and it is one command to add later.
+- =magnet:= links now bypass the browser Emacs-wide, including inside eww and
+  elfeed. That is the point, but it means a magnet click no longer offers a
+  GUI client choice.
+- =qbittorrent= stays installed and untouched. Two torrent clients now exist on
+  the machine, but only one is wired into Emacs, so the "one tool per
+  responsibility" rule is satisfied at the level this repo governs.
+- Deliberately skipped: the elfeed-to-torrent command sketched while planning
+  (add the current entry's enclosure as a torrent). Nobody has an actual feed
+  that needs it yet; the =browse-url= handler already covers magnets in elfeed,
+  and the dedicated command is a few lines whenever a real feed calls for it.
+
+** Rejected alternatives
+See the Candidates table above.
+
+** Validation
+- =doom sync= clean, =doom doctor= clean apart from the pre-existing markdown
+  tree-sitter warning (both quoted under Evidence).
+- Daemon reachable and loopback-bound: =systemctl --user is-active= =active=,
+  =ss -ltnp= shows =127.0.0.1:9091=.
+- Emacs-side RPC confirmed by an actual =session-get= call returning the user
+  daemon's config, not by assuming the defaults line up.
+- *Not yet live-verified*: Emacs has not been restarted, so =SPC o B=, the
+  =magnet:= handler, and the refresh modes have not been exercised in a real
+  session. Per [[id:tshoot-daemon-validation][tshoot-daemon-validation]], that check belongs to the user's
+  next restart, and this ADR's =:STATUS:= should move to =Implemented,
+  live-verified= only then.
+
+** Rollback
+- Emacs side: =git revert= the commit and =doom sync=. The change is confined to
+  =packages.el=, =config.el=, and docs.
+- Daemon: =systemctl --user disable --now transmission-daemon= and
+  =rm ~/.config/systemd/user/transmission-daemon.service=.
+- System package: =sudo apt remove transmission-daemon=. Torrent state and
+  settings survive in =~/.config/transmission-daemon/= unless separately
+  removed.
+
+** Revisit when
+- Emacs is restarted and =SPC o B= is actually used — the first real session is
+  what promotes this ADR's status, or surfaces a binding/handler problem.
+- A maintained Emacs qBittorrent client appears, which would let the
+  system-package install be dropped entirely (see the honest gap noted under
+  Candidates).
+- Seeding needs to survive logout, at which point =loginctl enable-linger= and
+  a note here are the change.
+- Remote or seedbox access is wanted: that turns on RPC authentication, which
+  pulls =:tools pass= and a credential entry into this decision for the first
+  time.
+- The failed system unit becomes noisy enough to mask, or an Ubuntu update
+  fixes its =Type=notify= behaviour and makes the user unit redundant.

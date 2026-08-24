@@ -121,6 +121,7 @@ configuration in =config.el=; they run at Doom defaults.
 | perfect-margin | MELPA default                                       | unrelated to AI work, untouched            |
 | claude-code-ide | =(:host github :repo "manzaltu/claude-code-ide.el")= | Installed Phase 6, 2026-07-20; no tagged release upstream yet (pre-1.0) |
 | vulpea         | MELPA default                                       | =2ea4a8b= (2026-08-17), installed 2026-08-18; see [[id:adr-vulpea-note-management][ADR-019]] (retroactive) |
+| transmission   | MELPA default                                       | installed 2026-08-23; front-end for a local =transmission-daemon=, see [[id:adr-torrent-transmission][ADR-030]] |
 | ~~exwm~~       | removed 2026-07-20, see [[id:adr-remove-exwm][ADR-002]]         | —                                          |
 
 * External binaries
@@ -167,6 +168,8 @@ configuration in =config.el=; they run at Doom defaults.
 | sqlite3 (CLI) | yes | =/usr/bin/sqlite3=, =3.45.1= (apt, 2026-08-23) — needed by =:tools lookup +docsets= (dash-docs). Distinct from Emacs' *built-in* sqlite, which is what =magit +forge=, org-roam, and vulpea use |
 | wn (wordnet) | yes | =/usr/bin/wn= (apt =wordnet=, 2026-08-23) — offline thesaurus/definitions for =:tools lookup +offline= (wordnut/synosaurus). =doom doctor= does not check for it |
 | maim    | yes     | =/usr/bin/maim=, =v5.7.4= (apt, 2026-08-23) — screenshot capture for =org-download-clipboard= (=:lang org +dragndrop=); =xclip= (already present) covers the clipboard half on X11 |
+| transmission-daemon / transmission-remote | yes | =/usr/bin/transmission-daemon=, =4.0.5 (a6fe2a64aa)= (apt, installed by the user 2026-08-23) — RPC backend for =transmission.el= ([[id:adr-torrent-transmission][ADR-030]]). Runs as a *user* systemd unit, not the packaged system unit, which fails =Type=notify= startup on this machine — see [[id:tshoot-transmission-system-unit][troubleshooting.org]] |
+| qbittorrent | yes  | =qbittorrent 4.6.3-1build2= (apt) — predates this project, GUI only, *not* wired into Emacs. Kept installed; see [[id:adr-torrent-transmission][ADR-030]]'s Candidates for why it wasn't the Emacs backend |
 
 Node 18.19.1 initially looked like a possible blocker for
 =copilot-language-server=. Resolved in Phase 5: this install actually uses the
@@ -210,6 +213,7 @@ the AI subsystem, not a full machine audit).
 | =texlab=, =marksman= | LaTeX and Markdown language servers for =+lsp= on those modules ([[id:adr-init-flag-audit][ADR-026]]) | Upstream GitHub release binaries, =install -m755= into =~/.local/bin= (no apt package for either) | Re-download the newer release the same way; neither self-updates | =rm ~/.local/bin/{texlab,marksman}=; drop the =+lsp= flag from that module |
 | =tuntox= | Tox-protocol port forwarding behind =:tools collab= =+tunnel= ([[id:adr-module-sweep-non-lang][ADR-029]]) | Upstream release binary =tuntox-x64= 0.0.10 (=gjedeer/tuntox=) into =~/.local/bin/tuntox=, =chmod +x= — no apt package. sha256 =76beab684624905ee6a0a913489cb2f03a21f37d800d28e7c4001545a09acb8f= | Re-download the newer release the same way; does not self-update | =rm ~/.local/bin/tuntox=; drop the =+tunnel= flag, =doom sync= |
 | =xdotool= (+ =xclip=) | X11 window/keystroke automation =:app everywhere= needs to paste back into the app you invoked it from ([[id:adr-module-sweep-non-lang][ADR-029]]) | =sudo apt install xdotool xclip= — user's own terminal (agent's shell has no TTY for sudo) | Standard =apt= upgrade | Standard =apt remove=; also re-comment =everywhere= in =init.el='s =:app= block and =doom sync= |
+| =transmission-daemon= | BitTorrent daemon =transmission.el= drives over RPC on =127.0.0.1:9091= ([[id:adr-torrent-transmission][ADR-030]]) | =sudo apt install transmission-daemon= — done 2026-08-23 (user's own terminal, agent's shell has no TTY for sudo). The packaged *system* unit then fails =Type=notify= startup, so this config runs it as a user unit instead: =~/.config/systemd/user/transmission-daemon.service=, =systemctl --user enable --now transmission-daemon= | Standard =apt= upgrade; the user unit needs no change | =systemctl --user disable --now transmission-daemon=, =rm ~/.config/systemd/user/transmission-daemon.service=, =sudo apt remove transmission-daemon=; drop =transmission= from =packages.el= and =doom sync=. Torrent state persists in =~/.config/transmission-daemon/= unless removed separately |
 | =bash-language-server=, =vscode-langservers-extracted= | Shell and JSON language servers for =:lang sh +lsp= / =:lang json +lsp= ([[id:adr-init-flag-audit][ADR-026]]) | =npm install -g --prefix ~/.local <pkg>= — the =--prefix= is deliberate: npm's global prefix here is =/usr/local=, which would need root | =npm install -g --prefix ~/.local <pkg>@latest= | =npm uninstall -g --prefix ~/.local <pkg>=; drop the flag, =doom sync= |
 
 *vterm-module build, done once during Phase 6, historical* (=vterm= is

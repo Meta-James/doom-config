@@ -363,3 +363,38 @@ in their session. That same restart also cleared the pending live-verification
 on [[file:docs/decisions.org][ADR-026]], ADR-027, ADR-028, and ADR-029 — all four moved from
 "Implemented; not live-verified" to live-verified, with the per-ADR caveat that
 individual features were not itemized back one by one.
+
+** TODO Emacs as a torrent client — transmission.el + user-session daemon
+:PROPERTIES:
+:EFFORT:   1h
+:END:
+
+Requested 2026-08-23, off-roadmap (the roadmap's active phase is AI
+integration, and this isn't that). Full writeup: [[id:adr-torrent-transmission][ADR-030]].
+
+- [X] Backend chosen: =transmission-daemon= + =transmission.el= over the
+  already-installed qBittorrent, because no maintained Emacs client exists
+  for the latter and writing the WebUI glue would cost more than the one
+  =apt install= — see ADR-030's Candidates table.
+- [X] =transmission-daemon= =4.0.5= installed by the user (2026-08-23).
+- [X] Packaged system unit diagnosed as broken on this machine
+  (=Type=notify= timeout, not a daemon fault) and replaced with a user unit
+  at =~/.config/systemd/user/transmission-daemon.service= — see
+  [[id:tshoot-transmission-system-unit][troubleshooting.org]].
+- [X] RPC hardened: =rpc-bind-address= changed =0.0.0.0= -> =127.0.0.1=.
+  Authentication stays off, which is why no credential entry is involved.
+- [X] =(package! transmission)= declared; =config.el= gains =SPC o B=
+  (=SPC o t=/=T= belong to ghostel), =transmission-refresh-modes=, and a
+  =browse-url-handlers= entry routing =magnet:= links to =transmission-add=.
+- [X] =doom sync= clean (9.5s); =doom doctor= clean apart from the standing
+  markdown tree-sitter warning.
+- [X] Emacs-side RPC round trip confirmed by an actual =session-get= call
+  returning the user daemon's =config-dir= and =download-dir=.
+- [ ] *Live-verify after the next Emacs restart*: =SPC o B= opens the
+  torrent list, a =magnet:= link adds to the daemon instead of opening a
+  browser, and the auto-refresh actually polls. Promote ADR-030's =:STATUS:=
+  to =Implemented, live-verified= then, per [[id:tshoot-daemon-validation][tshoot-daemon-validation]].
+- [ ] Optional, deliberately deferred: mask the still-=enabled= system unit
+  (=sudo systemctl mask transmission-daemon=) so it stops failing at boot,
+  and =loginctl enable-linger= if seeding should survive logout. Neither is
+  needed for the client to work.
