@@ -924,3 +924,64 @@ Verified after the fix: the same reproduction now leaves the buffer empty, with
 temp file and *then* sets a major mode can trip Doom's file templates, because
 the template check is on buffer-switch rather than file-visit. =org-capture= is
 special-cased in =+file-templates-check-h= by name; nothing else is.
+
+* OPEN (workaround known): =emacsclient= output is swallowed by the rtk Bash hook
+:PROPERTIES:
+:ID:       tshoot-rtk-swallows-emacsclient
+:END:
+
+An agent running =emacsclient -e '...'= through its Bash tool gets *completely
+empty output* — no value, no error, no diagnostic. The failure is silent and
+looks exactly like a dead Emacs server, which sends you off diagnosing the
+wrong thing entirely.
+
+Reproduction, run with the Emacs server *deliberately down* (so every call
+below should have printed a socket error):
+
+#+begin_example
+$ emacsclient -e '"hello"'      # → nothing
+$ emacsclient -e '(+ 1 1)'      # → nothing
+$ emacsclient -e '(list 1 2)'   # → nothing
+$ rtk proxy "emacsclient -e '(+ 1 1)'"
+/snap/emacs/.../emacsclient: can't find socket; have you started the server?
+#+end_example
+
+Surrounding =echo= statements in the same Bash invocation print normally, so
+the whole command block is not being suppressed — only the =emacsclient=
+output is. Redirecting to a file and =cat=-ing it back in the same command
+also yields nothing, so the output is lost *before* it reaches the shell,
+not filtered out of the transcript afterward.
+
+*Cause*: the =rtk hook claude= =PreToolUse= hook in =~/.claude/settings.json=
+rewrites Bash commands ([[id:adr-token-reduction-stack][ADR-023]]). =rtk proxy <cmd>= is documented to
+execute a command *without* filtering, and it restores the output in every
+case tested.
+
+*Workaround*: wrap the whole invocation in =rtk proxy=, which takes one
+single-quoted argument — so the elisp needs escaped double quotes inside:
+
+#+begin_example
+rtk proxy 'emacsclient -e "(format \"%S\" (list ...))"'
+#+end_example
+
+Wrapping the payload in =(format "%S" ...)= is worth doing anyway: it returns
+one readable line instead of a bare sexp spread over the reply.
+
+*How to tell this apart from an actually-dead server*: a genuinely dead server
+prints =can't find socket; have you started the server?= *through* =rtk
+proxy=. If =rtk proxy= also returns empty, the problem is somewhere else.
+
+*Not fully characterised.* This is filed OPEN rather than RESOLVED because the
+suppression is not perfectly consistent: earlier in the same session, one
+=emacsclient -e '(mapconcat ...)'= call returned its output correctly, while
+every later call — including simpler ones — returned nothing. No rule
+distinguishing the working call from the failing ones has been established.
+Treat =rtk proxy= as the default for =emacsclient= rather than reaching for it
+only after a silent failure.
+
+*Related but not the same cause*: [[id:tshoot-agent-shell-system-state][tshoot-agent-shell-system-state]] records the
+same symptom class — the agent's own shell reporting wrong results about the
+real machine — but predates rtk's installation (ADR-020, 2026-08-13, against
+[[id:adr-token-reduction-stack][ADR-023]], 2026-08-23), so rtk cannot explain those earlier failures. What
+this entry adds is a second, now-confirmed mechanism for the same kind of
+wrongness.
