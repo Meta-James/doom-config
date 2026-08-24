@@ -328,6 +328,36 @@
         :desc "Switch tab group"     "T" #'centaur-tabs-switch-group
         :desc "Kill other tabs (group)" "o" #'centaur-tabs-kill-other-buffers-in-current-group)))
 
+;; Leftover cosmetic-module commands with no key at all. Doom already covers
+;; the rest: `SPC t z'/`t Z' (zen), `t m' (minimap), `t i' (indent-guides),
+;; `t d' (vc-gutter) with `SPC g ]'/`g [' for hunks, `SPC o p'/`o P'
+;; (treemacs), `SPC i e'/`i u' (emoji/unicode), `]t'/`[t' (hl-todo nav),
+;; `SPC TAB ...' (workspaces), `SPC w 1'-`w 9' (window-select/winum), and
+;; ``C-`'' (popup). Only these two were unreachable outside `M-x'.
+;;
+;; `SPC o h' -- the dashboard is a buffer you can only get back to by killing
+;; everything else; `+dashboard/open' is its front door. `h' for "home",
+;; matching the fallback buffer's role.
+;;
+;; `SPC s h' -- `hl-todo' highlights TODO/FIXME/HACK everywhere but only ships
+;; point-to-point motion; `hl-todo-occur' is the list view. It sits under
+;; search rather than toggle because it answers "where are they", not
+;; "show/hide them".
+(map! :leader
+      :desc "Dashboard (home)" "o h" #'+dashboard/open
+      :desc "TODOs in buffer"  "s h" #'hl-todo-occur)
+
+;; `:ui treemacs' and `:emacs dired +dirvish' both bind `SPC o p' to "Project
+;; sidebar"; treemacs' binding is declared later in Doom's `+evil-bindings.el',
+;; so it wins and `dirvish-side' becomes reachable only from `M-x'. Rather than
+;; drop a module, both are kept and split by axis -- the same per-axis reading
+;; of the one-tool-per-responsibility rule that ADR-021 applied to Corfu and
+;; Vertico. Treemacs is structural browsing (and carries the `+lsp' symbol,
+;; error, and call-hierarchy trees on `SPC c S'/`c X'/`c y'); dirvish-side is
+;; file manipulation -- rename, chmod, wdired -- in a narrow window.
+;; Full dirvish stays on `SPC o /'.
+(map! :leader :desc "Project sidebar (dirvish)" "o s" #'dirvish-side)
+
 ;; Save minibuffer history (Vertico likes this)
 (after! savehist
   (savehist-mode 1))

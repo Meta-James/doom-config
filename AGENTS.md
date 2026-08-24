@@ -44,7 +44,10 @@ changes, don't re-derive architecture from scratch. `docs/roadmap.org` and
   minibuffer/`completing-read` completion (Vertico) — these solve different
   problems and both existing is not a violation. Don't stack two engines on
   the *same* axis (e.g. Corfu and Company both active). See `docs/decisions.org`
-  ADR-021.
+  ADR-021. Project sidebars are scoped the same way: treemacs (structural
+  browsing, and the anchor for the `+lsp` symbol/error/call-hierarchy trees)
+  and `dirvish-side` (file manipulation in a narrow window) both exist
+  deliberately, on `SPC o p` and `SPC o s` respectively — see ADR-031.
 
 ## Where to look first
 

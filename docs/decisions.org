@@ -4902,3 +4902,186 @@ See the Candidates table above.
   re-read the decision, not to reverse it automatically.
 - Lingering starts costing something: with =Linger=yes= the daemon now runs
   even when nobody is logged in, so a machine that should be idle isn't.
+
+* ADR-031: Cosmetic =:ui= module keybinding audit — resolve the =SPC o p= sidebar collision by axis rather than by dropping a module
+:PROPERTIES:
+:ID:       adr-cosmetic-module-bindings
+:STATUS:   Implemented, live-verified
+:DATE:     2026-08-23
+:END:
+:LOGBOOK:
+- State "Live-verified" from "Implemented" [2026-08-23 Sat] — user reloaded and
+  exercised all three bindings in their own session. =SPC s h= was confirmed
+  first and separately: it returned four =hl-todo-occur= hits in =config.el=,
+  all of them the literal word "TODO" in the ADR-017 comment block, the
+  =org-todo-keywords= sequence, and the ="* TODO %?\n%U"= capture template —
+  no real task markers, and a useful demonstration that =hl-todo= matches text
+  without syntactic awareness. =SPC o h= and =SPC o s= confirmed working in the
+  same pass.
+:END:
+
+** Context
+[[id:adr-ui-rice-pass][ADR-022]] and [[id:adr-module-sweep-non-lang][ADR-029]]
+between them turned on most of Doom's =:ui= modules, and
+[[id:adr-tabs-new-tab-dashboard][ADR-024]] gave =:ui tabs= its bindings, but no
+pass had ever asked the flat question: of every cosmetic module now enabled,
+which ones expose a command that has no key at all?
+
+Auditing that surfaced two separate problems.
+
+1. Two modules — =:ui dashboard= and =:ui hl-todo= — each ship a command
+   reachable only from =M-x=. The dashboard is =doom-fallback-buffer= but has
+   no "go back to it" key, and =hl-todo= binds point-to-point motion
+   (=]t=/=[t=) without binding its list view.
+2. =:ui treemacs= and =:emacs dired +dirvish= *both* claim =SPC o p= /
+   =SPC o P= with the description "Project sidebar". Doom declares them in
+   the same =:prefix-map ("o" . "open")= block, dirvish first and treemacs
+   second, so treemacs silently wins and =dirvish-side= is reachable only
+   from =M-x=. This is a live shadow, not a hypothetical: nothing warns, and
+   reading Doom's binding file suggests dirvish is bound when it isn't.
+
+Problem 2 is the substantive one, because it is a genuine
+=AGENTS.md= one-tool-per-responsibility question — two project sidebars — and
+not merely an unbound key.
+
+** Decision drivers
+- =AGENTS.md= one tool per responsibility, as scoped per-axis by
+  [[id:adr-corfu-migration][ADR-021]] (Corfu and Vertico coexist because
+  in-buffer completion and minibuffer completion are different axes) and
+  extended again by [[id:adr-token-reduction-stack][ADR-023]]. The rule is
+  already established as axis-scoped in this repo, so the question is whether
+  a real axis separates treemacs from dirvish-side — not whether two sidebars
+  are automatically a violation.
+- =AGENTS.md= Doom-first and Evil-first: bindings go through =map!= under the
+  leader prefix whose category they belong to.
+- =docs/standards.org= =std-no-scope-creep=: a binding audit, not an occasion
+  to re-litigate which file manager this config uses.
+- Don't remove a feature to settle a keybinding argument. Dropping either
+  module costs real functionality (see Candidates); a free key costs nothing.
+- Prefer no diff to a diff. Options that required zero config change were
+  weighed first.
+
+** Candidates
+| Area | Candidate | Fate |
+|------+-----------+------|
+| Sidebar collision | Leave the shadow, document it only | Rejected — zero diff, but =dirvish-side= stays =M-x=-only and the next reader of Doom's =+evil-bindings.el= still sees a binding that doesn't exist |
+| Sidebar collision | *Rebind =dirvish-side= to a free key, keep both modules* | *Chosen* — one line, no module churn, and the axis split is defensible under ADR-021's existing precedent |
+| Sidebar collision | Drop =:ui treemacs=; =dirvish-side= inherits =SPC o p= | Rejected — costs the =+lsp= trees gated on =(modulep! :ui treemacs +lsp)=: =SPC c S= (symbols), =SPC c X= (errors list), =SPC c y=/=c Y= (call hierarchy), =SPC c R= (references tree) |
+| Sidebar collision | Drop the =+dirvish= flag from =:emacs dired= | Rejected — costs previews, multi-pane, and =SPC o /=; plain =dired= would remain but the rice pass adopted dirvish deliberately |
+| Sidebar collision | Make =SPC o p= dispatch (treemacs in a code project, dirvish-side otherwise) | Rejected — a conditional nobody will remember, and both modules stay installed anyway, so nothing is actually simplified |
+| Key for =dirvish-side= | =SPC o s= | *Chosen* (user's pick) — confirmed unbound; =s= for "sidebar" |
+| Key for =dirvish-side= | =SPC o w=, =o z=, =o n=, =o S=, =o k= | Not chosen — all equally free, no reason to prefer them |
+| Key for the dashboard | =SPC o h= ("home") | *Chosen* — confirmed unbound; the dashboard is =doom-fallback-buffer=, so "home" describes its role |
+| Key for the dashboard | =SPC o d= | Rejected — already =+debugger/start= |
+| Key for =hl-todo-occur= | =SPC s h= | *Chosen* — confirmed unbound. Filed under *search*, not *toggle*: it answers "where are the TODOs", not "show/hide them" |
+| Key for =hl-todo-occur= | =SPC t h= | Rejected — =SPC t= is the toggle map; occur toggles nothing |
+| =+dired/dirvish-side-and-follow= | Give it =SPC o S=, pairing with =o s= as Doom pairs =p=/=P= | Not done — out of the scope the user asked for; one line whenever it's wanted |
+
+** Evidence
+Every claim below was read out of the *running* Emacs daemon via
+=emacsclient -e=, not inferred from Doom's source:
+
+- =(lookup-key doom-leader-map (kbd "o p"))= returns =+treemacs/toggle=, and
+  =("o P")= returns =treemacs-find-file= — confirming treemacs wins the
+  collision in practice. =("o /")= returns =dirvish=, so full dirvish was
+  never shadowed; only the sidebar variant was.
+- Doom's =modules/config/default/+evil-bindings.el= declares the dirvish
+  sidebar at lines 690–693 and the treemacs sidebar at lines 697–699, inside
+  one =:prefix-map ("o" . "open")=. Later declaration wins, which matches the
+  observed behavior. (Doom's tree lives at
+  =~/.config/emacs/sources/doom+/modules/= in this install, not the
+  =modules/= directory at the Doom root.)
+- Already-bound cosmetic commands, all confirmed present rather than assumed:
+  =t z= → =+zen/toggle=, =t Z= → =+zen/toggle-fullscreen=, =t m= →
+  =demap-toggle=, =t i= → =indent-bars-mode=, =t d= → =diff-hl-mode=,
+  =g ]=/=g [= → =+vc-gutter/next-hunk=/=previous-hunk=, =i e= →
+  =emojify-insert-emoji=, =i u= → =insert-char=, =b t= →
+  =centaur-tabs--create-new-tab= (from [[id:adr-tabs-new-tab-dashboard][ADR-024]]).
+- =(lookup-key evil-motion-state-map (kbd "]t"))= → =hl-todo-next= and
+  =("[t")= → =hl-todo-previous=, so hl-todo motion was *already* covered and
+  only its occur view was missing. This corrected an initial assumption that
+  hl-todo had no bindings at all.
+- =o h=, =s h=, and =o s= all returned =nil= from =doom-leader-map= before
+  binding — no shadowing introduced.
+- =(commandp 'hl-todo-occur)=, =(commandp 'dirvish-side)=, and
+  =(commandp '+dashboard/open)= all return =t=. =+dashboard/open= takes a
+  =FRAME= argument but declares =(interactive (list (selected-frame)))=, so
+  it is bindable directly with no wrapper.
+- After evaluating the new =map!= forms in the daemon, =o h= →
+  =+dashboard/open=, =s h= → =hl-todo-occur=, =o s= → =dirvish-side=, with
+  =o p= → =+treemacs/toggle= and =o /= → =dirvish= unchanged.
+
+Not evidence: the user has *not* yet reloaded and used any of the three
+bindings in their own interactive session. The verification above proves the
+forms bind what they claim, in a live daemon, and nothing more.
+
+** Decision
+Keep both =:ui treemacs= and =:emacs dired +dirvish=. Treat them as occupying
+different axes of the same nominal responsibility — treemacs is *structural
+browsing* (a persistent multi-root project tree, and the anchor for the =+lsp=
+symbol, error, and call-hierarchy trees); dirvish-side is *file manipulation*
+in a narrow window (rename, chmod, wdired, TRAMP). This is the same per-axis
+reading of the one-tool rule that [[id:adr-corfu-migration][ADR-021]] applied
+to Corfu and Vertico, made explicit here rather than left as a silent shadow.
+
+Three bindings added to =config.el=, each with a comment explaining the
+prefix choice:
+
+#+begin_src emacs-lisp
+(map! :leader
+      :desc "Dashboard (home)" "o h" #'+dashboard/open
+      :desc "TODOs in buffer"  "s h" #'hl-todo-occur)
+
+(map! :leader :desc "Project sidebar (dirvish)" "o s" #'dirvish-side)
+#+end_src
+
+=SPC o p= stays treemacs. No module is added, removed, or reflagged, so no
+=doom sync= is required and =init.el=/=packages.el= are untouched.
+
+** Consequences
+- =SPC o p= and =SPC o s= now mean two different sidebars. That is a real
+  thing to remember, and it is the price of keeping both modules.
+- The remaining cosmetic modules — =ligatures=, =smooth-scroll=, =ophints=,
+  =modeline=, =unicode=, =vi-tilde-fringe=, =doom-quit=, =doom= — expose no
+  command worth a key. They are configuration, not commands. This is recorded
+  so a future audit doesn't re-derive it.
+- =+dired/dirvish-side-and-follow= remains =M-x=-only. Deliberate, per the
+  Candidates table.
+- The one-tool rule now has a third per-axis carve-out (ADR-021 completion,
+  ADR-023 token reduction, this one for project sidebars). If a fourth
+  appears, the rule as written in =AGENTS.md= is probably the thing that
+  needs rewording, not each individual case.
+
+** Rejected alternatives
+See the Candidates table above.
+
+** Validation
+- Live daemon =lookup-key= before and after, quoted under Evidence — the three
+  new keys were unbound beforehand and resolve to the intended commands
+  afterward.
+- =commandp= confirmed for all three commands, so none of the bindings can
+  fail at press time with a non-interactive-function error.
+- No =doom sync= or =doom doctor= run: this change touches =config.el= only,
+  which per =AGENTS.md= triggers neither.
+- Live-verified 2026-08-23 in the user's own session after a reload: all three
+  bindings pressed and working. See the =:LOGBOOK:= drawer for what =SPC s h=
+  actually returned.
+- Still unproven by use rather than by press: whether =SPC o s= earns its place
+  over time. See Revisit when.
+
+** Rollback
+Delete the two =map!= forms and their comment blocks from =config.el= and
+reload. Doom's own bindings are untouched, so removal restores the exact
+prior state — including the =SPC o p= shadow, which returns as it was.
+
+** Revisit when
+- =SPC o s= turns out to go unused for a month or two, which would mean the
+  axis argument was rationalization and option 4 (drop the =+dirvish= flag)
+  was right after all.
+- A future Doom release reorders =+evil-bindings.el= so dirvish wins =SPC o p=
+  instead — the =SPC o s= binding would still work, but =SPC o p= would
+  silently change meaning.
+- =+dired/dirvish-side-and-follow= is wanted, at which point =SPC o S= is the
+  obvious home for it.
+- A fourth per-axis carve-out to the one-tool rule appears, which is the
+  signal to reword the rule in =AGENTS.md= rather than add another exception.
