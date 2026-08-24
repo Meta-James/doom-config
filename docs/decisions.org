@@ -4788,14 +4788,21 @@ because it would remove the system-package install entirely.
   from auth-source via =:tools pass=, never a literal.
 
 ** Consequences
-- The failed *system* =transmission-daemon.service= is still installed and
-  =enabled=. It will keep failing at each boot — harmless (it never binds the
-  port, so it cannot conflict with the user unit) but it leaves a red unit in
-  =systemctl --failed=. Masking it needs =sudo= and is left as a follow-up for
-  the user rather than done silently.
-- The user unit lives as long as the login session. Seeding will stop at
-  logout unless =loginctl enable-linger= is turned on. Not enabled here: no
-  one asked for post-logout seeding, and it is one command to add later.
+- The *system* =transmission-daemon.service= is masked as of 2026-08-23
+  (=sudo systemctl mask transmission-daemon=, run by the user —
+  =/etc/systemd/system/transmission-daemon.service -> /dev/null=,
+  =systemctl is-enabled= reports =masked=). It can no longer start or fail at
+  boot. It was harmless before masking too — it never bound the port, so it
+  could not conflict with the user unit — but a permanently red unit in
+  =systemctl --failed= trains you to ignore that list.
+  Caveat: masking does *not* clear the already-recorded failure. The unit
+  still shows in =systemctl --failed= until =sudo systemctl reset-failed
+  transmission-daemon= is run, or until the next reboot.
+- Lingering is enabled for the user (=loginctl enable-linger james=,
+  2026-08-23 — =Linger=yes=, =/var/lib/systemd/linger/james= exists), so the
+  user unit and its seeding survive logout rather than dying with the login
+  session. Notably this did *not* need =sudo=: polkit permits enabling linger
+  for one's own account.
 - =magnet:= links now bypass the browser Emacs-wide, including inside eww and
   elfeed. That is the point, but it means a magnet click no longer offers a
   GUI client choice.
@@ -4838,10 +4845,12 @@ See the Candidates table above.
 - A maintained Emacs qBittorrent client appears, which would let the
   system-package install be dropped entirely (see the honest gap noted under
   Candidates).
-- Seeding needs to survive logout, at which point =loginctl enable-linger= and
-  a note here are the change.
 - Remote or seedbox access is wanted: that turns on RPC authentication, which
   pulls =:tools pass= and a credential entry into this decision for the first
   time.
-- The failed system unit becomes noisy enough to mask, or an Ubuntu update
-  fixes its =Type=notify= behaviour and makes the user unit redundant.
+- An Ubuntu update fixes the packaged unit's =Type=notify= behaviour, which
+  would make the user unit redundant — though the file-ownership argument for
+  running as the user stands on its own regardless, so this is a reason to
+  re-read the decision, not to reverse it automatically.
+- Lingering starts costing something: with =Linger=yes= the daemon now runs
+  even when nobody is logged in, so a machine that should be idle isn't.

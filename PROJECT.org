@@ -394,7 +394,10 @@ integration, and this isn't that). Full writeup: [[id:adr-torrent-transmission][
   torrent list, a =magnet:= link adds to the daemon instead of opening a
   browser, and the auto-refresh actually polls. Promote ADR-030's =:STATUS:=
   to =Implemented, live-verified= then, per [[id:tshoot-daemon-validation][tshoot-daemon-validation]].
-- [ ] Optional, deliberately deferred: mask the still-=enabled= system unit
-  (=sudo systemctl mask transmission-daemon=) so it stops failing at boot,
-  and =loginctl enable-linger= if seeding should survive logout. Neither is
-  needed for the client to work.
+- [X] System unit masked and lingering enabled (2026-08-23), both optional
+  and neither needed for the client to work: =sudo systemctl mask
+  transmission-daemon= (user's own terminal) stops the broken unit failing
+  at boot, and =loginctl enable-linger james= (no sudo needed — polkit
+  allows it for one's own account) keeps seeding alive after logout. The
+  masked unit still appears in =systemctl --failed= until =sudo systemctl
+  reset-failed transmission-daemon= or the next reboot.

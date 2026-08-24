@@ -836,15 +836,22 @@ solves a second problem at the same time: the packaged unit runs as
 =debian-transmission=, which would leave every completed download owned by a
 system account instead of the user.
 
-*Two loose ends this leaves*, both deliberate:
+*Two loose ends this left, both closed 2026-08-23*:
 
-- The system unit stays installed and =enabled=, so it keeps failing at every
-  boot and shows up in =systemctl --failed=. It is harmless (it never binds
-  the port, so it cannot conflict with the user unit). Silencing it means
-  =sudo systemctl mask transmission-daemon=, which needs a root action the
-  agent doesn't take unprompted.
-- A user unit only lives as long as the login session, so seeding stops at
-  logout. =loginctl enable-linger $USER= changes that if it's ever wanted.
+- The system unit stayed installed and =enabled=, so it kept failing at every
+  boot and showed up in =systemctl --failed=. Harmless (it never binds the
+  port, so it cannot conflict with the user unit) but noisy. Closed with
+  =sudo systemctl mask transmission-daemon= — run by the user, since the
+  agent's shell has no TTY for sudo's password prompt (the same constraint
+  that put every =apt install= in this repo in the user's own terminal).
+  *Gotcha*: masking prevents future starts but does not clear the failure
+  already on record — the unit stays listed in =systemctl --failed= until
+  =sudo systemctl reset-failed transmission-daemon= or the next reboot.
+- A user unit only lives as long as the login session, so seeding stopped at
+  logout. Closed with =loginctl enable-linger james= (=Linger=yes=). Worth
+  knowing: this needed *no* =sudo= — polkit allows enabling linger for one's
+  own account, so it is one of the few system-state changes the agent can
+  make directly.
 
 *Takeaway*: =Result: timeout= together with =status=0/SUCCESS= means a
 readiness-protocol mismatch (=Type=notify= vs. a daemon that doesn't notify),
