@@ -4694,8 +4694,30 @@ See the Candidates table above.
 * ADR-030: Torrent client — =transmission.el= against a user-session =transmission-daemon=
 :PROPERTIES:
 :ID:       adr-torrent-transmission
-:STATUS:   Implemented (not yet live-verified)
+:STATUS:   Implemented, live-verified
 :DATE:     2026-08-23
+:END:
+:LOGBOOK:
+- State "Live-verified" from "Implemented"  [2026-08-23 Sun] — the restart this
+  ADR was waiting on happened. =SPC o B= opens the torrent list (user
+  confirmed). The =magnet:= handler was checked two ways: in-Emacs,
+  =browse-url-select-handler= on a magnet URI returns the =config.el= closure
+  rather than =browse-url-default-browser=; end to end, a real magnet driven
+  through the new desktop handler reached the daemon and created a torrent,
+  which was then removed. =revert-buffer= in =transmission-mode= completed
+  against the daemon, so the RPC path the list buffer depends on is live.
+  Honest gap, deliberately not papered over: the auto-refresh was verified by
+  mechanism, not by observation. =transmission-refresh-interval= is 2s and
+  =transmission-timer-check= is on a buffer-local =post-command-hook= in all
+  four refresh modes (=transmission.el:2114,2182,2264,2379=), but
+  =transmission-timer-revert= (=transmission.el:552-559=) tests the =major-mode=
+  of whatever buffer is current when the timer fires and cancels itself
+  otherwise — so it polls only while you are sitting in the buffer, by
+  upstream's design. With no torrents on the daemon there was nothing to watch
+  tick. First real transfer is the honest filter for that one line.
+- Amendment  [2026-08-23 Sun] — the desktop-level =magnet:= handler was added,
+  which this ADR originally did not cover. See the amended Consequences and
+  Rollback entries below.
 :END:
 
 ** Context
@@ -4806,6 +4828,29 @@ because it would remove the system-package install entirely.
 - =magnet:= links now bypass the browser Emacs-wide, including inside eww and
   elfeed. That is the point, but it means a magnet click no longer offers a
   GUI client choice.
+- Amended 2026-08-23: the =browse-url-handlers= entry only governs links that
+  originate *inside* Emacs. The desktop still routed =x-scheme-handler/magnet=
+  to =org.qbittorrent.qBittorrent.desktop=, so a magnet clicked in Firefox went
+  to the client this ADR chose against. Two files outside this repo now close
+  that gap, and being outside =$DOOMDIR= they are not under git — this entry is
+  their only record:
+  - =~/.local/bin/emacs-magnet= — escapes the URI for an Emacs Lisp string
+    literal, then calls =emacsclient -a '' -e '(transmission-add "…")'=. The
+    =-a ''= starts a daemon when no Emacs is running so a magnet is not
+    silently dropped. The URI arrives from a web page and is therefore
+    untrusted: it is never interpolated into a shell command, and the only
+    escaping needed inside an elisp string literal is =\= and ="=, both of
+    which the wrapper handles. Verified with a URI carrying an embedded
+    =(shell-command "touch /tmp/pwned")= payload — it arrived at
+    =transmission-add= as one 70-character string and the file was never
+    created.
+  - =~/.local/share/applications/emacs-magnet.desktop= — =NoDisplay=true=,
+    following the existing =claude-code-url-handler.desktop= pattern. Both
+    =xdg-mime query default= and =gio mime= resolve to it; =qbittorrent= stays
+    registered as an alternative, just not the default.
+  Firefox caches scheme handlers per profile, so it may still offer its own
+  qBittorrent dialog until that is cleared in Settings → General →
+  Applications.
 - =qbittorrent= stays installed and untouched. Two torrent clients now exist on
   the machine, but only one is wired into Emacs, so the "one tool per
   responsibility" rule is satisfied at the level this repo governs.
@@ -4824,11 +4869,10 @@ See the Candidates table above.
   =ss -ltnp= shows =127.0.0.1:9091=.
 - Emacs-side RPC confirmed by an actual =session-get= call returning the user
   daemon's config, not by assuming the defaults line up.
-- *Not yet live-verified*: Emacs has not been restarted, so =SPC o B=, the
-  =magnet:= handler, and the refresh modes have not been exercised in a real
-  session. Per [[id:tshoot-daemon-validation][tshoot-daemon-validation]], that check belongs to the user's
-  next restart, and this ADR's =:STATUS:= should move to =Implemented,
-  live-verified= only then.
+- Live-verified 2026-08-23 after the restart: =SPC o B=, both magnet paths, and
+  the list buffer's RPC round trip. The auto-refresh is verified by mechanism
+  only, never watched against a live transfer. See the =:LOGBOOK:= entry for
+  what each check actually proved and where the gap is.
 
 ** Rollback
 - Emacs side: =git revert= the commit and =doom sync=. The change is confined to
@@ -4838,6 +4882,10 @@ See the Candidates table above.
 - System package: =sudo apt remove transmission-daemon=. Torrent state and
   settings survive in =~/.config/transmission-daemon/= unless separately
   removed.
+- Desktop =magnet:= handler (added 2026-08-23, outside git):
+  =xdg-mime default org.qbittorrent.qBittorrent.desktop x-scheme-handler/magnet=,
+  then =rm ~/.local/share/applications/emacs-magnet.desktop ~/.local/bin/emacs-magnet=
+  and =update-desktop-database ~/.local/share/applications=.
 
 ** Revisit when
 - Emacs is restarted and =SPC o B= is actually used — the first real session is

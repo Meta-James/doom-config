@@ -390,10 +390,21 @@ integration, and this isn't that). Full writeup: [[id:adr-torrent-transmission][
   markdown tree-sitter warning.
 - [X] Emacs-side RPC round trip confirmed by an actual =session-get= call
   returning the user daemon's =config-dir= and =download-dir=.
-- [ ] *Live-verify after the next Emacs restart*: =SPC o B= opens the
-  torrent list, a =magnet:= link adds to the daemon instead of opening a
-  browser, and the auto-refresh actually polls. Promote ADR-030's =:STATUS:=
-  to =Implemented, live-verified= then, per [[id:tshoot-daemon-validation][tshoot-daemon-validation]].
+- [X] Live-verified 2026-08-23 after the restart: =SPC o B= opens the torrent
+  list, and a =magnet:= link reaches the daemon instead of a browser. The
+  auto-refresh is verified by mechanism only — it polls just while the buffer
+  is current, by upstream's design, and there were no torrents to watch tick.
+  ADR-030 promoted to =Implemented, live-verified= with that gap recorded in
+  its =:LOGBOOK:=.
+- [X] Desktop-level =magnet:= handler (2026-08-23): the =browse-url-handlers=
+  entry only covers links originating inside Emacs, so magnets clicked in
+  Firefox still went to qBittorrent. =~/.local/bin/emacs-magnet= plus
+  =~/.local/share/applications/emacs-magnet.desktop= now route them to the
+  daemon. Both live outside =$DOOMDIR= and so outside git — ADR-030's
+  Consequences and Rollback are their only record.
+- [ ] Watch the auto-refresh tick during a real transfer, the one check a
+  torrent-less daemon could not provide. Also confirm Firefox honours the new
+  handler rather than its own cached qBittorrent association.
 - [X] System unit masked and lingering enabled (2026-08-23), both optional
   and neither needed for the client to work: =sudo systemctl mask
   transmission-daemon= (user's own terminal) stops the broken unit failing
