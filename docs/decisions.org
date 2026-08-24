@@ -5323,3 +5323,339 @@ See the Candidates table above.
 - A project in this config grows a real =.envrc=, which would move direnv from
   "available" to "load-bearing" and is worth noting in
   [[id:inv-binaries][inventory.org]] when it happens.
+
+* ADR-033: Terminal-layer pass — ghostel configuration, the bash environment beneath it, and a zenburn Claude Code theme
+:PROPERTIES:
+:ID:       adr-terminal-layer-pass
+:STATUS:   Implemented; shell half and Claude Code theme live-verified, Emacs half still unverified since the user's restart (see Validation)
+:DATE:     2026-08-23
+:END:
+:LOGBOOK:
+- Claude Code theme "Live-verified" from "Structurally validated" [2026-08-24 Sun]
+  — user restarted the CLI and confirmed the zenburn theme renders. The Emacs
+  half is *not* covered by this: the daemon was still down at the time, so
+  =ghostel-project= on =SPC p t= and the rest of the =config.el= block remain
+  read-back-only, exactly as Validation describes.
+:END:
+
+** Context
+[[id:adr-terminal-backend-ghostel][ADR-014]] made ghostel the terminal this
+config actually lives in — =SPC p t= for a project shell, and every
+claude-code-ide.el agent session rendered through it. What that ADR did *not*
+do is configure it. Before this pass =config.el= set exactly zero ghostel
+variables: one =defun=, one =map!=, one =claude-code-ide-terminal-backend=
+line.
+
+The prompt was narrower than the result. The user asked for Claude Code's own
+TUI to match =doom-zenburn=; checking that surfaced three untouched layers
+stacked on each other:
+
+1. *Claude Code's colors*, which come from a built-in theme table compiled into
+   the CLI binary and have no relationship to the Emacs theme.
+2. *Ghostel's own configuration* — 69 =defcustom= s and 19 faces, all at
+   upstream defaults, including a hand-rolled project-terminal command that
+   upstream had since obsoleted.
+3. *The bash environment underneath*, at Ubuntu 24.04 stock: no =EDITOR=,
+   1000-line history, no =~/.inputrc=, and a =PS1= that was rendering
+   uncoloured for a reason that had nothing to do with ghostel.
+
+Each layer's colors and behavior were being blamed on the layer above it, which
+is why they are one ADR rather than three.
+
+** Decision drivers
+- =AGENTS.md= Doom-first, and its generalisation: ghostel ships 69 tunables and
+  19 faces, so anything hand-rolled here competes with upstream rather than
+  filling a gap. The pass should *delete* config where upstream caught up.
+- Zenburn is this config's theme (=doom-theme 'doom-zenburn=, =config.el:52=).
+  Any color introduced at the terminal layer should derive from
+  =doom-zenburn-theme.el= 's palette, not from a hand-picked approximation of
+  it.
+- =docs/standards.org= =std-no-scope-creep=: configure the terminal layer,
+  don't redesign the shell or audit the machine.
+- [[id:adr-torrent-transmission][ADR-030]] and
+  [[id:adr-everywhere-direnv][ADR-032]] precedent for state that cannot live in
+  this repository: record it in the ADR with explicit rollback commands rather
+  than pretending it is version-controlled.
+- =.claude/rules/security.md=: treat external services as outside the trust
+  boundary, and don't leave an outbound path enabled by default without saying
+  so.
+- =std-binaries=: don't claim a binary is present without checking, and record
+  what the project newly depends on in [[id:inv-binaries][inventory.org]].
+
+** Candidates
+| Area | Candidate | Fate |
+|------+-----------+------|
+| Claude Code theme | Pick the closest built-in (=dark=, =dark-ansi=) | Rejected — =dark-ansi= would inherit the terminal palette and so *would* be zenburn inside ghostel, but Claude Code is also run outside Emacs, where it would inherit whatever that terminal uses |
+| Claude Code theme | *Custom theme file, =~/.claude/themes/zenburn.json=, =base: dark= plus 71 overrides* | *Chosen* — the CLI has a first-class custom-theme loader; the mechanism was read out of the binary rather than guessed |
+| Claude Code theme | Hand-edit the compiled theme table in the binary | Rejected — 330MB single-file bundle, replaced on every =claude update= |
+| ghostel palette | Set the 16 =ghostel-color-*= faces to zenburn hexes | Rejected — *already correct*. They inherit =ansi-color-*=, which =doom-zenburn= already defines as the exact zenburn palette. Zero lines needed |
+| Terminal background | Leave =ghostel-default= alone | Rejected — solaire already dims it to =#303030=, but so is every other non-file buffer, so the terminal was indistinguishable from treemacs and dirvish-side |
+| Terminal background | *Explicit =:background "#2B2B2B"= (zenburn =bg-1=), overriding only that attribute* | *Chosen* — one step darker than solaire's =#303030=, and leaves the module's solaire hook still managing =:inherit= |
+| Project terminal | Keep =my/project-ghostel= | Rejected — upstream =ghostel-project= does strictly more (reuses an existing terminal per project instead of spawning duplicates, prefixes the buffer with the project name, distinguishes TRAMP from local projects of the same name, passes the prefix argument through) |
+| Project terminal | *Delete the defun; bind =SPC p t= to =ghostel-project=* | *Chosen* — this pass's only net deletion, and it supersedes the rationale [[id:adr-terminal-backend-ghostel][ADR-014]] recorded for keeping the wrapper |
+| Uncoloured prompt | Set ghostel face colors / =ghostel-bold-color= | Rejected — misdiagnosis. Bash was emitting *no* color at all; nothing at the Emacs layer could fix it |
+| Uncoloured prompt | Hand-write a truecolor =PS1= with zenburn hexes | Rejected — pins the prompt to one theme, and breaks the palette-follows-terminal property everything else in this pass relies on |
+| Uncoloured prompt | *Uncomment =force_color_prompt=yes=; recolor the existing =PS1= to palette slots =00;32= / =00;33=* | *Chosen* — two one-line edits to Ubuntu's own prompt block, and the colors resolve through the terminal's palette, so they are zenburn in ghostel and correct elsewhere |
+| Bold text | Leave =ghostel-bold-color= =nil= | Rejected — bold keeps the normal foreground, which flattens the TUI output claude-code-ide renders |
+| atuin install | =cargo install atuin= | Rejected — not viable. atuin 18.19's MSRV is 1.97.0; this box has rustc 1.75.0 |
+| atuin install | =cargo install atuin --version 18.2.0= | Rejected by the user — builds on 1.75, but pins to a release roughly two years old |
+| atuin install | rustup, then build current atuin from source | Rejected by the user — adds a second Rust toolchain shadowing apt's, plus a 10-20 minute compile |
+| atuin install | *Prebuilt =x86_64-unknown-linux-musl= binary from the v18.19.0 release, SHA256-verified, into =~/.local/bin=* | *Chosen* (user's pick) — current version, no toolchain, static build so glibc is irrelevant |
+| atuin =?= binding | Leave atuin's AI keybinding as shipped | Rejected by the user — see Consequences |
+
+** Evidence
+Everything below was read from the running system, the running Emacs daemon, or
+the shipped source — not inferred:
+
+- *Claude Code's custom-theme mechanism*, read out of the 2.1.241 bundle
+  (=/home/james/.local/share/claude/versions/2.1.241=) rather than from docs:
+  themes load from =<user config dir>/themes/*.json=; the parser accepts
+  ={name, base, overrides}=, defaults =base= to ="dark"=, and *silently drops*
+  any override key not present in the base theme; the color validator accepts
+  =rgb(r,g,b)=, =#RRGGBB=, =#RGB=, =ansi256(n)=, and =ansi:<name>=. The theme
+  is selected as =custom:<slug>=. Files over 256KB are skipped.
+- All 71 override keys were diffed against the base dark theme's own key set
+  before publishing: zero invalid keys. Exactly one base key is deliberately
+  left unset — =background=, whose base value is =rgb(0,204,204)= and whose use
+  was not identifiable from the bundle.
+- *Palette source*: every hex comes from
+  =/home/james/.config/emacs/.local/straight/build-30.2/doom-themes/doom-zenburn-theme.el:51-96=,
+  not from a zenburn reproduction.
+- *Ghostel was already zenburn.* =ghostel-color-*= all =:inherit ansi-color-*=,
+  and those were read live from the daemon: =ansi-color-red= =#CC9393=,
+  =-green= =#7F9F7F=, =-yellow= =#F0DFAF=, =-blue= =#8CD0D3=,
+  =-magenta= =#DC8CC3=, =-cyan= =#93E0E3=, =-white= =#DCDCDC=,
+  =-bright-black= =#5F5F5F=, =-bright-white= =#FFFFEF=. Exact zenburn. No
+  =ghostel-color-*= override was written, because none was needed.
+- =ghostel-default= was *already* dimmer than file buffers before this pass:
+  read live, it inherits =solaire-default-face= (=#303030=) against =default=
+  's =#3F3F3F=, with =solaire-global-mode= =t=. The change is separation from
+  the *other* solaire buffers, not from file buffers.
+- *Root cause of the uncoloured prompt*, at =~/.bashrc:39=:
+  =case "$TERM" in xterm-color|*-256color) color_prompt=yes;; esac=. Ghostel
+  sets =TERM=xterm-ghostty=, which matches neither pattern, so bash fell
+  through to the *non-color* =PS1= branch at line 62. Confirmed by reading the
+  block and by dumping =PS1= from =TERM=xterm-ghostty bash -i=. =tput setaf 1=
+  was checked under that =TERM= before relying on =force_color_prompt=, and
+  =infocmp xterm-ghostty= confirmed the terminfo entry is installed.
+- =ghostel-command-finish-functions= takes =(BUFFER STATUS)= — not
+  =(command code)= — and upstream's docstring states it fires *synchronously
+  from the terminal parser*, which is why the hook added here defers its work
+  through =run-at-time=.
+- =ghostel-eval-cmds= is dispatched through OSC 52's =;e= subcommand, so it is
+  gated on =ghostel-enable-osc52=. Enabling OSC 52 therefore enables *both*
+  clipboard writes and whitelisted Emacs command invocation from the terminal.
+  This was found by reading the =defcustom= docstrings, and it is the reason
+  the whitelist addition is commented as untrusted input.
+- =ghostel-keymap-exceptions= defaults to
+  =("C-c" "C-x" "C-u" "C-h" "M-x" "M-:" "C-\\")= and those are the keys routed
+  to *Emacs instead of* the terminal. =C-r= is not among them, so it already
+  reaches the shell — correcting an earlier suggestion in this pass that an
+  exception was needed for fzf/atuin, which would have done the opposite.
+- =PATH= hygiene, measured before and after: 34 entries with 11 duplicates
+  (=.profile= and =.bashrc= both prepend =~/.local/bin=,
+  =~/.config/emacs/bin=, pyenv, snap, and four Claude plugin dirs) → 23
+  entries, 0 duplicates, first-occurrence order preserved. No literal-tilde
+  entry of the [[id:tshoot-path-tilde][=$PATH= tilde]] kind was present.
+- *atuin could not be built here.* Read from the crates.io sparse index:
+  18.19.0 declares =rust_version 1.97.0=; this box has =cargo=/=rustc=
+  =1.75.0= at =/usr/bin=. The newest non-yanked atuin with MSRV ≤ 1.75 is
+  18.2.0 (=1.67=).
+- atuin's tarball SHA256 matched the published =.sha256=
+  (=a2cd1f7bba0e45cf620683833a6414b9dd74a0c446e4d819258b6717109bc0fd=).
+  Both files came from the same GitHub host, so this establishes transfer
+  integrity, *not* provenance independent of GitHub — atuin publishes no
+  detached signature.
+- atuin's =?= binding was read out of its generated init script, not assumed:
+  =_atuin_ai_question_mark= triggers =atuin ai inline= only when
+  =READLINE_LINE= is empty or exactly ="?"=; its =else= branch inserts a
+  literal =?= at point. So ordinary mid-line =?= was never broken — the
+  exposure is specifically =?= as the first keystroke on an empty prompt.
+- =bat= 's binary on Debian/Ubuntu is =batcat= (the =bat= name collides with
+  =bacula-console-qt=), confirmed by =dpkg=/=command -v=. =bat --list-themes=
+  confirms an =ansi= theme exists, which is what makes CLI highlighting follow
+  the terminal palette instead of hardcoded hexes.
+- Post-change shell state, read back from a fresh =TERM=xterm-ghostty bash -i=:
+  =EDITOR='emacsclient -nw'=, =VISUAL='emacsclient -c -a emacs'=,
+  =HISTSIZE=100000=, =HISTCONTROL=ignoreboth:erasedups=, and =autocd cdspell
+  dirspell globstar checkjobs cmdhist histappend= all =on=.
+- fzf's bindings survive the =editing-mode vi= switch: =bind -m vi-insert -X=
+  lists =\C-t= → =fzf-file-widget=, and after atuin loads, =bind -m vi-insert
+  -s= resolves =\C-r= to atuin's macro chain. Verified per keymap rather than
+  assumed, because =bind -p= does not list =bind -x= entries and initially
+  looked like a failure.
+- After the =?= unbind, =bind -X= shows no =?= widget in =emacs=, =vi-insert=,
+  or =vi-command=, while =\C-r= still resolves to atuin.
+- atuin imported 1998 commands, 1135 unique, from the existing
+  =~/.bash_history=; =atuin stats= runs inside an initialised shell.
+
+*Not evidence.* The Emacs half of this pass was verified by =load-file= plus
+reading every variable and keybinding back — =ghostel-max-scrollback=
+=20971520=, =ghostel-bold-color= =bright=, =ghostel-enable-osc52= =t=,
+=ghostel-default= background =#2B2B2B= and height =0.95=, the popup rule in
+=display-buffer-alist=, =ghostel-project= on =SPC p t= across five evil
+states, =C-c C-n= and =C-c C-e= resolving in =ghostel-mode-map=, the
+=magit-status= whitelist entry, and =ghostel-sync-theme= on
+=doom-load-theme-hook= — but that was *before* the user restarted Emacs, and
+the server was down afterwards. Nothing here has been re-checked in the
+restarted daemon, and no ghostel buffer has been looked at by a human since.
+The Claude Code theme was structurally validated here (key diff, color-format
+check) and only rendered later — see the LOGBOOK entry.
+
+** Decision
+*Emacs (=config.el=)*
+
+1. Delete =my/project-ghostel=; bind =SPC p t= to upstream =ghostel-project=,
+   and register it in =project-switch-commands=.
+2. =after! ghostel=: =ghostel-max-scrollback= 20MB (from 5MB),
+   =ghostel-bold-color= ='bright=, =ghostel-enable-osc52= =t=; add
+   =("magit-status" magit-status)= to =ghostel-eval-cmds=; add a
+   =ghostel-command-finish-functions= hook that reports off-screen command
+   completion, deferred off the parser via =run-at-time=.
+3. =custom-set-faces!= =ghostel-default= =:background "#2B2B2B" :height 0.95=.
+4. =setq-hook!= =line-spacing= =0.1= on =ghostel-mode-hook=.
+5. =set-popup-rule!= for =^\*ghostel= — =:size 0.35 :select t :quit nil :ttl
+   nil=, since a terminal holding a live process is not a transient buffer.
+6. =ghostel-sync-theme= on =doom-load-theme-hook=, so open terminals don't keep
+   a stale palette across a theme switch.
+7. =ghostel-mode-map=: =C-c C-p= / =C-c C-n= prompt motion, =C-c C-f= / =C-c
+   C-b= hyperlink motion, =C-c C-l= clear scrollback, =C-c C-e= line mode.
+   Line mode is *bound, not defaulted* — =ghostel-initial-input-mode= is left
+   alone until it earns the change.
+
+*Claude Code (out of git)*
+
+=~/.claude/themes/zenburn.json=, =base: dark=, 71 zenburn overrides;
+=~/.claude/settings.json= =theme= set to ="custom:zenburn"=.
+
+*Shell (out of git)*
+
+=~/.bashrc=: =EDITOR=/=VISUAL= to =emacsclient=; history to 100000/200000 with
+=ignoreboth:erasedups= and =HISTTIMEFORMAT=; =shopt= =cmdhist autocd cdspell
+dirspell globstar checkjobs=; a first-occurrence =PATH= dedupe;
+=force_color_prompt=yes= with =PS1= recoloured to palette slots =00;32= /
+=00;33=; =bat=/=eza=/=fzf=/=zoxide= wiring with =BAT_THEME=ansi= and zenburn
+=FZF_DEFAULT_OPTS=; =atuin init bash --disable-up-arrow= after fzf; and
+=bind '"?": self-insert'= to undo atuin's AI keybinding.
+
+=~/.inputrc= (new): =editing-mode vi= with mode indicators, prefix history
+search on Up/Down, case-insensitive completion, =colored-stats=.
+
+=~/.gitconfig=: =delta= as =core.pager= and =interactive.diffFilter=,
+=delta.syntax-theme=ansi=, =merge.conflictstyle=zdiff3=.
+
+*Binaries*: =eza=, =bat=, =zoxide=, =fzf=, =git-delta= from apt (installed by
+the user); =atuin= 18.19.0 as a SHA256-verified prebuilt musl binary in
+=~/.local/bin=.
+
+** Consequences
+- *The out-of-git surface grew from two items to six.* [[id:adr-torrent-transmission][ADR-030]]'s =magnet:=
+  handler and [[id:adr-everywhere-direnv][ADR-032]]'s =direnv= hook are now joined by =~/.bashrc= 's much
+  larger block, a new =~/.inputrc=, three =~/.gitconfig= keys, and two Claude
+  Code files. A machine restored from this repository alone gets a terminal
+  that is themed correctly inside Emacs and stock everywhere else. The
+  "Reproducible machine provisioning" future phase in
+  [[id:roadmap-future][roadmap.org]] absorbs all of it.
+- *OSC 52 is the widest new attack surface in this pass.* Enabling it lets any
+  process in a ghostel buffer write the kill ring and system clipboard with no
+  prompt — and because =ghostel-eval-cmds= dispatches through the same OSC 52
+  =;e= subcommand, it also lets terminal output invoke whitelisted Emacs
+  commands with arbitrary string arguments. That whitelist is now
+  =find-file=, =find-file-other-window=, =dired=, =dired-other-window=,
+  =message=, and =magit-status=. This was flagged and accepted deliberately;
+  the mitigation is that the whitelist stays short and every addition is
+  judged as untrusted input.
+- *atuin ships an outbound AI path enabled by default*, bound to =?= on an
+  empty prompt, sending the query to atuin's own service. There is no setting
+  for it in =atuin default-config=, so it is disabled here by rebinding =?=
+  after =atuin init= — a fix that a future atuin release could break by
+  binding into a different keymap or a different key. Worth re-checking on
+  upgrade.
+- *Command history now lives in three places*: =~/.bash_history=, ghostel's
+  20MB in-memory scrollback per buffer, and atuin's SQLite database. atuin is
+  local-only (no =register=/=login=), but that is a third retention location
+  for command text, which can include arguments that should not be retained.
+- *Terminal-layer color now follows the palette in three tools at once.*
+  =BAT_THEME=ansi=, =delta.syntax-theme=ansi=, and ghostel's own faces all
+  resolve through =ansi-color-*=, so a future Emacs theme change re-colors the
+  CLI tools for free — and equally, anything that breaks =ansi-color-*= breaks
+  all three.
+- *The readline =vi= switch is a behavior change, not a cosmetic one*, and the
+  broadest-reaching item in this pass. Every interactive bash on this machine
+  now starts in vi-insert. It was chosen to match Evil, but nothing about the
+  terminal-theming goal required it.
+- 20MB of scrollback is *per live ghostel buffer*. Several open project
+  terminals is a real memory cost, not a free win.
+- =ghostel-project= supersedes the wrapper-defun rationale recorded in
+  [[id:adr-terminal-backend-ghostel][ADR-014]]; that ADR should be read as
+  amended by this one on that single point. Its terminal-backend decision is
+  untouched.
+- [[id:inv-binaries][inventory.org]]'s =fd= row said "not installed" and was
+  stale. It is installed, but not where the row would have implied: apt's
+  =fd-find= ships the binary as =/usr/bin/fdfind=, and the =fd= name resolves
+  only through a user-made =~/.local/bin/fd= symlink to
+  =/usr/lib/cargo/bin/fd=. =FZF_DEFAULT_COMMAND= now depends on that symlink,
+  which is itself un-versioned state.
+
+** Rejected alternatives
+See the Candidates table above.
+
+** Validation
+- *Shell half: live-verified.* Every setting read back from a fresh
+  =TERM=xterm-ghostty bash -i= — quoted under Evidence. =PATH= dedupe measured
+  before and after. fzf and atuin key bindings checked *per readline keymap*,
+  including after the =?= unbind. atuin's import verified by =atuin stats=
+  inside an initialised shell.
+- *Emacs half: read back but not re-verified since the restart.* All seven
+  =config.el= items were confirmed live by =load-file= plus reading each
+  variable, face attribute, keybinding, and the =display-buffer-alist= entry —
+  then the user restarted Emacs and the server was down for the rest of the
+  session. The outstanding check is one =SPC p t= in the restarted daemon.
+- *Claude Code theme: live-verified 2026-08-24.* 71 override keys diffed
+  against the base theme's key set (zero invalid), every value checked against
+  the CLI's own color-format validator, JSON parsed — then the user restarted
+  the CLI and confirmed it renders.
+- No =doom sync= and no =doom doctor=: no =init.el= or =packages.el= change.
+- =atuin= tarball SHA256 verified against the published checksum before
+  install; scratch download left in the job tmp dir, not in the repo.
+
+** Rollback
+- =config.el=: =git revert= the commit carrying this pass. Restoring
+  =my/project-ghostel= specifically is not necessary — =ghostel-project= is
+  upstream and does more.
+- Claude Code theme: =rm ~/.claude/themes/zenburn.json= and set =theme= back to
+  ="auto"= in =~/.claude/settings.json= (previous value; a
+  =~/.claude/settings.json.bak= also predates this pass).
+- Shell: five timestamped backups were taken in order and are the cleanest
+  revert path — =~/.bashrc.bak-20260823= is the state *before* any change in
+  this pass, and =.bak2= through =.bak5= are the successive steps.
+  =rm ~/.inputrc= (it did not exist before). =git config --global --unset= for
+  =core.pager=, =interactive.diffFilter=, =delta.navigate=,
+  =delta.syntax-theme=, =merge.conflictstyle=.
+- atuin: =rm ~/.local/bin/atuin ~/.local/share/atuin/= (the latter destroys the
+  imported history database) and delete its =~/.bashrc= block.
+- apt tools: =sudo apt remove eza bat zoxide fzf git-delta=, and delete the
+  aliases/exports block from =~/.bashrc=.
+
+** Revisit when
+- Emacs is restarted and =SPC p t= is actually pressed — the one outstanding
+  verification, the daemon having been down for the rest of the session.
+- =ghostel-line-mode= has had real use, at which point
+  =ghostel-initial-input-mode= is the decision to make.
+- An atuin upgrade — its =?= binding is undone by a =bind= call that assumes
+  atuin's current keymap choice, and there is no config flag to rely on
+  instead.
+- A =claude update= changes the custom-theme schema. The loader silently drops
+  unknown override keys, so the failure mode is colors quietly reverting to
+  base, not an error.
+- Several project terminals are open at once and memory matters — 20MB of
+  scrollback each.
+- The =background= key in the Claude Code theme is identified. It is the one
+  base key left unset, because its base value (=rgb(0,204,204)=) gave no clue
+  what renders it.
+- Claude Code gains a way to reference the terminal palette (an =ansi:= base
+  theme with overrides), which would let the custom theme follow
+  =ansi-color-*= the way =bat= and =delta= now do, instead of restating zenburn
+  hexes.
+- The clipboard or a whitelisted Emacs command fires unexpectedly in a ghostel
+  buffer — the OSC 52 consequence above, whose symptom would be silent.

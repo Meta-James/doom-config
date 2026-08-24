@@ -383,17 +383,95 @@
 
 (map! :leader :desc "Magit status" "g s" #'magit-status)
 
-;; Ghostel in project root (migrated from vterm 2026-08-17, see ADR-014;
-;; my/project-vterm's whole reason for existing -- vterm doesn't offer a
-;; project-root-scoped entry point of its own -- carries over unchanged,
-;; just swapping which terminal backend it opens).
-(defun my/project-ghostel ()
-  "Open ghostel in the current project's root."
-  (interactive)
-  (let ((default-directory (projectile-project-root)))
-    (ghostel)))
+;; `my/project-ghostel' lived here from the vterm era (ADR-014) purely because
+;; vterm shipped no project-root-scoped entry point of its own. Ghostel does:
+;; `ghostel-project' resolves the root, reuses an existing terminal for the
+;; project instead of spawning duplicates, prefixes the buffer with the project
+;; name, distinguishes local from TRAMP projects of the same name, and passes
+;; the prefix argument through. All of that was missing from the hand-rolled
+;; version, so the custom defun is deleted rather than kept alongside.
+(map! :leader :desc "Project ghostel" "p t" #'ghostel-project)
 
-(map! :leader :desc "Project ghostel" "p t" #'my/project-ghostel)
+;; Make it reachable from `project-switch-project' too, as upstream documents.
+(after! project
+  (add-to-list 'project-switch-commands '(ghostel-project "Ghostel") t))
+
+;; Terminal output from long agent sessions (claude-code-ide drives its CLI
+;; through this backend) blows past the 5MB upstream default -- 5MB is roughly
+;; 5,000 rows at 80 columns, fewer as the window widens. 20MB buys ~4x that.
+;; Cost is per live ghostel buffer, so this is a deliberate memory-for-history
+;; trade, not a free win; drop it back if several terminals are open at once.
+(after! ghostel
+  (setq ghostel-max-scrollback (* 20 1024 1024)
+        ;; Bold text keeps the normal foreground upstream, which flattens TUI
+        ;; output that leans on bold for emphasis. `bright' maps ANSI 0-7 to
+        ;; 8-15, so bold picks up zenburn's bright variants.
+        ghostel-bold-color 'bright
+        ;; Lets programs in the terminal write the kill ring and system
+        ;; clipboard via OSC 52 -- the point is copying out of a TUI (tmux,
+        ;; nvim) over SSH. Upstream defaults this off because it means any
+        ;; process in the terminal can overwrite the clipboard; enabled here
+        ;; deliberately, revert to nil if that ever bites.
+        ghostel-enable-osc52 t)
+
+  ;; Shell integration can call whitelisted Emacs commands (the OSC 52 ";e"
+  ;; subcommand, so this rides on `ghostel-enable-osc52' above). Point being:
+  ;; `find-file' from inside the terminal reuses THIS Emacs instead of nesting
+  ;; a second one. Only add commands that are harmless to invoke with arbitrary
+  ;; string arguments -- terminal output is untrusted input to this whitelist.
+  (add-to-list 'ghostel-eval-cmds '("magit-status" magit-status) t)
+
+  ;; A command that finishes while the terminal is off-screen otherwise
+  ;; announces itself nowhere. The hook fires synchronously from the parser, so
+  ;; per upstream's docstring the actual work is deferred off the parser.
+  (add-hook 'ghostel-command-finish-functions
+            (defun +ghostel-notify-finished-h (buffer status)
+              (unless (eq buffer (window-buffer (selected-window)))
+                (run-at-time
+                 0 nil
+                 (lambda ()
+                   (when (buffer-live-p buffer)
+                     (message "%s: command finished (exit %s)"
+                              (buffer-name buffer) (or status "?")))))))))
+
+;; Live terminals keep the palette they were created with, so a theme switch
+;; leaves them stale until the palette is re-pushed.
+(add-hook 'doom-load-theme-hook #'ghostel-sync-theme)
+
+;; Shell integration tracks every prompt (OSC 133), but nothing was bound to
+;; move between them. Hyperlink motion covers the links `ghostel-enable-url-
+;; detection' and `-enable-file-detection' are already generating.
+(map! :map ghostel-mode-map
+      "C-c C-p" #'ghostel-previous-prompt
+      "C-c C-n" #'ghostel-next-prompt
+      "C-c C-f" #'ghostel-next-hyperlink
+      "C-c C-b" #'ghostel-previous-hyperlink
+      "C-c C-l" #'ghostel-clear-scrollback
+      ;; Line mode edits the pending shell line as an ordinary Emacs buffer,
+      ;; with `completion-at-point' -- i.e. Corfu/Vertico instead of readline.
+      ;; Bound rather than made the default (`ghostel-initial-input-mode') until
+      ;; it's had real use; flip that variable if it earns it.
+      "C-c C-e" #'ghostel-line-mode)
+
+;; Terminal rows sit tighter than Doom's default text; a little leading makes
+;; dense output legible without costing a visible amount of height.
+(setq-hook! 'ghostel-mode-hook line-spacing 0.1)
+
+;; No popup rule existed, so `SPC p t' reused whatever window it landed in.
+;; :quit nil and :ttl nil keep a live shell from being closed by `C-g' or
+;; reaped while idle -- a terminal holding a running process is not a
+;; transient buffer.
+(set-popup-rule! "^\\*ghostel" :size 0.35 :vslot -4 :select t :quit nil :ttl nil)
+
+;; The `:term ghostel' module already inherits `ghostel-default' from
+;; `solaire-default-face' (#303030), so terminals are dimmer than file buffers
+;; (#3F3F3F) out of the box -- but so is every other solaire buffer (treemacs,
+;; dirvish-side, dashboard), which makes the terminal indistinguishable from
+;; the furniture around it. An explicit background one step darker still
+;; (zenburn bg-1) separates it from both. This overrides only the background
+;; attribute, so the module's solaire hook keeps managing `:inherit'.
+(custom-set-faces!
+  '(ghostel-default :background "#2B2B2B" :height 0.95))
 
 ;; vterm didn't repaint reliably when its window was resized while it wasn't
 ;; the selected window (a known vterm/libvterm bug class). This was worked
@@ -563,7 +641,7 @@ region/buffer/project-file context already."
 ;; Only the two commands that map has no equivalent for are added, into the
 ;; same prefix -- the former `SPC a' namespace and its `embark-act' unbind
 ;; are gone. See docs/decisions.org ADR-028 (supersedes ADR-003).
-;; `my/project-ghostel' is unaffected: still `SPC p t' (see above).
+;; The project terminal is unaffected: still `SPC p t' (see above).
 (map! :leader
       :desc "Add diagnostics to context" "o l d" #'my/gptel-add-diagnostics
       :desc "Agent (Claude Code)"        "o l g" #'claude-code-ide-menu)
