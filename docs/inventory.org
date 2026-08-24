@@ -87,7 +87,8 @@ enabled ones.
   see [[id:adr-org-roam-with-vulpea][ADR-027]]), python +lsp +pyenv +poetry +pyright +tree-sitter, sh +lsp
 - =:email= mu4e +org +gmail +mbsync
 - =:os= macos (macOS only), tty +osc
-- =:app= calendar (packages only — sync unconfigured, [[id:adr-calendar-org-gcal][ADR-025]]), emms,
+- =:app= calendar (org-gcal configured, not yet authorized against Google —
+  [[id:adr-calendar-org-gcal][ADR-025]]), emms,
   everywhere, irc, rss +org +youtube
 - =:config= default +bindings +smartparens +gnupg
 
@@ -244,6 +245,7 @@ No secret values recorded here or anywhere in this repo — entry names only.
 |--------+--------------------------------|
 | pass   | =api/anthropic=, =api/openai= (confirmed via =pass ls=, 2026-07-21). Phase 2 ([[id:adr-email-mu4e][ADR-011]]): =mail/oauth2-google-client= *confirmed present* (via =pass ls mail=, 2026-08-05), backing the now fully-implemented =personal=/=ualberta= accounts. =mail/tricca= *still not created* — =jcook@tricca.ca= email is therefore *not implemented*, blocked on circumstances outside the user's control (as of 2026-08-05); work is paused here for other priorities as of 2026-08-07, not actively chased. A manual, never-scripted user action once unblocked |
 | gpg    | one ultimate-trust secret key (created 2026-02-05, ID =859AF991C9EA4396=), reused as oama's GPG backend key rather than minting a second one |
+| oauth2-auto (GPG-backed plstore at =~/.config/emacs/.local/state/oauth2-auto.plist=) | org-gcal's token store, and a *third* credential mechanism alongside =pass= and =oama= — not a choice, it's how org-gcal authenticates ([[id:adr-calendar-org-gcal][ADR-025]]). Reads its client id/secret from the same =mail/oauth2-google-client= pass entry =oama= uses. *Empty as of 2026-08-23*: no authorization has been run, so no token exists yet. The path is set in =config.el=; oauth2-auto's own default would put it inside Doom's git checkout |
 | oama (GPG-backed, own store at =~/.local/state/oama=) | Holds per-address OAuth2 refresh/access tokens for the 2 Gmail accounts. Authorized 2026-07-29, live-verified 2026-08-05 morning, then *both went invalid the same afternoon* — =oama access <address>= returned =getEmailAuth: InvalidGrant= for both =mrniceguyjames@gmail.com= and =jcook@ualberta.ca=, exactly 7 days after authorization, consistent with a "Testing" consent-screen 7-day refresh-token cap. *2026-08-06:* user re-=authorize=d both and published the OAuth consent screen (Testing → In production, unverified) to fix the root cause; =oama access <address>= confirmed exit 0 for both immediately after. Durability past the old ~7-day mark (~2026-08-13) not yet confirmed by elapsed time — see [[id:adr-email-mu4e][ADR-011]] Validation/Revisit when. Token output never printed at any point in this diagnosis |
 
 =api/anthropic= was created during Phase 4 (user action) once gptel's

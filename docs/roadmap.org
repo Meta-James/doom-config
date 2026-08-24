@@ -109,13 +109,19 @@ see [[id:adr-vulpea-dailies-backlinks][ADR-018]]'s LOGBOOK.
 | =docs/inventory.org= backfill      | Done | Added the =vulpea= package row that was missing since its 2026-08-18 install |
 | Vulpea-adoption ADR backfill      | Done | [[id:adr-vulpea-note-management][ADR-019]] (retroactive) records the original Vulpea-vs-org-roam decision that was never itself given an ADR |
 
-* Phase 5 — Calendar (scoped, not implemented)
+* Phase 5 — Calendar (implemented in config; not live-verified)
 :PROPERTIES:
 :ID:       roadmap-phase-5
 :END:
 
 Promoted from the "Calendar" Future-phases bullet below and scoped 2026-08-23;
-see [[id:adr-calendar-org-gcal][ADR-025]] for the full decision record. Nothing is installed yet.
+see [[id:adr-calendar-org-gcal][ADR-025]] for the full decision record. The package half landed early — the
+non-language module sweep ([[id:adr-module-sweep-non-lang][ADR-029]]) enabled =:app calendar= on 2026-08-23, so
+calfw and org-gcal are installed — and the configuration landed the same day:
+credentials, the fetch-file alist, both leader bindings, the guarded
+agenda-open hook, and =~/org/calendar/=. What remains is entirely on the
+Google side and in the user's own session: adding the Calendar scope to the
+OAuth client, authorizing both accounts once, and then live-verifying.
 
 Shape: Doom's =:app calendar= module (calfw for the view, org-gcal for sync),
 two-way sync for both existing Google accounts, into a dedicated
@@ -129,12 +135,13 @@ plain org editing.
 
 | Sub-phase | Status | Notes |
 |-----------+--------+-------|
-| Enable =:app calendar=, =doom sync= | Not started | Module currently commented out at =init.el:187= |
-| Google Cloud: add Calendar scope, re-authorize both accounts | Not started | User action — reuses the existing =mail/oauth2-google-client= OAuth client from [[id:adr-email-mu4e][ADR-011]], whose consent screen is already published |
-| =config.el=: credentials + =org-gcal-fetch-file-alist= | Not started | Via =+pass-get-secret=, following [[id:adr-gptel-rework][ADR-006]]'s lazy no-value-stored pattern |
-| =config.el=: manual sync binding + agenda-open hook | Not started | Needs a staleness guard so a slow Google call cannot hang =SPC n a= — see [[id:adr-calendar-org-gcal][ADR-025]] Consequences |
-| Verify org-gcal's real API against installed source | Not started | ADR-025 names its expected variables as *unverified* — the package could not be read from the agent's sandbox. Do this first |
-| Live verification | Not started | View renders, events pull for both accounts, an org edit pushes back, agenda not noticeably slower, =doom doctor= clean, and a token survives past ~7 days |
+| Enable =:app calendar=, =doom sync= | Done | Enabled by the ADR-029 sweep 2026-08-23 (=init.el:202=); calfw, calfw-org/cal/ical and org-gcal installed at the module's pins |
+| Verify org-gcal's real API against installed source | Done | 2026-08-23 — variables exist as named, but credentials can't be lazy, tokens live in =oauth2-auto-plstore=, and =org-gcal-sync= is already async. Corrections in [[id:adr-calendar-org-gcal][ADR-025]]'s LOGBOOK |
+| Google Cloud: add Calendar scope, re-authorize both accounts | Not started | User action — reuses the existing =mail/oauth2-google-client= OAuth client from [[id:adr-email-mu4e][ADR-011]], whose consent screen is already published. Also needs the entry's client-id *field name* confirmed; the agent can't read the store |
+| =config.el=: credentials + =org-gcal-fetch-file-alist= | Done | Values set as strings (org-gcal's API rules out ADR-006's lazy pattern), both lookups NOERROR so a missing entry warns rather than breaking the agenda. =~/org/calendar/= created |
+| =config.el=: manual sync binding + agenda-open hook | Done | =SPC o C= syncs, =SPC o c= opens calfw; hook guarded by a 1-hour staleness interval, the sync lock, and the presence of a stored token |
+| =doom doctor= | Done | Clean — 77 modules, 230 packages, only the pre-existing =markdown +tree-sitter= warning |
+| Live verification | Not started | View renders, events pull for both accounts, an org edit pushes back, agenda not noticeably slower, and a token survives past ~7 days |
 
 Known risks going in: this is the first part of the config that writes to a
 remote service rather than to local git-recoverable files — though modestly

@@ -949,6 +949,92 @@ DIRECTION is `previous' or `next'."
        :desc "Daily: previous"  "p" #'my/vulpea-daily-previous
        :desc "Daily: next"      "n" #'my/vulpea-daily-next))
 
+;; Calendar: calfw view + two-way org-gcal sync (docs/decisions.org ADR-025).
+;; The `:app calendar' module already ships calfw's evil keymap, its popup rule
+;; and the `=calendar' command, so only credentials, the calendar-to-file
+;; mapping and the two sync triggers belong here.
+;;
+;; Credentials come from the same Google Cloud OAuth client mu4e uses
+;; (`mail/oauth2-google-client', ADR-011). Unlike gptel's backends above, these
+;; can't stay behind a lambda: org-gcal reads `org-gcal-client-id' and
+;; `org-gcal-client-secret' literally as it loads and copies them into
+;; `oauth2-auto-additional-providers-alist', so they must be real strings in
+;; the variables, followed by `org-gcal-reload-client-id-secret' to rebuild
+;; that alist. Load is deferred to first calendar use, so the gpg prompt still
+;; doesn't happen at startup. The one-time "must set `org-gcal-client-id'"
+;; warning is expected -- org-gcal emits it a moment before this block runs.
+;;
+;; Tokens are oauth2-auto's business (`oauth2-auto-plstore'), not org-gcal's:
+;; the module's `org-gcal-token-file' defvar is vestigial in this version.
+;;
+;; ~/org/calendar/ is org-gcal-owned -- it rewrites the files it syncs, so
+;; nothing hand-written goes in there. The agenda picks it up for free, since
+;; `org-agenda-files' is the whole of `org-directory' (ADR-017).
+
+;; Keep the OAuth token store out of `user-emacs-directory' (oauth2-auto's
+;; default), which here is Doom's own git checkout. `doom-state-dir' is the
+;; right shelf for it: losing the file only costs a re-authorization. Set at
+;; config load rather than inside the `after!' below, because the agenda hook
+;; checks this path before anything has loaded org-gcal -- a `defcustom' won't
+;; overwrite a value the variable already has.
+(setq oauth2-auto-plstore (expand-file-name "oauth2-auto.plist" doom-state-dir))
+
+(after! org-gcal
+  (setq org-gcal-client-id
+        (+pass-get-field "mail/oauth2-google-client"
+                         '("client_id" "client-id" "login" "user") 'noerror)
+        org-gcal-client-secret
+        (+pass-get-field "mail/oauth2-google-client" 'secret 'noerror)
+        org-gcal-fetch-file-alist
+        `(("mrniceguyjames@gmail.com"
+           . ,(expand-file-name "calendar/personal.org" org-directory))
+          ("jcook@ualberta.ca"
+           . ,(expand-file-name "calendar/ualberta.org" org-directory))))
+  ;; Both lookups pass NOERROR deliberately. `+pass-get-secret' would signal on
+  ;; a missing or unreadable entry, and that signal propagates out of the
+  ;; `require' inside `org-gcal-sync' -- which, from the agenda hook below,
+  ;; breaks opening the agenda at all. Degrade to a warning instead: the
+  ;; calendar stays unauthenticated, `SPC n a' still works.
+  (if (and org-gcal-client-id org-gcal-client-secret)
+      (org-gcal-reload-client-id-secret)
+    (warn "org-gcal: no usable OAuth client in pass entry mail/oauth2-google-client")))
+
+;; Sync triggers (ADR-025): `SPC o C' always syncs, while opening the agenda
+;; syncs at most once an hour -- without that staleness guard every `SPC n a'
+;; would cost a round-trip to Google. `org-gcal-sync' is deferred-async, so
+;; neither trigger blocks; a hung call degrades to stale data rather than a
+;; frozen agenda. The lock check matters: `org-gcal-sync' signals a
+;; `user-error' while a previous sync is still running (or died holding the
+;; lock), which from a hook would break opening the agenda outright. Clear a
+;; stuck lock with `org-gcal--sync-unlock'.
+(defvar my/org-gcal-sync-min-interval 3600
+  "Seconds an agenda-open sync must be stale before another one runs.")
+
+(defvar my/org-gcal-last-sync 0
+  "`float-time' of the last agenda-open sync.")
+
+(defun my/org-gcal-sync-maybe ()
+  "Sync Google Calendar if the last agenda-open sync has gone stale.
+Skips the sync entirely when no oauth2-auto token store exists yet. With no
+stored token, `org-gcal-sync' starts an authorization flow -- a browser hand-off
+and, in oauth2-auto's manual mode, a blocking `read-string' for the returned
+code (oauth2-auto.el:500). Neither belongs in a hook that fires while the
+agenda is being drawn. Authorizing is a user-initiated act: do it once via
+`SPC o C', after which this hook has a token to refresh silently."
+  (when (and (> (- (float-time) my/org-gcal-last-sync)
+                my/org-gcal-sync-min-interval)
+             (not (bound-and-true-p org-gcal--sync-lock))
+             (require 'oauth2-auto nil t)
+             (file-exists-p oauth2-auto-plstore))
+    (setq my/org-gcal-last-sync (float-time))
+    (org-gcal-sync nil 'silent)))
+
+(add-hook 'org-agenda-mode-hook #'my/org-gcal-sync-maybe)
+
+(map! :leader
+      :desc "Calendar (calfw)"         "o c" #'=calendar
+      :desc "Calendar sync (org-gcal)" "o C" #'org-gcal-sync)
+
 ;; EXWM
 ;; (defun my/exwm-screen-layout ()
 ;;   "Configure monitors: external on the left of the laptop."

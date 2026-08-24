@@ -137,6 +137,36 @@ MCP tools, which do reach the user's real running Emacs — confirmed via
 =claude-code-ide-mcp-project-info= returning the real project/buffer) over
 re-running more agent-shell commands that may be checking the wrong thing.
 
+* OPEN: =org-agenda-list= hangs a frame-less headless daemon
+:PROPERTIES:
+:ID:       tshoot-agenda-headless-daemon-hangs
+:END:
+:LOGBOOK:
+- Found [2026-08-23 Sun], while testing Phase 5's agenda-open sync hook ([[id:adr-calendar-org-gcal][ADR-025]])
+:END:
+
+In a disposable =emacs --daemon=<name>= started against this config, an
+=emacsclient --eval "(org-agenda-list)"= never returns — the client times out
+and every subsequent =--eval= against that daemon also hangs, so the daemon
+has to be killed by PID. The Emacs process itself stays in state =S= with no
+=gpg=/=pinentry= child, which points at a blocking minibuffer read rather than
+a stuck subprocess.
+
+*Not root-caused.* What is established is what it is *not*: it reproduces with
+=org-agenda-mode-hook='s org-gcal entry removed, and with =org-agenda-files=
+pointed at an empty scratch directory instead of =~/org=. So it is neither the
+calendar sync hook nor anything about the real agenda files — it is the
+frame-less daemon itself, in the same family as [[id:tshoot-ghostel-needs-x-frame][the ghostel entry below]].
+
+*Takeaway for future sessions*: the isolated-headless-daemon pattern is still
+the right way to verify agenda-adjacent *wiring* — hooks attached, variables
+set, bindings resolved, =(require ...)= clean — and that is exactly how Phase
+5's config was checked. It cannot verify agenda *behavior*. Don't call
+=org-agenda-list= (or anything that opens the agenda) in a frame-less daemon,
+and don't read a hang there as evidence about the code under test. If agenda
+behavior genuinely needs testing, attach a real X frame first, the way the
+ghostel entry describes.
+
 * CONFIRMED: Doom's tree-sitter module grammar-install advice is broken on Emacs 30.x
 :PROPERTIES:
 :ID:       tshoot-treesitter-confirmed

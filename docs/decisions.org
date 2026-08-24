@@ -3677,10 +3677,53 @@ See Candidates table above.
 * ADR-025: Calendar via Doom =:app calendar= — calfw view plus two-way org-gcal sync for both Google accounts
 :PROPERTIES:
 :ID:       adr-calendar-org-gcal
-:STATUS:   Partially implemented — module enabled, sync not configured
+:STATUS:   Implemented in config; not live-verified (blocked on the user-side Google Cloud scope change and first authorization)
 :DATE:     2026-08-23
 :END:
 :LOGBOOK:
+- Implemented [2026-08-23 Sun]: =config.el= now carries the credential block,
+  =org-gcal-fetch-file-alist=, the =SPC o c= / =SPC o C= bindings and the
+  agenda-open hook; =~/org/calendar/= exists with the two org-gcal-owned
+  files. =doom doctor= clean (77 modules, 230 packages, only the pre-existing
+  =markdown +tree-sitter= warning). Verified in a disposable headless daemon:
+  the hook is attached, the interval is 3600s, both leader bindings resolve,
+  =(require 'org-gcal)= loads without error, and =org-gcal-fetch-file-alist=
+  holds the two expected pairs. Still unverified because it needs the user:
+  the Google Cloud scope change, the first authorization, and every live
+  behavior in Validation below.
+- API verified against the installed source [2026-08-23 Sun], resolving this
+  ADR's largest evidence gap. =org-gcal-client-id=, =org-gcal-client-secret=,
+  =org-gcal-fetch-file-alist= and =org-gcal-sync= all exist as assumed, at the
+  module's pin (=7304b592=). Three corrections came out of the reading, and
+  the implementation follows the source rather than this ADR's original text:
+  1. *The credentials cannot be lazy.* Decision item 3 called for
+     [[id:adr-gptel-rework][ADR-006]]'s =(lambda () (+pass-get-secret ...))= pattern. org-gcal reads
+     both variables' literal values as it loads and copies them into
+     =oauth2-auto-additional-providers-alist=, so they have to be real strings
+     in the variables, followed by =org-gcal-reload-client-id-secret= to
+     rebuild that alist. Deferred loading still keeps the =gpg= prompt out of
+     startup; a lambda would simply not work.
+  2. *Tokens are oauth2-auto's, not org-gcal's.* This version authenticates
+     through =oauth2-auto= (a hard dependency), which stores tokens in
+     =oauth2-auto-plstore=. Doom's module =defvar= of =org-gcal-token-file= is
+     vestigial — the variable survives as a =defcustom= but nothing reads it.
+     =config.el= points =oauth2-auto-plstore= at =doom-state-dir= rather than
+     leaving it in =user-emacs-directory=, which here is Doom's own git
+     checkout.
+  3. *=org-gcal-sync= is already async* (=deferred=), so the Consequences
+     preference for an async path in the hook is satisfied by the ordinary
+     command; no special handling was needed. It does take a =SILENT=
+     argument, used by the hook.
+  Two hardening changes fell out of testing rather than reading. Both pass
+  lookups use =+pass-get-field='s NOERROR argument: =+pass-get-secret= signals
+  on a missing entry, and that signal escapes the =require= inside
+  =org-gcal-sync=, which from the agenda hook would break opening the agenda
+  at all — reproduced in the sandbox, where the password store isn't visible.
+  And the hook now skips the sync entirely unless =oauth2-auto-plstore=
+  exists, so a session with no stored token never starts an authorization flow
+  (browser hand-off, plus a blocking =read-string= for the returned code in
+  oauth2-auto's manual mode) from inside a hook that runs while the agenda is
+  being drawn. Authorization stays a user-initiated act via =SPC o C=.
 - Module enabled [2026-08-23 Sun]: the non-language module sweep
   ([[id:adr-module-sweep-non-lang][ADR-029]]) turned on =:app calendar=, so calfw, calfw-org/cal/ical and
   org-gcal are installed at the module's pins. Only the package half of this
@@ -3776,7 +3819,10 @@ Two prior decisions shape it more than anything else:
 
 *Gaps in this evidence, stated rather than papered over:*
 
-- *org-gcal's actual API was not verified.* The package is not installed
+- *org-gcal's actual API was not verified.* [*Resolved 2026-08-23* — the
+  package is installed and its source was read; see the LOGBOOK entry above
+  for what held and what didn't. The original gap is kept below as written.]
+  The package is not installed
   (=~/.config/emacs/.local/straight/repos/= has neither =org-gcal= nor
   =calfw=), and the agent's sandbox cannot reach =github.com= or =melpa.org=
   to read its source (the same restriction documented in [[id:adr-ui-rice-pass][ADR-022]]'s
@@ -3801,11 +3847,13 @@ Scope Phase 5 (Calendar) as:
 2. Google Cloud: add the Calendar scope to the existing OAuth client behind
    =mail/oauth2-google-client=; re-authorize both accounts. User action, not
    agent-doable.
-3. =config.el=: set =org-gcal-client-id=/=org-gcal-client-secret= via
-   =+pass-get-secret= from that entry (lazily, no value stored in a variable,
-   per [[id:adr-gptel-rework][ADR-006]]'s pattern), and map
-   =org-gcal-fetch-file-alist= to =~/org/calendar/personal.org= and
-   =~/org/calendar/ualberta.org=.
+3. =config.el=: set =org-gcal-client-id=/=org-gcal-client-secret= from that
+   entry, and map =org-gcal-fetch-file-alist= to =~/org/calendar/personal.org=
+   and =~/org/calendar/ualberta.org=. (*Corrected during implementation*: this
+   item originally specified [[id:adr-gptel-rework][ADR-006]]'s lazy
+   =(lambda () (+pass-get-secret ...))= pattern with no value stored in a
+   variable. org-gcal's actual API makes that impossible — see the LOGBOOK
+   entry above.)
 4. =config.el=: a leader binding for manual =org-gcal-sync= (always syncs),
    plus an agenda-open hook gated by a staleness guard — a last-sync
    timestamp and a minimum-interval variable, skipping the fetch when the
@@ -3886,7 +3934,7 @@ refresh token has survived past ~7 days (the specific failure ADR-011 hit).
 * ADR-026: =init.el= module-flag audit — annotate every flag, prune dead modules, enable the flags that earn their keep
 :PROPERTIES:
 :ID:       adr-init-flag-audit
-:STATUS:   Implemented; not live-verified
+:STATUS:   Implemented, live-verified (user restarted Emacs 2026-08-23 and reported the config loading and running with no breakage; individual flags not itemized)
 :DATE:     2026-08-23
 :END:
 :LOGBOOK:
@@ -3941,6 +3989,12 @@ refresh token has survived past ~7 days (the specific failure ADR-011 hit).
   =dape= and =tools/debugger/README.org= says it has no flags, not =[+lsp]=.
   Treat the annotations as dated against doom core =ad55ed0=, exactly as
   =init.el='s header comment says.
+- State "Live-verified" from "Implemented"  [2026-08-23 Sun] — the user
+  restarted Emacs with all audited flags active and reported everything
+  working. That restart is what this ADR's Validation section was waiting on.
+  The five spot-checks it named (dirvish, a popup, corfu's dabbrev fallback,
+  forge, a tree-sitter buffer) were not reported back one by one, so read this
+  as "nothing broke on load or in normal use", not a per-flag exercise.
 :END:
 
 ** Context
@@ -4096,6 +4150,12 @@ is live-verified until the user restarts Emacs and exercises, at minimum,
 dirvish, a popup, corfu's dabbrev fallback, forge against this repo, and one
 tree-sitter-backed buffer.
 
+*Update [2026-08-23 Sun]:* the restart happened and the user reported all of
+it good — the config loads and runs with the audited flags active, closing the
+"no live session has loaded this" gap. The five spot-checks above were not
+reported back individually, so the honest reading is "no breakage on load or
+in normal use"; a flag never reached in practice is still untested.
+
 ** Rollback
 Per flag, remove it from its module's flag list in =init.el= and =doom
 sync=; nothing else in the repo depends on any of them. To revert the whole
@@ -4124,8 +4184,16 @@ independent of the config: =pipx uninstall grip jupyterlab=, =npm uninstall
 * ADR-027: Run org-roam alongside Vulpea rather than instead of it (amends ADR-019)
 :PROPERTIES:
 :ID:       adr-org-roam-with-vulpea
-:STATUS:   Implemented; not live-verified
+:STATUS:   Implemented, live-verified (org-roam and Vulpea both active after the user's 2026-08-23 restart, no conflict or slowdown reported)
 :DATE:     2026-08-23
+:END:
+:LOGBOOK:
+- State "Live-verified" from "Implemented"  [2026-08-23 Sun] — user restarted
+  Emacs and reported everything working with both packages active: no
+  conflict, and no complaint about save latency in =~/org= with two autosync
+  hooks running. The finer checks under Validation (=SPC n r f=, a note made
+  by each tool being findable by the other) were not itemized back, so the
+  "which finder do I use?" question in Revisit-when remains open.
 :END:
 
 ** Context
@@ -4238,6 +4306,10 @@ it.
 See the Candidates table above.
 
 ** Validation
+*Live-verified [2026-08-23 Sun]:* the user restarted Emacs with both packages
+active and reported no breakage, no conflict, and no save slowdown in =~/org=.
+The pre-restart assessment is preserved below.
+
 None yet — this is installed, not exercised. =doom sync= and =doom doctor=
 pass (55 modules, 188 packages, one unrelated warning), and =dot= is now
 installed so org-roam's graph view has its prerequisite, but no live session
@@ -4270,8 +4342,15 @@ removing the package.
 * ADR-028: Retire the =SPC a= AI namespace for =:tools llm='s =SPC o l= map; move the app launcher to =SPC o L= (supersedes ADR-003, amends ADR-020)
 :PROPERTIES:
 :ID:       adr-llm-module-owns-ai-keys
-:STATUS:   Implemented; structurally verified headless, not yet live-verified
+:STATUS:   Implemented, live-verified (user restarted Emacs 2026-08-23; the =SPC o l= / =SPC o L= layout loads with no reported problem)
 :DATE:     2026-08-23
+:END:
+:LOGBOOK:
+- State "Live-verified" from "Implemented"  [2026-08-23 Sun] — restart done,
+  user reported everything good, closing the headless-only gap under
+  Validation. Whether the =SPC o l= vs =SPC o L= shift distinction proves
+  error-prone is a Revisit-when question only accumulated daily use can
+  answer, not this restart.
 :END:
 
 ** Context
@@ -4390,10 +4469,11 @@ See the Candidates table above.
   collision.
 - =doom sync= + =doom doctor= clean.
 - =config.el= re-read by =emacs -Q --batch= without a parse error.
-- *Not yet live-verified*: the user has not restarted their long-running Emacs
-  and exercised these keys interactively. Per [[id:tshoot-daemon-validation][tshoot-daemon-validation]] that
-  restart is required before any of this counts as confirmed — a headless
-  daemon proves the bindings exist, not that the workflow feels right.
+- *Live-verified [2026-08-23 Sun]*: the user restarted their long-running
+  Emacs and reported the config good, satisfying
+  [[id:tshoot-daemon-validation][tshoot-daemon-validation]]'s restart requirement. Individual keys were not
+  reported back one at a time, so "the workflow feels right" rests on the
+  absence of complaints, not on an itemized pass.
 
 ** Rollback
 - =git revert= the commit; the change is confined to =config.el=,
@@ -4419,8 +4499,16 @@ See the Candidates table above.
 * ADR-029: Non-language module sweep — enable 22 more Doom modules; drop =confirm-kill-emacs nil= so =doom-quit= can fire
 :PROPERTIES:
 :ID:       adr-module-sweep-non-lang
-:STATUS:   Implemented; not live-verified (both prerequisite binaries installed, =doom doctor= clean)
+:STATUS:   Implemented, live-verified (user restarted Emacs 2026-08-23 with all 22 modules active and reported no breakage, no binding collision, no startup complaint)
 :DATE:     2026-08-23
+:END:
+:LOGBOOK:
+- State "Live-verified" from "Implemented"  [2026-08-23 Sun] — the restart this
+  ADR was explicitly waiting on happened, and the user reported all of it
+  good: nothing broken by the sweep, no binding collision, no startup
+  complaint. The quit prompt and treemacs were not confirmed one by one, so
+  Revisit-when still stands — the first real usage pass, not this restart, is
+  the honest filter for modules that turn out to be unused.
 :END:
 
 ** Context
@@ -4573,11 +4661,10 @@ See the Candidates table above.
 - =doom doctor= re-run after both installs: *no errors, one warning* — the
   standing "tree-sitter rudimentary before Emacs 31" caveat on =markdown
   +tree-sitter=, which predates this sweep and no action here can clear.
-- *Not live-verified*: the user's long-running Emacs has not been restarted
-  with these 22 modules active. Per [[id:tshoot-daemon-validation][tshoot-daemon-validation]], nothing here
-  counts as confirmed until that restart happens — in particular the quit
-  prompt, treemacs, and whether any new module's keys collide with this
-  repo's own bindings.
+- *Live-verified [2026-08-23 Sun]*: the user restarted Emacs with all 22
+  modules active and reported no breakage and no binding collisions, which
+  satisfies [[id:tshoot-daemon-validation][tshoot-daemon-validation]]. The quit prompt and treemacs were not
+  confirmed individually — absence of complaint, not a checklist.
 
 ** Rollback
 - Whole sweep: =git revert= the commit, then =doom sync=. The change is

@@ -251,33 +251,49 @@ full decision records.
 :END:
 Promoted from [[file:docs/roadmap.org][docs/roadmap.org]]'s "Calendar" Future-phases bullet and scoped
 2026-08-23 per =docs/standards.org= =std-no-scope-creep=. See
-[[file:docs/decisions.org][docs/decisions.org]] ADR-025 for the full decision record. Nothing installed yet.
+[[file:docs/decisions.org][docs/decisions.org]] ADR-025 for the full decision record. Packages are installed
+(the ADR-029 sweep enabled the module); nothing is configured.
 
-- [ ] *Do this first:* install =:app calendar= and read org-gcal's actual
-  source. ADR-025's Evidence flags every org-gcal variable it names
-  (=org-gcal-client-id=/=-client-secret=/=-fetch-file-alist=/=org-gcal-sync=)
-  as *expected, not confirmed* — the package isn't installed and the agent's
-  sandbox can't reach github/melpa to check. Correct ADR-025 if it differs
-  (ADR-022's obsolete =pulsar-pulse= is the precedent for why)
-- [ ] =init.el=: uncomment =calendar= under =:app= (currently =init.el:187=),
-  then =doom sync=
+- [X] *Do this first:* read org-gcal's actual source — done 2026-08-23. Every
+  variable ADR-025 named exists, but three things differ, and ADR-025's
+  LOGBOOK now records them: the client id/secret can't be lazy (org-gcal reads
+  them literally at load into =oauth2-auto-additional-providers-alist=, so
+  they're set as strings plus =org-gcal-reload-client-id-secret=); tokens
+  belong to =oauth2-auto= (=oauth2-auto-plstore=), making the module's
+  =org-gcal-token-file= vestigial; and =org-gcal-sync= is already
+  =deferred=-async, so the hook needed no special async handling
+- [X] =init.el=: uncomment =calendar= under =:app=, then =doom sync= — done
+  2026-08-23 as part of the ADR-029 module sweep, not as Phase 5 work; the
+  module now sits at =init.el:202= and its packages are installed
 - [ ] Google Cloud (user action, not agent-doable): add the Calendar scope to
   the existing OAuth client behind the =mail/oauth2-google-client= pass entry,
-  re-authorize both accounts. Verify that pass entry actually exists — the
-  agent could not check it (=pass= not on its =PATH=)
-- [ ] =config.el=: =org-gcal-client-id=/=-client-secret= via
-  =+pass-get-secret= (lazy, no value stored in a variable, per ADR-006), and
-  =org-gcal-fetch-file-alist= mapping the two accounts to
-  =~/org/calendar/personal.org= and =~/org/calendar/ualberta.org=
-- [ ] =config.el=: leader binding for manual =org-gcal-sync= (always syncs,
-  unguarded — an explicit request should always fetch)
-- [ ] =config.el=: agenda-open hook gated by a *required* staleness guard —
-  last-sync timestamp plus a minimum-interval variable, so repeatedly opening
-  the agenda costs one network call, not one per open. Settle the threshold
-  value with the user during the phase. Prefer org-gcal's async path here if
-  it has one, so a hung call degrades to stale data rather than a frozen
-  agenda
-- [ ] =doom doctor= clean
+  re-authorize both accounts. Verify that pass entry actually exists and check
+  which *field* holds the client id — the agent still can't see the store
+  (=pass= not on its =PATH=, =~/.password-store= not visible), so =config.el=
+  tries =client_id=, =client-id=, =login=, =user= in that order and warns
+  instead of erroring if none match. Tell the agent the field name if it's
+  something else
+- [X] =config.el=: =org-gcal-client-id=/=-client-secret= from
+  =mail/oauth2-google-client=, and =org-gcal-fetch-file-alist= mapping the two
+  accounts to =~/org/calendar/personal.org= and =~/org/calendar/ualberta.org=
+  (both directory and files created). Not the lazy ADR-006 pattern the scope
+  called for — org-gcal's API rules it out, see above. Both lookups pass
+  =+pass-get-field='s NOERROR argument: a missing entry would otherwise signal
+  out of the =require= inside =org-gcal-sync= and break opening the agenda.
+  =oauth2-auto-plstore= repointed at =doom-state-dir= so the token file
+  doesn't land in Doom's own git checkout
+- [X] =config.el=: =SPC o C= for manual =org-gcal-sync= (unguarded — an
+  explicit request always fetches), plus =SPC o c= for =calendar= (calfw).
+  Both keys were free in Doom's =SPC o= map
+- [X] =config.el=: agenda-open hook with the staleness guard —
+  =my/org-gcal-sync-min-interval= is 3600s (user's choice), tracked against
+  =my/org-gcal-last-sync=. No async work was needed: =org-gcal-sync= is
+  already =deferred=. Two further guards the scope didn't anticipate: skip
+  while =org-gcal--sync-lock= is held (it signals a =user-error= otherwise,
+  which from a hook breaks the agenda), and skip entirely until
+  =oauth2-auto-plstore= exists, so a hook never starts an authorization flow
+- [X] =doom doctor= clean — 77 modules, 230 packages, only the pre-existing
+  =markdown +tree-sitter= warning. No =doom sync= needed: =config.el= only
 - [ ] Live-verify in the user's own session: calfw renders both calendars, an
   event created in Google appears in org after sync, an org edit pushes back
   to Google, =SPC n a= not noticeably slower
@@ -341,6 +357,9 @@ Interim fix for the vterm resize-repaint bug that motivated this is the
   itself. Revisit only if the same visual corruption recurs under ghostel
   (see ADR-014's Revisit-when).
 
-Only remaining loose end: your live Emacs session needs a restart (or
-=M-x doom/reload=) to actually pick up the =init.el=/=config.el= changes —
-not yet done, since that has to happen in your own interactive session.
+Closed 2026-08-23: the user restarted Emacs and confirmed everything working,
+so the ghostel backend, the module sweep, and the AI-keymap move are all live
+in their session. That same restart also cleared the pending live-verification
+on [[file:docs/decisions.org][ADR-026]], ADR-027, ADR-028, and ADR-029 — all four moved from
+"Implemented; not live-verified" to live-verified, with the per-ADR caveat that
+individual features were not itemized back one by one.
