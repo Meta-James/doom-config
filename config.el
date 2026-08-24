@@ -1093,6 +1093,27 @@ agenda is being drawn. Authorizing is a user-initiated act: do it once via
       :desc "Calendar (calfw)"         "o c" #'=calendar
       :desc "Calendar sync (org-gcal)" "o C" #'org-gcal-sync)
 
+;; emacs-everywhere buffers must not get a file template (ADR-032).
+;;
+;; `emacs-everywhere' opens a brand-new temp file (`/tmp/emacs-everywhere-<ts>-<app>')
+;; with no extension, so it visits in `fundamental-mode' and no template rule
+;; matches. Then `emacs-everywhere-apply-major-mode' switches it to `org-mode'
+;; -- `pandoc' is installed, so `emacs-everywhere-major-mode-function' defaults
+;; to `org-mode' rather than markdown. The buffer is now empty, unmodified,
+;; backed by a file that doesn't exist yet, and in a mode with a template rule.
+;; Doom checks templates on `doom-switch-buffer-hook' (not `find-file-hook'),
+;; so the *next* switch into that buffer fires `+file-templates-check-h', every
+;; condition passes, and org-mode's `__' template inserts
+;; `#+title: Emacs Everywhere 20260823 141530 Firefox' -- which then gets pasted
+;; straight back into whatever app you invoked it from.
+;;
+;; `emacs-everywhere-init-hooks' runs before `emacs-everywhere-mode' and before
+;; any later buffer switch, so inhibiting there wins the race. Same mechanism
+;; and same hook the module itself uses one line over for
+;; `doom-inhibit-local-var-hooks'.
+(after! emacs-everywhere
+  (setq-hook! 'emacs-everywhere-init-hooks +file-templates-inhibit t))
+
 ;; EXWM
 ;; (defun my/exwm-screen-layout ()
 ;;   "Configure monitors: external on the left of the laptop."

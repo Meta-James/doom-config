@@ -141,7 +141,7 @@ configuration in =config.el=; they run at Doom defaults.
 | black   | yes     | ~/.local/bin/black                         |
 | poetry  | yes     | ~/.local/bin/poetry                        |
 | pyenv   | yes     | ~/.pyenv/bin/pyenv                         |
-| direnv  | yes     | /usr/bin/direnv                            |
+| direnv  | yes     | =/usr/bin/direnv=, =2.32.1-2ubuntu0.24.04.3= (apt) — predates this project; wired into Emacs via =:tools direnv=/envrc and into bash via a =~/.bashrc= hook, [[id:adr-everywhere-direnv][ADR-032]] |
 | pass    | yes     | /usr/bin/pass                              |
 | gpg     | yes     | /usr/bin/gpg, one secret key (created 2026-02-05) |
 | claude  | yes     | ~/.local/bin/claude, CLI version 2.1.216 (updated from 2.1.215 mid-project) |
@@ -155,7 +155,8 @@ configuration in =config.el=; they run at Doom defaults.
 | oama    | yes     | ~/.local/bin/oama, =0.22.0 - 2025-08-29=, precompiled release binary (no apt package) — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
 | mpv     | yes     | =/usr/bin/mpv=, =0.37.0-1ubuntu4= (apt) — Phase 3, [[id:adr-rss-elfeed][ADR-012]] |
 | yt-dlp  | yes     | =/usr/bin/yt-dlp=, =2024.04.09-1= (apt) — Phase 3, [[id:adr-rss-elfeed][ADR-012]] |
-| xdotool | yes     | =/usr/bin/xdotool=, =3.20160805.1= (apt) — predates this project. The agent's own =which= check first reported it missing; user confirmed it was installed the whole time — see [[id:adr-app-launcher][ADR-020]]'s LOGBOOK and [[id:tshoot-agent-shell-system-state][troubleshooting.org]] |
+| xdotool | yes     | =/usr/bin/xdotool=, =3.20160805.1= (apt) — predates this project; also the paste/refocus backend for =emacs-everywhere= on X11 ([[id:adr-everywhere-direnv][ADR-032]]). The agent's own =which= check first reported it missing; user confirmed it was installed the whole time — see [[id:adr-app-launcher][ADR-020]]'s LOGBOOK and [[id:tshoot-agent-shell-system-state][troubleshooting.org]] |
+| xclip   | yes     | =/usr/bin/xclip=, =0.13-3= (apt) — predates this project; clipboard backend for =emacs-everywhere= on X11 ([[id:adr-everywhere-direnv][ADR-032]]) |
 | libpoppler-glib-dev | yes | needed for =pdf-tools='s =epdfinfo= helper to compile. The agent's own =dpkg -s= check first reported it missing; user confirmed it was installed the whole time — see [[id:adr-app-launcher][ADR-020]]'s LOGBOOK and [[id:tshoot-agent-shell-system-state][troubleshooting.org]] |
 | grip    | yes     | =~/.local/bin/grip=, =4.6.2= (pipx) — backs =:lang markdown +grip= live preview ([[id:adr-init-flag-audit][ADR-026]]) |
 | jupyter | yes     | =~/.local/bin/jupyter=, jupyterlab =4.6.3= + ipykernel =7.3.0= (pipx, =--include-deps= to expose the =jupyter= entry point) — backs =:lang org +jupyter= ([[id:adr-init-flag-audit][ADR-026]]) |

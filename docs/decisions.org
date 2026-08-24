@@ -4681,7 +4681,15 @@ See the Candidates table above.
   module that simply is not used — the sweep was chosen from descriptions, so
   the first real usage pass is the honest filter.
 - =treemacs= goes unused for a month while dirvish stays the file UI — cut
-  treemacs and record it, rather than carrying two drawers.
+  treemacs and record it, rather than carrying two drawers. (Partly answered:
+  [[id:adr-cosmetic-module-bindings][ADR-031]] found the two drawers were in
+  fact colliding on =SPC o p=, and kept both on a per-axis reading of the
+  one-tool rule, with =dirvish-side= moved to =SPC o s=. The "goes unused"
+  test still stands — it just now applies to =SPC o s=.)
+- =:app everywhere= or =:tools direnv= is actually wanted — both were enabled
+  here but left inert until [[id:adr-everywhere-direnv][ADR-032]] supplied the
+  two pieces that cannot live in this repository: a GNOME hotkey and a
+  =~/.bashrc= hook.
 - [[id:adr-calendar-org-gcal][ADR-025]]'s sync work starts, at which point =:app calendar= stops being an
   idle module and needs its credential and file-layout half.
 - =:tools debugger= is actually used: it ships =dape=, and this repo has no
@@ -5085,3 +5093,233 @@ prior state — including the =SPC o p= shadow, which returns as it was.
   obvious home for it.
 - A fourth per-axis carve-out to the one-tool rule appears, which is the
   signal to reword the rule in =AGENTS.md= rather than add another exception.
+
+* ADR-032: Activate =:app everywhere= and =:tools direnv= — a GNOME hotkey and a bash hook, no Emacs config
+:PROPERTIES:
+:ID:       adr-everywhere-direnv
+:STATUS:   Implemented, live-verified (one bug found and fixed on first use)
+:DATE:     2026-08-23
+:END:
+:LOGBOOK:
+- State "Live-verified" from "Implemented" [2026-08-23 Sat] — user pressed
+  =Ctrl+Alt+Space= over a real application and reported it "mostly works". The
+  one defect: the buffer opened carrying a =#+title:= line from Doom's org file
+  template, which =C-c C-c= would have pasted back into the source app. Root
+  cause traced and fixed the same day with a two-line =config.el= addition; see
+  [[id:tshoot-everywhere-file-template][troubleshooting.org]] for the full
+  three-way interaction and the reproduction. Re-pressed after the fix and
+  confirmed clean by the user the same day.
+:END:
+
+** Context
+[[id:adr-module-sweep-non-lang][ADR-029]] enabled =:app everywhere= and
+=:tools direnv= as part of the 22-module sweep, but that ADR scoped itself to
+*turning modules on* and explicitly deferred whether each one was actually
+usable. Both were left dormant in different ways:
+
+- =:tools direnv= was already working inside Emacs and nobody had checked. Its
+  =envrc-global-mode= runs on =doom-first-file=, the =direnv= binary predates
+  this project, and the module even carries a =:before-while= advice that
+  aborts gracefully when the binary is missing. What was missing was the
+  *shell* half: =~/.bashrc= had no =direnv hook bash= line, so =.envrc= files
+  were honoured in Emacs and ignored in every terminal.
+- =:app everywhere= was unusable by construction. Its whole design is to be
+  invoked from *outside* Emacs — you focus some other application's text
+  field, press a global hotkey, and a small Emacs frame appears over it. The
+  package's entry point is autoloaded specifically so a desktop hotkey can
+  call =emacsclient --eval "(emacs-everywhere)"=. With no such hotkey
+  registered, the module was installed and unreachable.
+
+Neither gap is fixable from inside this repository, which is the interesting
+part of this decision.
+
+** Decision drivers
+- =AGENTS.md= Doom-first. Both modules ship complete configuration —
+  =tools/direnv/config.el= carries four hacks and advices (early
+  =change-major-mode-after-body-hook= ordering, LSP/eglot restart on env
+  change, internal-buffer debounce, graceful abort without the binary), and
+  =app/everywhere/config.el= handles the modeline, yasnippet, and Hyprland /
+  Niri support. Writing =config.el= equivalents of any of it would be
+  reimplementation.
+- =docs/standards.org= =std-no-scope-creep=: activate what ADR-029 enabled,
+  don't redesign the shell environment or the desktop keymap.
+- [[id:adr-torrent-transmission][ADR-030]]'s precedent for state that lives
+  outside git: the =magnet:= desktop handler was recorded in the ADR with
+  explicit rollback commands rather than pretended into the repository. The
+  GNOME hotkey and the =~/.bashrc= line get the same treatment.
+- =std-binaries=: don't claim a binary is present without checking, and record
+  what the project newly depends on in [[id:inv-binaries][inventory.org]].
+- The hotkey is muscle memory the user will own for years, so it was their
+  choice, not a default picked for them.
+
+** Candidates
+| Area | Candidate | Fate |
+|------+-----------+------|
+| Emacs configuration | Add =use-package!=/=setq= blocks for either module in =config.el= | Rejected — both Doom modules are already complete; there is no gap to fill. Zero lines of =config.el= were written for this ADR |
+| direnv shell half | Leave =~/.bashrc= alone, Emacs-only direnv | Rejected by the user — =.envrc= would keep working in Emacs and silently doing nothing in any terminal, which is a worse trap than not having direnv at all |
+| direnv shell half | *=eval "$(direnv hook bash)"= appended to =~/.bashrc=* | *Chosen* — direnv's own documented install step; the hook is a =PROMPT_COMMAND= shim, not a persistent process |
+| direnv shell half | A =.envrc= committed to this repo | Not done — nothing in this config needs a project-local environment yet. Revisit if the Python/LSP work grows one |
+| everywhere invocation | Bind =emacs-everywhere= to an Emacs key | Rejected — meaningless. The point is to invoke it while focus is in *another* application; an Emacs binding can never fire at that moment |
+| everywhere invocation | *GNOME custom keybinding running =emacsclient --eval "(emacs-everywhere)"=* | *Chosen* — the invocation the package documents, and the mechanism GNOME already uses for the user's existing =custom0= ("Start emacs") |
+| everywhere hotkey | *=Ctrl+Alt+Space=* | *Chosen* (user's pick) — emacs-everywhere's own documented default, and confirmed unclaimed by scanning =org.gnome.desktop.wm.keybindings= and =org.gnome.settings-daemon.plugins.media-keys= |
+| everywhere hotkey | =Ctrl+Shift+Alt+Super+Space=, matching =custom0='s four-modifier style | Rejected by the user in favour of the shorter chord |
+| everywhere hotkey | =Super+E= | Rejected — free, but =Super= chords collide with GNOME's overview conventions more readily as extensions get added |
+
+** Evidence
+Everything below was read from the running system or the running Emacs daemon,
+not inferred:
+
+- Session is X11, not Wayland: =XDG_SESSION_TYPE=x11=, =loginctl ... Type=x11=,
+  =XDG_CURRENT_DESKTOP=ubuntu:GNOME=, Ubuntu 24.04.4 LTS. This matters — on
+  Wayland =emacs-everywhere= would have needed =ydotool= / =wtype= / =dotool=
+  plus =wl-clipboard=, all four of which are *absent* on this machine. Nothing
+  had to be installed only because the session happens to be X11.
+- Required binaries all already present: =/usr/bin/direnv= =2.32.1=,
+  =/usr/bin/xdotool= =3.20160805.1=, =/usr/bin/xclip= =0.13-3=, =/usr/bin/xprop=.
+  No =apt install=, and so no sudo blocker of the kind Phase 2 and Phase 3 hit.
+- Emacs side of direnv was *already* live before any change:
+  =(featurep 'envrc)= → =t=, =envrc-global-mode= → =t=,
+  =(executable-find "direnv")= → =/usr/bin/direnv=.
+- direnv end-to-end, both halves, with a real =.envrc= in a scratch directory
+  exporting =PONYTAIL_TEST=works=:
+  - Emacs: =(envrc--find-env-dir)= resolved to the test directory and
+    =(getenv "PONYTAIL_TEST")= returned ="works"= inside that buffer.
+  - Shell: =_direnv_hook= exists as a function in a fresh interactive bash, and
+    running it after a =cd= printed =direnv: export +PONYTAIL_TEST= with the
+    variable set. The scratch =.envrc= was then =direnv deny='d and deleted.
+- emacs-everywhere resolves its X11 configuration correctly *in the daemon*,
+  which is where the hotkey's =--eval= actually runs:
+  =(emacs-everywhere--system-compositor)= → =(x11 . ubuntu:GNOME)=,
+  =DISPLAY= =":1"=, and after =(emacs-everywhere--configure-system)= the
+  private vars hold =("xdotool" "key" "--clearmodifiers" "Shift+Insert")=,
+  =("xclip" "-selection" "clipboard" "%f")=,
+  =("xdotool" "windowactivate" "--sync" "%w")=, and
+  =emacs-everywhere--app-info-linux-x11=. The obsolete-since-0.3.0 variables
+  (=emacs-everywhere-paste-command= and friends) are all =nil= — they are
+  vestigial, not misconfigured.
+- Emacs here is a *snap* install (=/snap/emacs/3690/usr/bin/emacs=), which
+  raised a real question about whether it can execute host binaries at all.
+  It can: =envrc= ran =/usr/bin/direnv= as a subprocess and got its output
+  back, and =emacs-everywhere--cmd-executable-p= resolved both =/usr/bin/xdotool=
+  and =/usr/bin/xclip=. Confinement is not blocking this.
+- GNOME keybinding registered and read back:
+  =custom-keybindings= now lists =custom0/= and =custom1/=; =custom1= has
+  =name 'Emacs Everywhere'=, =command 'emacsclient --eval "(emacs-everywhere)"'=,
+  =binding '<Primary><Alt>space'=. The pre-existing =custom0= is untouched
+  (=name 'Start emacs'=, =command 'emacs'=,
+  =binding '<Primary><Shift><Alt><Super>e'=).
+
+Not evidence: nobody has pressed =Ctrl+Alt+Space= over a real application yet.
+Every check above proves the pieces resolve; none proves the round trip
+(capture text → edit in Emacs → =C-c C-c= → paste back into the source app).
+
+** Decision
+Write no Emacs configuration for either module — both Doom modules are already
+complete, and this ADR is the record of that being a deliberate finding rather
+than an omission. (Amended on first use: two lines of =config.el= *were*
+needed after all, but for a Doom-module *interaction*, not for either module's
+own configuration. See Consequences.)
+
+Activate them through the two mechanisms that live outside the repository:
+
+1. =~/.bashrc= gains =eval "$(direnv hook bash)"=, with a comment pointing back
+   at this ADR and noting that Emacs is covered separately by envrc.
+2. GNOME =custom1= keybinding: =Ctrl+Alt+Space= →
+   =emacsclient --eval "(emacs-everywhere)"=.
+
+Record =xclip= in [[id:inv-binaries][inventory.org]] (it was missing from the
+table) and annotate the existing =direnv= and =xdotool= rows with what now
+depends on them.
+
+** Consequences
+- Two pieces of this configuration now live outside git — =~/.bashrc= and the
+  dconf keybinding — joining ADR-030's =magnet:= handler. A fresh machine
+  restored from this repository alone will have both modules installed and
+  both effectively inert until these two steps are redone. That is a real
+  reproducibility gap, and it is the second one; the "Reproducible machine
+  provisioning" future phase in [[id:roadmap-future][roadmap.org]] now has two
+  concrete items waiting for it rather than one.
+- =Ctrl+Alt+Space= depends on the Emacs server being up. Emacs here is a snap
+  GUI process with no systemd unit and no =--daemon= flag, so if Emacs is
+  closed the hotkey fails *silently* — GNOME reports nothing when a custom
+  keybinding's command exits non-zero. The existing =custom0= ("Start emacs")
+  is the manual recovery, which is a slightly awkward pairing: one hotkey
+  starts Emacs, the other needs it already running.
+- direnv now affects every new interactive bash shell, including the ones this
+  and other agents run. A repository with a hostile =.envrc= could therefore
+  influence an agent's shell environment — but only after someone runs
+  =direnv allow= on it, which is exactly the consent gate direnv exists to
+  provide. Worth knowing, not worth blocking on.
+- The X11 dependency is now load-bearing. If this machine ever moves to a
+  Wayland session, =emacs-everywhere= breaks and needs =ydotool= or =wtype=
+  plus =wl-clipboard= installed before it works again.
+- The "no Emacs configuration" finding survived contact with reality only
+  barely. First real use surfaced a collision between =:app everywhere= and
+  =:editor file-templates=: the temp file is extensionless, so it visits in
+  =fundamental-mode=; =emacs-everywhere-apply-major-mode= then switches it to
+  =org-mode= (pandoc is installed, so that is the default); and Doom checks
+  templates on =doom-switch-buffer-hook= rather than =find-file-hook=, so the
+  next buffer switch expanded org-mode's =#+title:= template into a buffer
+  whose entire contents get pasted back into the source app. Fixed with
+  =(setq-hook! 'emacs-everywhere-init-hooks +file-templates-inhibit t)= inside
+  an =after!=, mirroring the =doom-inhibit-local-var-hooks= line the module
+  itself carries. Full trace in
+  [[id:tshoot-everywhere-file-template][troubleshooting.org]].
+- That bug generalises: any package opening an extensionless temp file and
+  setting its major mode afterwards can trip Doom's file templates.
+  =org-capture= is special-cased inside =+file-templates-check-h=; nothing else
+  is. Worth checking if a future module does the same thing.
+
+** Rejected alternatives
+See the Candidates table above.
+
+** Validation
+- direnv verified in both halves against a real =.envrc=, quoted under
+  Evidence, then cleaned up (=direnv deny= plus deletion of the scratch dir).
+- emacs-everywhere verified as far as it can be without a keypress: compositor
+  detection, all three resolved commands, the info function, and the snap
+  process's ability to execute the host binaries.
+- GNOME keybinding read back from =gsettings= after writing.
+- No =doom sync= or =doom doctor=: no =init.el= or =packages.el= change, and
+  in fact no =config.el= change either.
+- Round trip exercised by the user 2026-08-23: the frame opened over a real
+  application and the flow worked. The =#+title:= defect it surfaced was
+  reproduced non-interactively in the daemon (visit the nonexistent temp path,
+  =(org-mode)=, =(+file-templates-check-h)= → buffer contains
+  =#+title: Emacs Everywhere 20260823 141530 Firefox=), then re-run after the
+  fix → buffer empty, =+file-templates-inhibit= =t= and buffer-local.
+- Re-pressed after the fix, 2026-08-23: clean round trip, no stray =#+title:=
+  line. Nothing outstanding.
+
+** Rollback
+- Shell hook: delete the =eval "$(direnv hook bash)"= line and its comment from
+  =~/.bashrc=. Existing shells keep the hook until they exit.
+- GNOME hotkey:
+  =gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/']"=,
+  then =dconf reset -f /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/=.
+- Modules themselves: re-comment =everywhere= in =init.el='s =:app= block and
+  =direnv= in =:tools=, then =doom sync= — this reverses part of
+  [[id:adr-module-sweep-non-lang][ADR-029]], so amend that ADR rather than
+  silently diverging from it.
+- Docs: =git revert= the commit carrying this ADR and the
+  [[id:inv-binaries][inventory.org]] rows.
+
+** Revisit when
+- A different application turns out to need markdown rather than org — the
+  major mode is chosen globally by =emacs-everywhere-major-mode-function=, and
+  pandoc's presence pins it to org for every app.
+- =Ctrl+Alt+Space= turns out to collide with something after all. GNOME
+  silently lets a later binding win, so the symptom would be the hotkey
+  quietly doing the wrong thing rather than an error.
+- Emacs is closed and the hotkey is pressed — the silent-failure mode above. If
+  that becomes annoying, the fix is a proper =emacs.service= user unit
+  (=--fg-daemon=), which is the same shape as ADR-030's
+  =transmission-daemon.service= and would supersede the =custom0= launcher too.
+- This machine moves to a Wayland session, at which point =emacs-everywhere=
+  needs =ydotool= / =wtype= and =wl-clipboard= before it works again.
+- The "Reproducible machine provisioning" future phase starts — it now has two
+  out-of-git items to absorb (this hotkey plus =~/.bashrc=, and ADR-030's
+  =magnet:= handler).
+- A project in this config grows a real =.envrc=, which would move direnv from
+  "available" to "load-bearing" and is worth noting in
+  [[id:inv-binaries][inventory.org]] when it happens.

@@ -857,3 +857,70 @@ system account instead of the user.
 readiness-protocol mismatch (=Type=notify= vs. a daemon that doesn't notify),
 not a broken daemon. Check the unit's =Type== before debugging the service
 itself.
+
+* RESOLVED: emacs-everywhere buffers opened with an =#+title:= line from Doom's org file template
+:PROPERTIES:
+:ID:       tshoot-everywhere-file-template
+:END:
+:LOGBOOK:
+- Resolved [2026-08-23 Sat]
+:END:
+
+*Symptom*: pressing =Ctrl+Alt+Space= ([[id:adr-everywhere-direnv][ADR-032]])
+opened the emacs-everywhere frame, but the buffer was not empty — it started
+with a line like:
+
+: #+title: Emacs Everywhere 20260823 141530 Firefox
+
+Everything else worked. Left unnoticed, that line is *pasted back into the
+source application* along with whatever you typed, since emacs-everywhere
+copies the whole buffer on =C-c C-c=.
+
+*Root cause*: an interaction between three separately-correct behaviours.
+
+1. =emacs-everywhere= opens a brand-new temp file,
+   =/tmp/emacs-everywhere-<timestamp>-<app-class>=, with *no extension*. It
+   therefore visits in =fundamental-mode=, and at that moment no
+   =+file-templates-alist= rule matches.
+2. =emacs-everywhere-apply-major-mode= (an =emacs-everywhere-init-hooks=
+   member) then switches the buffer to =org-mode=. It picks org rather than
+   markdown because =emacs-everywhere-major-mode-function= defaults to
+   =#'org-mode= whenever =pandoc= is on =PATH=, and =/usr/bin/pandoc= is
+   installed here.
+3. Doom's =:editor file-templates= checks on =doom-switch-buffer-hook=, *not*
+   =find-file-hook= (=editor/file-templates/config.el:180=). So the check runs
+   again on the next switch into that buffer — by which point every condition
+   in =+file-templates-check-h= passes: not read-only, empty (=bobp= and
+   =eobp=), not a =*special*= buffer, not an org-capture buffer, the file
+   still doesn't exist on disk, not modified, not an indirect clone. The
+   =(org-mode)= rule matches and expands
+   =modules/editor/file-templates/templates/org-mode/__=, whose whole body is
+   a =#+title:= derived from =file-name-base=.
+
+Reproduced directly in the running daemon, without needing the hotkey:
+visiting the nonexistent path, calling =(org-mode)=, then
+=(+file-templates-check-h)= returned a buffer containing exactly
+=#+title: Emacs Everywhere 20260823 141530 Firefox=.
+
+*Fix* (=config.el=, [[id:adr-everywhere-direnv][ADR-032]]): inhibit templates
+buffer-locally from within emacs-everywhere's own init hooks.
+
+#+begin_src emacs-lisp
+(after! emacs-everywhere
+  (setq-hook! 'emacs-everywhere-init-hooks +file-templates-inhibit t))
+#+end_src
+
+=emacs-everywhere-init-hooks= runs before =emacs-everywhere-mode= and before
+any later buffer switch, so this wins the race. =setq-hook!= *prepends*, so the
+setter is the first hook member and lands even though a later member can
+signal (the package wraps the hook run in =with-demoted-errors=). This is the
+same mechanism and the same hook Doom's own =app/everywhere/config.el= uses one
+line over to set =doom-inhibit-local-var-hooks=.
+
+Verified after the fix: the same reproduction now leaves the buffer empty, with
+=+file-templates-inhibit= =t= and buffer-local.
+
+*Generalisation worth remembering*: any package that opens an extensionless
+temp file and *then* sets a major mode can trip Doom's file templates, because
+the template check is on buffer-switch rather than file-visit. =org-capture= is
+special-cased in =+file-templates-check-h= by name; nothing else is.
