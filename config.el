@@ -432,11 +432,14 @@
                  (lambda ()
                    (when (buffer-live-p buffer)
                      (message "%s: command finished (exit %s)"
-                              (buffer-name buffer) (or status "?")))))))))
+                              (buffer-name buffer) (or status "?"))))))))
 
-;; Live terminals keep the palette they were created with, so a theme switch
-;; leaves them stale until the palette is re-pushed.
-(add-hook 'doom-load-theme-hook #'ghostel-sync-theme)
+  ;; Live terminals keep the palette they were created with, so a theme switch
+  ;; leaves them stale until the palette is re-pushed. `ghostel-sync-theme'
+  ;; isn't autoload-cookied, so this must live inside `after!' -- registering
+  ;; it at top level fires the hook (Doom loads its theme at startup) before
+  ;; ghostel.el itself has loaded, leaving the function void.
+  (add-hook 'doom-load-theme-hook #'ghostel-sync-theme))
 
 ;; Shell integration tracks every prompt (OSC 133), but nothing was bound to
 ;; move between them. Hyperlink motion covers the links `ghostel-enable-url-

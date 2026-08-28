@@ -5327,15 +5327,91 @@ See the Candidates table above.
 * ADR-033: Terminal-layer pass — ghostel configuration, the bash environment beneath it, and a zenburn Claude Code theme
 :PROPERTIES:
 :ID:       adr-terminal-layer-pass
-:STATUS:   Implemented; shell half and Claude Code theme live-verified, Emacs half still unverified since the user's restart (see Validation)
+:STATUS:   Implemented and fully live-verified — Claude Code theme 2026-08-24, Emacs half and shell half (rebuilt from scratch after a second regression) 2026-08-27
 :DATE:     2026-08-23
 :END:
 :LOGBOOK:
+- Claude Code theme regressed, then re-applied [2026-08-27 Thu] — both
+  out-of-git files from the original pass were gone: =~/.claude/themes/=
+  didn't exist (so =zenburn.json= with it), and =~/.claude/settings.json=
+  =theme= had reverted to ="dark"=. No record of *when* or *why*; nothing in
+  this repo tracks that directory, so there is no diff to inspect. Found while
+  investigating a "theme not loading" report. Also found along the way,
+  unrelated: Emacs had moved 30.2 -> 31.1, which moved straight's build dir
+  (=build-30.1= -> =build-31.1=) and briefly made =doom-zenburn-theme.el= look
+  missing too — same file, same hexes, confirmed byte-identical, just at a new
+  path. Fix: regenerated =zenburn.json= (71 overrides, =background= left
+  unset) against the base ="dark"= theme's key schema, re-extracted live from
+  the current CLI binary (2.1.247, up from the original pass's 2.1.241) rather
+  than assumed — the key set is unchanged, still 72 keys total. Re-set
+  =settings.json= =theme= to ="custom:zenburn"=. *Caveat*: the hex-per-key
+  mapping is a fresh derivation from =doom-zenburn-theme.el=, not a
+  byte-for-byte restore — the original pass's mapping choices were never
+  recorded anywhere (out-of-git, and this ADR logged only the override
+  *count*), so a diff against the pre-regression file is not possible. Not yet
+  live-verified — the user needs to restart the CLI, same as the original
+  pass's [2026-08-24 Sun] step below.
 - Claude Code theme "Live-verified" from "Structurally validated" [2026-08-24 Sun]
   — user restarted the CLI and confirmed the zenburn theme renders. The Emacs
   half is *not* covered by this: the daemon was still down at the time, so
   =ghostel-project= on =SPC p t= and the rest of the =config.el= block remain
   read-back-only, exactly as Validation describes.
+- Emacs half live-verified; whole shell half found regressed a second time,
+  then rebuilt and verified [2026-08-27 Thu] — started as a user report that a
+  =SPC o t= ghostel buffer wasn't themed. It was, for anything printed *after*
+  the fix (=ghostel-sync-theme= redraw was confirmed correct — a live buffer
+  showed exact zenburn hexes on fresh output); the buffer's already-white
+  scrollback from before the daemon picked up the =config.el= fix just never
+  got retroactively recolored, which is expected, not a bug. =SPC p t= itself
+  was also confirmed live: =(lookup-key doom-leader-map (kbd "p t"))=
+  resolves to =ghostel-project=. That closes the one outstanding Emacs-half
+  item Validation had been carrying.
+
+  Chasing the *actual* white-prompt symptom found the real fault one layer
+  down: =~/.bashrc:46= still had =#force_color_prompt=yes= commented out —
+  the original fix was never there to begin with, because it turned out the
+  *entire* shell half of this ADR had reverted to stock Ubuntu. Not just the
+  PS1 line: no =~/.inputrc=, no =~/.gitconfig= delta/merge keys, no
+  =atuin=/=eza=/=bat=/=zoxide=/=fzf= wiring, none of those binaries even
+  installed, and — unlike the Claude Code regression — *no backups either*:
+  the =~/.bashrc.bak-20260823= through =.bak5= that Rollback names were gone
+  too. Same signature as the Claude Code regression (out-of-git, no record of
+  when/why, nothing in this repo tracks the directory to diff against), now
+  covering six files instead of two. Rebuilt from this ADR's own Decision
+  section line-by-line (backups taken first this time:
+  =~/.bashrc.bak-20260827-174931=, matching =.gitconfig= backup) rather than
+  reconstructed from memory, since the spec was already written down in
+  enough detail to do that. Two things came out different from the original
+  pass, both recorded here since neither is written into the Decision text
+  above:
+  - *atuin installed as 18.20.1, not 18.19.0* — the version the ADR verified
+    against no longer being the latest tag. Same install method (musl
+    release binary, SHA256-verified against the published checksum, into
+    =~/.local/bin=), user's choice to track current over pinning for fidelity.
+  - *=FZF_DEFAULT_COMMAND= now calls =fdfind= directly*, not through a
+    =~/.local/bin/fd= symlink. That symlink was flagged in Consequences as
+    itself un-versioned state a fresh machine wouldn't have, and this
+    restore found it gone too (predates this ADR, never was this ADR's to
+    restore) — calling =fdfind= directly removes the dependency rather than
+    re-creating the fragility. =docs/inventory.org='s =fd= row updated to
+    match.
+  - Found and fixed a real bug in the =PATH= dedupe while rebuilding it: the
+    original one-liner (=awk '!seen[$0]++' with RS=ORS=":"= over a
+    here-string) never dedupes the *last* =PATH= entry against an earlier
+    occurrence of itself — mawk's single-char =RS= folds the here-string's
+    trailing newline into the final record, so =".../bin"= and
+    =".../bin\n"= compare unequal. Silent failure: it looked deduped for
+    every other position. Replaced with a plain =while= loop over
+    =${PATH%%:*}=/=${PATH#*:}=, byte-for-byte and re-verified (19 entries,
+    19 unique, in a fresh =TERM=xterm-ghostty bash -i=). Ubuntu's =fzf=
+    package (0.44.1) also turned out too old for =fzf --bash= (needs 0.48+),
+    so that step falls back to sourcing
+    =/usr/share/doc/fzf/examples/key-bindings.bash= directly, guarded by a
+    version probe; Ubuntu's =fzf= package ships no separate bash completion
+    file at all (only zsh/fish examples), so completion was always meant to
+    come from =bash-completion=, not a second sourced file — the original
+    Decision text's "and the completion file explicitly" was wrong on
+    inspection, corrected in =docs/inventory.org=.
 :END:
 
 ** Context
@@ -5592,25 +5668,35 @@ the user); =atuin= 18.19.0 as a SHA256-verified prebuilt musl binary in
   untouched.
 - [[id:inv-binaries][inventory.org]]'s =fd= row said "not installed" and was
   stale. It is installed, but not where the row would have implied: apt's
-  =fd-find= ships the binary as =/usr/bin/fdfind=, and the =fd= name resolves
-  only through a user-made =~/.local/bin/fd= symlink to
-  =/usr/lib/cargo/bin/fd=. =FZF_DEFAULT_COMMAND= now depends on that symlink,
-  which is itself un-versioned state.
+  =fd-find= ships the binary as =/usr/bin/fdfind=. Originally
+  =FZF_DEFAULT_COMMAND= depended on a user-made =~/.local/bin/fd= symlink to
+  =/usr/lib/cargo/bin/fd= for the plain =fd= name — itself un-versioned
+  state a fresh machine wouldn't have. That symlink didn't survive the
+  2026-08-27 shell-half regression (see LOGBOOK); the rebuild calls
+  =fdfind= directly instead of re-creating it.
 
 ** Rejected alternatives
 See the Candidates table above.
 
 ** Validation
-- *Shell half: live-verified.* Every setting read back from a fresh
-  =TERM=xterm-ghostty bash -i= — quoted under Evidence. =PATH= dedupe measured
-  before and after. fzf and atuin key bindings checked *per readline keymap*,
-  including after the =?= unbind. atuin's import verified by =atuin stats=
-  inside an initialised shell.
-- *Emacs half: read back but not re-verified since the restart.* All seven
-  =config.el= items were confirmed live by =load-file= plus reading each
-  variable, face attribute, keybinding, and the =display-buffer-alist= entry —
-  then the user restarted Emacs and the server was down for the rest of the
-  session. The outstanding check is one =SPC p t= in the restarted daemon.
+- *Shell half: live-verified, twice* — 2026-08-23 against the original build,
+  and again 2026-08-27 against the from-scratch rebuild after the regression
+  (see LOGBOOK). Both times: every setting read back from a fresh
+  =TERM=xterm-ghostty bash -i=. =PATH= dedupe measured before and after (2026-08-27:
+  19 entries in, 19 unique — the dedupe bug found that day was caught by this
+  same check, not missed by it). fzf and atuin key bindings checked *per
+  readline keymap*, including after the =?= unbind (2026-08-27: confirmed via
+  =bind -p | grep '"?"'= showing =self-insert=, since =atuin init bash='s own
+  source confirms it binds =?= through =bind -x=, which =bind -p= does not
+  list). 2026-08-27 additionally rendered real output in a live ghostel
+  buffer and read back the text properties directly — prompt and =eza=
+  output both carrying exact zenburn hex foregrounds, not just Emacs-side
+  face values.
+- *Emacs half: live-verified 2026-08-27.* The one outstanding item —
+  =SPC p t= in the restarted daemon — closed: =(lookup-key doom-leader-map
+  (kbd "p t"))= resolves to =ghostel-project=. =ghostel-sync-theme= confirmed
+  registered on =doom-load-theme-hook=, callable without error, and its
+  effect confirmed on a live buffer (see LOGBOOK).
 - *Claude Code theme: live-verified 2026-08-24.* 71 override keys diffed
   against the base theme's key set (zero invalid), every value checked against
   the CLI's own color-format validator, JSON parsed — then the user restarted
@@ -5626,12 +5712,14 @@ See the Candidates table above.
 - Claude Code theme: =rm ~/.claude/themes/zenburn.json= and set =theme= back to
   ="auto"= in =~/.claude/settings.json= (previous value; a
   =~/.claude/settings.json.bak= also predates this pass).
-- Shell: five timestamped backups were taken in order and are the cleanest
-  revert path — =~/.bashrc.bak-20260823= is the state *before* any change in
-  this pass, and =.bak2= through =.bak5= are the successive steps.
-  =rm ~/.inputrc= (it did not exist before). =git config --global --unset= for
-  =core.pager=, =interactive.diffFilter=, =delta.navigate=,
-  =delta.syntax-theme=, =merge.conflictstyle=.
+- Shell: the original pass's five timestamped backups
+  (=~/.bashrc.bak-20260823= through =.bak5=) did not survive the 2026-08-27
+  regression — see LOGBOOK. The current cleanest revert path is
+  =~/.bashrc.bak-20260827-174931= and =~/.gitconfig.bak-20260827-174931=,
+  taken immediately before that day's rebuild — stock Ubuntu =.bashrc=, no
+  delta/merge keys. =rm ~/.inputrc= (it did not exist before either pass).
+  =git config --global --unset= for =core.pager=, =interactive.diffFilter=,
+  =delta.navigate=, =delta.syntax-theme=, =merge.conflictstyle=.
 - atuin: =rm ~/.local/bin/atuin ~/.local/share/atuin/= (the latter destroys the
   imported history database) and delete its =~/.bashrc= block.
 - apt tools: =sudo apt remove eza bat zoxide fzf git-delta=, and delete the
