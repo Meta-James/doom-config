@@ -435,10 +435,8 @@
                               (buffer-name buffer) (or status "?"))))))))
 
   ;; Live terminals keep the palette they were created with, so a theme switch
-  ;; leaves them stale until the palette is re-pushed. `ghostel-sync-theme'
-  ;; isn't autoload-cookied, so this must live inside `after!' -- registering
-  ;; it at top level fires the hook (Doom loads its theme at startup) before
-  ;; ghostel.el itself has loaded, leaving the function void.
+  ;; leaves them stale until the palette is re-pushed. Inside `after!' because
+  ;; `doom-load-theme-hook' fires during startup, before ghostel is loaded.
   (add-hook 'doom-load-theme-hook #'ghostel-sync-theme))
 
 ;; Shell integration tracks every prompt (OSC 133), but nothing was bound to

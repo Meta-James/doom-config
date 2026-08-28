@@ -985,3 +985,46 @@ real machine — but predates rtk's installation (ADR-020, 2026-08-13, against
 [[id:adr-token-reduction-stack][ADR-023]], 2026-08-23), so rtk cannot explain those earlier failures. What
 this entry adds is a second, now-confirmed mechanism for the same kind of
 wrongness.
+
+* RESOLVED (workaround): Doom's CLI exits 1 with zero output when it has no PTY
+:PROPERTIES:
+:ID:       tshoot-doom-cli-needs-pty
+:END:
+
+Any =doom= subcommand run from an agent's Bash tool — or from any plain
+=subprocess= / pipeline where stdout is not a terminal — can exit non-zero
+having printed *nothing at all*. Observed with =doom upgrade= during the
+v2.2.2 → v2.2.3 upgrade on 2026-08-24:
+
+#+begin_example
+$ ~/.config/emacs/bin/doom upgrade
+$ echo $?
+1
+#+end_example
+
+No error text, no partial progress, no log file. The same command run by hand
+in a terminal succeeds normally, which makes this very easy to misread as "the
+upgrade is broken" rather than "the invocation is broken".
+
+*Cause*: Doom's CLI writes through its own terminal-aware output layer and
+expects an interactive TTY. Without one it aborts early, before it has emitted
+anything a caller can see.
+
+*Workaround*: allocate a pseudo-terminal with =script=, which also gives you a
+transcript to grep afterwards:
+
+#+begin_example
+script -qec "~/.config/emacs/bin/doom sync" /tmp/doom-sync.log
+#+end_example
+
+Note that =script= writes =\r\n= line endings, so pipe the log through
+=tr -d '\r'= before matching on it.
+
+*Related flags worth knowing while you are here*: =doom= has no =-y=. The
+global "assume yes" flag is =--force= (short =-!=), and it goes *before* the
+subcommand: =doom --force sync --rebuild=.
+
+*Related*: [[id:tshoot-rtk-swallows-emacsclient][tshoot-rtk-swallows-emacsclient]] is the same class of failure —
+a wrapper layer silently eating a subprocess's output — but a different cause
+(the rtk Bash hook, not a missing TTY). If a =doom= command is silent, try the
+=script= wrapper first; if an =emacsclient= command is silent, try =rtk proxy=.
