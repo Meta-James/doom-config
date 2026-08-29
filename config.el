@@ -396,6 +396,19 @@
 (after! project
   (add-to-list 'project-switch-commands '(ghostel-project "Ghostel") t))
 
+;; The native module lives outside straight's build tree deliberately. Left at
+;; its default, `ghostel-module-directory' resolves to the package directory --
+;; which straight version-stamps (`straight/build-31.1/'), so the Emacs 30.2 ->
+;; 31.1 upgrade on 2026-08-26 orphaned the downloaded .so in `build-30.2/' and
+;; left every terminal path dead until it was fetched again. Upstream's own
+;; docstring recommends a path outside the package manager's tree for exactly
+;; this reason. `doom-data-dir' over `doom-cache-dir' because a cache clear
+;; should not cost a redownload, and over `~/.config/emacs/' because that is
+;; Doom's own git checkout (same reasoning as `oauth2-auto-plstore' in ADR-025).
+;; Set at top level, not in `after! ghostel': ghostel.el calls
+;; `ghostel--load-module' as it loads, so an `after!' would run too late.
+(setq ghostel-module-directory (expand-file-name "ghostel/" doom-data-dir))
+
 ;; Terminal output from long agent sessions (claude-code-ide drives its CLI
 ;; through this backend) blows past the 5MB upstream default -- 5MB is roughly
 ;; 5,000 rows at 80 columns, fewer as the window widens. 20MB buys ~4x that.
