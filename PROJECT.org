@@ -402,9 +402,14 @@ integration, and this isn't that). Full writeup: [[id:adr-torrent-transmission][
   =~/.local/share/applications/emacs-magnet.desktop= now route them to the
   daemon. Both live outside =$DOOMDIR= and so outside git — ADR-030's
   Consequences and Rollback are their only record.
-- [ ] Watch the auto-refresh tick during a real transfer, the one check a
-  torrent-less daemon could not provide. Also confirm Firefox honours the new
-  handler rather than its own cached qBittorrent association.
+- [X] Watch the auto-refresh tick during a real transfer, the one check a
+  torrent-less daemon could not provide — done 2026-08-29 against a throttled
+  Debian =netinst= transfer; the list buffer's columns tick while the buffer is
+  current. Firefox also confirmed: its =handlers.json= had no cached
+  qBittorrent association to begin with (=magnet= is =action 4=,
+  use-system-default), and a magnet clicked in Firefox reached the daemon
+  through =xdg-desktop-portal=. Both written up in ADR-030's =:LOGBOOK:=, along
+  with an unmitigated disk-exhaustion risk the test surfaced.
 - [X] System unit masked and lingering enabled (2026-08-23), both optional
   and neither needed for the client to work: =sudo systemctl mask
   transmission-daemon= (user's own terminal) stops the broken unit failing

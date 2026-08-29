@@ -4706,6 +4706,43 @@ See the Candidates table above.
 :DATE:     2026-08-23
 :END:
 :LOGBOOK:
+- Note taken on [2026-08-29 Fri] \\
+  The two checks the 2026-08-23 entry left open are now closed by observation
+  rather than by mechanism, on the first real transfers this daemon has seen.
+
+  *Auto-refresh.* A Debian 13.6.0 =netinst= torrent was added from
+  =cdimage.debian.org= and throttled to 400 kB/s (=transmission-remote -t 1 -d
+  400=) purely so it would stay visibly downloading for tens of minutes instead
+  of finishing in two. The user confirmed the =transmission-mode= list buffer's
+  Have/ETA/Down columns ticking while that buffer was current. Upstream's
+  poll-only-while-current design (=transmission.el:552-559=) is unchanged and
+  still correct; what was missing was a changing torrent to prove it against.
+
+  *Firefox.* Inspection first: the snap profile's =handlers.json=
+  (=~/snap/firefox/common/.mozilla/firefox/s5v1taq3.default-release/=) records
+  =magnet= as ={"action": 4}= — use-system-default, with no cached handler name
+  and no =ask= flag — so there was never a stale qBittorrent association pinned
+  inside Firefox to fight. =xdg-mime query default x-scheme-handler/magnet=
+  resolves to =emacs-magnet.desktop= via =~/.config/mimeapps.list=. The desktop
+  chain was then re-proven directly: =xdg-open= on a =magnet:= URI returned
+  =#<process transmission>=, i.e. desktop entry to =~/.local/bin/emacs-magnet=
+  to =emacsclient= to =transmission-add= to the daemon, which rejected the
+  duplicate. Finally the user clicked a magnet in Firefox itself and a second
+  torrent appeared on the daemon — that covers the one hop inspection cannot
+  reach, snap Firefox's =xdg-desktop-portal= =OpenURI= call.
+
+  *Unmitigated risk this exposed, recorded rather than fixed.* That second
+  torrent was 9.32 GB and took =/= from 95% to 99% (3.4 GB free) before it was
+  a quarter done. Nothing in this design guards against it: the daemon has no
+  free-space precondition configured, =transmission-add= from a magnet commits
+  to the full payload size sight-unseen, and the default seed ratio limit is
+  unlimited, so completed torrents are never reclaimed on their own. A full
+  =/= breaks far more than the torrent client — Emacs autosaves, =straight=
+  builds, and system logs all share the volume. Options if this recurs, none
+  taken yet: set =download-queue-enabled= plus a =free-space-limit= in the
+  daemon's =settings.json=, point =download-dir= at a volume that is not =/=,
+  or set a default =ratio-limit= so seeding terminates. Revisit if a magnet
+  click ever actually fills the disk.
 - State "Live-verified" from "Implemented"  [2026-08-23 Sun] — the restart this
   ADR was waiting on happened. =SPC o B= opens the torrent list (user
   confirmed). The =magnet:= handler was checked two ways: in-Emacs,
