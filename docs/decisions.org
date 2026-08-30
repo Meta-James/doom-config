@@ -6631,3 +6631,181 @@ half writes persistent state into Emacs; existing archives under
   decrypt-on-demand upgrade named above.
 - Any new credential is added to =config.org=, which is the moment
   =my/pass-expected-entries= must grow with it.
+
+* ADR-039: This configuration is host-agnostic by construction; host-specificity is a documented exception, not a mechanism
+:PROPERTIES:
+:ID:       adr-multi-host-posture
+:STATUS:   Accepted; the documentation rule is implemented, the one code violation it found is fixed, and the laptop side is unverified — see Evidence
+:DATE:     2026-08-30
+:END:
+
+** Context
+On 2026-08-30 an audit found no =pass= store, no GPG secret key and no mail
+stack on this desktop, and recorded it as state that had *vanished*. James then
+pointed out he had set that stack up on his *laptop*. Measurement settled it
+immediately: every one of the 6775 files under =~/.mail/= is dated 2020,
+=~/.bash_history= holds zero invocations of =oama=, =pass=, =msmtp= or =gpg=, and
+this repository's first commit here is 2026-07-16. Nothing had been lost. It had
+never been here.
+
+The wrong conclusion was reachable because nothing in the documentation said
+which machine it described. [[id:docs-inventory][inventory.org]] called itself
+"verified current state" without naming a host.
+[[id:docs-roadmap][roadmap.org]] marks Phase 3 credentials DONE — true on the
+laptop, false on the desktop. Both statements were correct about *a* machine and
+were read as claims about *this* machine.
+
+That is the real defect, and it is a documentation defect rather than a
+configuration one. The configuration itself turns out to be almost entirely
+portable already; it had simply never been said out loud, so nothing stopped the
+next divergence from being introduced by accident, and nothing told a reader
+which host a given "verified" row belonged to.
+
+The prompt for this ADR is narrow and worth stating plainly: there are two
+machines, one repository, and until now no written rule about what is supposed
+to be the same on both.
+
+** Decision drivers
+- The failure this addresses was a *reader* being misled, not a program
+  misbehaving. The fix therefore has to land in the documents, not only in code.
+- =std-no-scope-creep=: there are two hosts and, as measured below, one genuine
+  divergence in the whole tangled output. Machinery sized for a fleet would be
+  speculative.
+- [[id:adr-literate-config][ADR-035]] already made every tangled file a
+  versioned artifact. Anything that makes those files differ per host directly
+  attacks the property that makes a reverted =~/.bashrc= show up as a diff.
+- =std-no-duplication=: a per-host config file or branch is a second place for
+  the same setting to live, and therefore a second place for it to rot.
+- The laptop is not reachable from this session. Any decision that depends on
+  asserting facts about it would be unverifiable at the moment of writing.
+- =std-credentials=: whatever the posture, credentials stay out of the
+  repository on every host. That constraint is fixed and not up for trade.
+
+** Candidates
+| Candidate | Fate | Reason |
+|-----------+------+--------|
+| Declare host-agnostic by construction; host-varying values take an env override; every host-scoped *document* names its host | Chosen | Matches what the configuration already is (see Evidence), adds no machinery, and fixes the defect that actually occurred |
+| =(when (string= (system-name) "PsychedPC") ...)= branches in =config.org= | Rejected | Makes the tangled output host-conditional, which is the property ADR-035 exists to protect. Also untestable from the other host, so both branches rot in opposite directions |
+| A per-host file (=config-PsychedPC.el=) loaded if present | Rejected | A second home for settings, invisible from the other machine, and un-diffable. This is the =std-no-duplication= shape exactly |
+| A branch per machine | Rejected | Turns every shared change into a merge, and the divergence becomes permanent by default rather than by decision |
+| chezmoi/Stow-style templating over =$HOME= | Rejected | A whole second dotfile system alongside ADR-035's tangling, to template one PATH entry and one backup directory. Considered and dismissed for the shell layer once already in ADR-035 |
+| Status quo — keep it implicit | Rejected | It is what produced a confident wrong diagnosis inside a single session |
+
+** Evidence
+Measured on this host, 2026-08-30, before the decision was framed:
+
+1. *The configuration is already portable.* Every filesystem path in
+   =config.org= that is not stock-Ubuntu boilerplate is =~=-relative:
+   =org-directory=, =projectile-project-search-path=, the =~/.password-store=
+   default, the maildir roots, the tangle targets. A grep for absolute paths
+   outside =/usr= returns exactly *one* host-specific entry —
+   =export PATH="/opt/zig-0.15.2:$PATH"= at =config.org:2133=, verified present
+   at =/opt/zig-0.15.2/= on this machine and of unknown status on the laptop.
+2. *There is no host branching anywhere.* All seven occurrences of
+   =system-name= in =config.org= belong to one function,
+   =+my/dashboard-hostname-banner-fn= (=config.org:367-387=), which renders the
+   hostname as the dashboard's ASCII banner. So the machine has been announcing
+   which host it is on every startup for the whole period in which the
+   documentation failed to say. That is worth recording as an irony, not as a
+   mitigation.
+3. *One value already follows the chosen pattern.*
+   [[id:adr-credential-state-guard][ADR-038]]'s =pass-backup= reads
+   =PASS_BACKUP_DIR= with =/data/backups/pass= as its default, where =/data= is
+   =sda= on this desktop. The override existed before this ADR named the rule;
+   the rule generalises what was already the better instinct.
+4. *The ancestry is visible in the file.* The commented-out EXWM block retained
+   from [[id:adr-remove-exwm][ADR-002]] contains
+   ="Configure monitors: external on the left of the laptop"=
+   (=config.org:1554=) — the configuration predates this desktop, which is
+   consistent with the mail stack having been built elsewhere.
+5. *Not verified:* everything about the laptop. Its Emacs version, its installed
+   binaries, whether =/opt/zig-0.15.2= exists there, whether its
+   =~/.password-store= is intact, and whether it is even running this
+   repository's current =main=. This ADR is written from one host and says so.
+
+** Decision
+Three parts, of which only the third is new machinery-free work.
+
+1. *Everything tangled from =config.org= is expected identical on every host.*
+   =init.el=, =packages.el=, =config.el=, =~/.bashrc=, =~/.inputrc=,
+   =~/.gitconfig= and =~/.local/bin/pass-backup= are the same bytes wherever the
+   repository is checked out. No =system-name= branching, no per-host file, no
+   per-host branch. A change that cannot be made true on both machines is a
+   change that needs an environment override, not a conditional.
+
+2. *A value that must vary by host takes an environment-variable override with a
+   working default*, the shape =PASS_BACKUP_DIR= already has. Where a hardcoded
+   absolute path cannot reasonably be overridden, it is *guarded* so its absence
+   is a non-event. Applied immediately to the one violation found:
+   =config.org:2133= becomes
+   =[ -d /opt/zig-0.15.2 ] && export PATH="/opt/zig-0.15.2:$PATH"=, so a host
+   without that install gets a working shell instead of a silently bogus =PATH=
+   entry.
+
+3. *Every documented fact about =$HOME= state, installed binaries, or
+   credentials names its host.* Recorded as =std-host-scope= in
+   [[id:docs-standards][standards.org]]. =inventory.org='s header now states
+   that it describes =PsychedPC= and that repository facts are
+   host-independent by construction while =$HOME= facts are not.
+
+Deliberately *not* decided: whether the laptop or the desktop is the "primary"
+machine. Nothing in the configuration depends on the answer, and inventing a
+hierarchy would be a claim this session cannot verify.
+
+** Consequences
+- A per-host difference now has exactly one legitimate expression — an
+  environment variable — and one illegitimate one. That is a rule a reviewer can
+  apply without knowing anything about the other machine.
+- =inventory.org= is now explicitly a *desktop* document. Its mail and
+  credential rows describe a host that never had that software, which is
+  accurate and also nearly useless for the laptop. If the laptop's state ever
+  needs recording, it needs its own section rather than edits to these rows.
+- =roadmap.org='s phase statuses remain ambiguous in the general case. Phase 3
+  is marked DONE on the strength of laptop work. This ADR does not fix that,
+  and pretending otherwise would repeat the original error — see Revisit when.
+- The guard in part 2 makes a missing =/opt/zig-0.15.2= silent rather than
+  visibly broken. That is the right trade for a =PATH= entry and the wrong trade
+  for a credential, which is precisely why
+  [[id:adr-credential-state-guard][ADR-038]] warns loudly instead.
+- Two hosts, one =pass= store per host, and no synchronisation between them. The
+  pending USB transfer (=PROJECT.org= §7.7) makes them equal once; nothing keeps
+  them equal afterwards. That gap is now named, and not closed.
+
+** Rejected alternatives
+See the Candidates table above, which carries the fate and reason for each. The
+one worth restating: =system-name= branching looks like the obvious answer and is
+the worst of the set, because it makes the tangled files differ per machine and
+so destroys the "a revert shows up as a diff" property that
+[[id:adr-literate-config][ADR-035]] exists to provide.
+
+** Validation
+- =grep -c "system-name" config.org= returns 7, all inside the dashboard banner
+  function — confirming no host branching exists to remove.
+- The zig guard was tangled and checked: =bash -n ~/.bashrc= passes, and
+  =~/.bashrc:139= holds the guarded form.
+- =doom sync= clean; =doom doctor= at the single standing false "development
+  build of Emacs (31.1)" warning.
+- *Not validated:* that the tangled files are in fact identical on the laptop.
+  That requires a checkout there and a =cmp=, and is the first thing to do the
+  next time that machine is in reach.
+
+** Rollback
+Delete the =std-host-scope= entry from =standards.org=, revert
+=inventory.org='s host header, and unguard =config.org:2133=. Nothing else
+depends on this ADR: it describes a posture the configuration already had and
+adds one =[ -d ]= test.
+
+** Revisit when
+- The laptop is next reachable — at which point the tangled files should be
+  =cmp='d against a fresh checkout, and this ADR's Evidence gains or loses its
+  one unverified leg.
+- A third machine appears, or a VM/container is used regularly. Two hosts and
+  one divergence justified no machinery; a third host with real differences is
+  the point at which the rejected candidates deserve a fresh look.
+- Any change genuinely cannot be expressed as "identical file plus environment
+  override" — that is the trigger to reopen the mechanism question rather than
+  quietly adding a conditional.
+- =roadmap.org= phase statuses are next revised, which is the moment to decide
+  whether phases need per-host completion rather than a single DONE.
+- The two =pass= stores are observed to have drifted after the USB transfer,
+  which would make store synchronisation a real problem rather than a named gap.

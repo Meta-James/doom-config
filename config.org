@@ -2130,7 +2130,11 @@ pyenv, nvm, and the Zig toolchain ghostel's native module is built with.
 export PATH="$HOME/.pyenv/bin:$PATH"
 eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
-export PATH="/opt/zig-0.15.2:$PATH"
+# Guarded: this is the only hardcoded absolute in the shell layer, and it is
+# a desktop-only install path. Prepending a nonexistent directory is harmless
+# but silent; the guard makes a second host's missing zig a non-event rather
+# than a mystery. See docs/decisions.org ADR-039.
+[ -d /opt/zig-0.15.2 ] && export PATH="/opt/zig-0.15.2:$PATH"
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"

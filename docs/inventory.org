@@ -16,7 +16,9 @@ live. Anything below describing =$HOME= state — credentials, mail, the binary
 table — is a claim about =PsychedPC= only. Anything describing the repository or
 its tangled output is host-independent by construction, which is
 [[id:adr-literate-config][ADR-035]]'s whole point. Where a fact differs between
-hosts, say which host.
+hosts, say which host. The rule is =std-host-scope= in
+[[id:docs-standards][standards.org]]; the posture behind it is
+[[id:adr-multi-host-posture][ADR-039]].
 
 * Repository
 :PROPERTIES:

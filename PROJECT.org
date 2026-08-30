@@ -785,10 +785,16 @@ around the correction. Guards below were built under the wrong reading and kept
 under the right one — an un-re-issuable GPG key and an unchecked store are the
 same exposure either way.
 
-- [ ] Decide whether the multi-host posture deserves its own ADR: what is
-  expected identical across machines (everything tangled from =config.org=)
-  versus per-host (credentials, mail state, installed binaries). Deferred —
-  scoping the docs was the cheap fix and it is done.
+- [X] Multi-host posture decided and recorded as
+  [[id:adr-multi-host-posture][ADR-039]], with =std-host-scope= in
+  [[id:docs-standards][standards.org]]: everything tangled from =config.org= is
+  identical on every host, host-varying values take an environment override with
+  a working default, and every documented =$HOME=/binary/credential fact names
+  its host. The audit behind it found the configuration already portable — one
+  host-specific absolute in the whole tangled output
+  (=/opt/zig-0.15.2= on =PATH=), now guarded with =[ -d ]=, and zero
+  =system-name= branches. Not verified: that the tangled files are actually
+  identical on the laptop; that needs a checkout there and a =cmp=.
 
 - [ ] Decide what guard, if any, the mail configuration gets. ADR-035's answer
   (tangle it from =config.org=) works for =.msmtprc= and =.mbsyncrc= in

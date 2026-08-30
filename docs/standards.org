@@ -137,3 +137,30 @@ method, and rollback/removal method.
 - The agent may commit, push, and rewrite Git history, but only with
   explicit, current-turn approval for each one — see [[id:std-no-commit][std-no-commit]] and
   [[id:adr-agent-git-authority][ADR-015]].
+
+* Host scope
+:PROPERTIES:
+:ID:       std-host-scope
+:END:
+
+There is more than one machine — the desktop =PsychedPC= and James's laptop —
+and one repository shared between them. See
+[[id:adr-multi-host-posture][ADR-039]].
+
+- Everything tangled from =config.org= is expected *identical* on every host:
+  =init.el=, =packages.el=, =config.el=, =~/.bashrc=, =~/.inputrc=,
+  =~/.gitconfig=, =~/.local/bin/pass-backup=. No =system-name= branching, no
+  per-host config file, no per-host branch.
+- A value that must vary by host takes an *environment-variable override with a
+  working default* (the shape =PASS_BACKUP_DIR= has). A hardcoded absolute path
+  that cannot be overridden is guarded so its absence on another host is a
+  non-event, not a mystery.
+- *Every documented fact about =$HOME= state, installed binaries, or credentials
+  names its host.* "Installed", "verified", "gone" and "DONE" are meaningless
+  without one. Repository facts and tangled output are host-independent by
+  construction and need no qualifier.
+
+The rule exists because its absence produced a wrong diagnosis: absent
+credentials on the desktop were recorded as state that had *vanished*, when they
+had only ever existed on the laptop. See
+[[id:inv-homedir-state-loss][inventory.org]] for that correction.
