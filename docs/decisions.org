@@ -6464,3 +6464,170 @@ undoing beyond the removal itself.
   condition for reconsidering =timeout=.
 - =:editor fold= is reworked, which is the natural moment to reconsider whether
   =hs-cycle= deserves a key after all.
+
+* ADR-038: Guard the credential state that cannot be tangled — startup detection plus an off-disk encrypted backup
+:PROPERTIES:
+:ID:       adr-credential-state-guard
+:STATUS:   Implemented; detection live-verified in batch, backup script not yet run end-to-end (needs the user's own terminal for two passphrase prompts)
+:DATE:     2026-08-30
+:END:
+
+** Context
+[[id:adr-literate-config][ADR-035]] gave the shell layer a regression guard by
+making =~/.bashrc=, =~/.inputrc= and =~/.gitconfig= tangle targets of
+=config.org=: state that lives only in =$HOME= silently reverts, state under
+version control shows up as a diff.
+
+On 2026-08-30, auditing the binary table in
+[[file:inventory.org][inventory.org]] for Phase 7's closeout turned up an
+absence: no =~/.password-store=, no GPG secret key, no =msmtp=, =oama=,
+=~/.mbsyncrc= or =mu= index on this desktop. =:tools pass +auth= is enabled,
+=config.org= calls =+pass-get-secret= for =api/anthropic= and =api/openai=, and
+[[file:ai/providers.org][providers.org]] recorded both as "Live — verified" —
+all false here. gptel's Anthropic and OpenAI backends did not work on this host
+and nobody noticed, because the tool used daily, claude-code-ide, authenticates
+through the Claude CLI's own login and never touches =pass=.
+
+*The first reading of that absence was wrong, and the correction is part of this
+ADR's context rather than a footnote to it.* It was recorded as state that had
+*vanished* — the ADR-035 pattern recurring at larger scale. James then pointed
+out that he had set the mail and credential stack up on his laptop. Checks on
+this host settled it: every one of the 6775 files under =~/.mail/= is dated
+2020, and =~/.bash_history= shows zero invocations of =oama=, =pass=, =msmtp= or
+=gpg=. Nothing was lost here; it was never here. See
+[[id:inv-homedir-state-loss][inventory.org]] for the full correction.
+
+Two things survive that correction, and they are what this ADR rests on.
+
+First, the exposure is real either way. This host has an empty store, a GPG key
+generated on 2026-08-30 that exists nowhere else, and configuration that reads
+credentials at startup. A key that is not re-issuable and a store that nothing
+checks is the same risk whether it got that way by loss or by never having been
+populated.
+
+Second, the *scope* defect that produced the wrong diagnosis is itself an
+argument for detection. This project's documentation described one host while
+being read on another, and a broken credential path went unremarked for an
+unknown period as a result. A startup check that names what is missing is
+exactly the thing that would have made the true state obvious on day one,
+without anyone having to hold two machines in their head.
+
+ADR-035's answer cannot be reused here regardless. The =pass= store and the GPG
+secret key must never be committed, so tangling them from =config.org= is not an
+option at any price.
+
+** Decision drivers
+- The guard must not depend on anyone remembering to look. Every prior
+  discovery of this class was accidental, which is the same as saying the
+  project had no guard at all.
+- A daily-cost guard will be disabled. Anything that fires a pinentry prompt on
+  every Emacs startup would be removed within a week, leaving nothing.
+- Detection and recovery are separate problems. Knowing the store is gone does
+  not bring the keys back; a backup nobody is told to check does not tell you
+  the store is gone.
+- Secrets must not enter the repository, must not appear in command output, and
+  must not pass through an agent — [[file:../AGENTS.md][AGENTS.md]] and
+  =.claude/rules/security.md=.
+- The recovery copy has to survive the failure that actually happened, which was
+  loss of state under =$HOME= on =sdc=. A backup on the same disk fails the
+  same way.
+
+** Candidates
+| Candidate | Fate | Reason |
+|-----------+------+--------|
+| Startup existence check + off-disk encrypted archive | Chosen | The two halves solve the two problems; neither has a recurring cost that would get it disabled |
+| Startup check that decrypts each entry | Rejected | Catches a corrupt entry too, but fires a passphrase prompt at every startup — the guard would be removed, and then there is no guard |
+| Backup only, no detection | Rejected | Nothing to trigger a restore. The store was missing for an unknown period precisely because nothing said so |
+| Detection only, no backup | Rejected | Correctly reports a loss that is already unrecoverable. The API keys are re-issuable; the GPG key is not |
+| Commit the store, encrypted, into this repo | Rejected | Puts secret material in git history permanently, where a later key compromise cannot be undone. Violates the security rules outright |
+| Cron/timer-driven backup | Rejected | Needs two interactive passphrase prompts (the key's, then the archive's); no unattended job can satisfy them |
+| Password manager migration (1Password, Bitwarden) | Rejected | Would re-open [[id:adr-terminal-layer-pass][ADR-033]] and the =:tools pass= integration for a problem that is backup discipline, not tooling |
+
+** Decision
+Two independent halves, both generated from =config.org=.
+
+*Detection* — =my/pass-check-store= on =emacs-startup-hook=, in the "Credential
+store guard" section. It checks that =$PASSWORD_STORE_DIR= (or
+=~/.password-store=) exists and that =<entry>.gpg= exists for each of
+=my/pass-expected-entries= — currently =api/anthropic=, =api/openai=,
+=mail/oauth2-google-client= — and raises a delayed warning naming what is
+missing. It checks for *files*, never decrypting, so it cannot prompt. A
+present-but-corrupt entry therefore still slips through; that is a deliberate
+ceiling, marked with a =ponytail:= comment, and the upgrade path is
+decrypt-on-demand if it ever actually happens. The observed failure mode is
+disappearance, not corruption.
+
+*Recovery* — =~/.local/bin/pass-backup=, tangled from the Shell layer at mode
+700. It copies the store, exports the secret key for the fingerprint in
+=.gpg-id=, tars both and encrypts the archive with =gpg --symmetric
+--cipher-algo AES256= into =/data/backups/pass/pass-<date>.tar.gpg=. =/data= is
+=sda=; =$HOME= is =sdc=. It is run by hand after adding or rotating an entry,
+and prints its own restore recipe.
+
+The archive contains an exported secret key, so its only protection is the
+symmetric passphrase. =/data= is mode 777, hence the mode-700 destination
+directory — worth stating plainly rather than leaving implied.
+
+** Evidence
+- Detection, both branches, in batch Emacs against the tangled =config.el=:
+  a nonexistent =PASSWORD_STORE_DIR= warns naming the directory; the real store
+  warns naming all three entries, which is the true state on this host today —
+  the store is initialized but empty, pending the USB transfer from the laptop
+  (=PROJECT.org= §7.7).
+- The host-scope correction above was itself established by measurement, not
+  assertion: file dates under =~/.mail/=, command counts in =~/.bash_history=,
+  and this repository's first commit date.
+- =bash -n= clean on the tangled =pass-backup=; the two precondition branches
+  exercised — missing store and a store with no =.gpg-id= — both exit 1 with
+  the intended message.
+- A full run blocks on pinentry under a non-interactive shell, which is the
+  expected and intended behaviour, and is why it is not on a timer.
+- =doom sync= clean (5.5s), =doom doctor= down to the one standing false
+  "development build of Emacs (31.1)" warning.
+- The disks are distinct: =lsblk= shows =/data= on =sda1= and =/= on =sdc5=.
+
+** Consequences
+- A missing store now announces itself at startup instead of surfacing as a
+  silently broken gptel backend months later.
+- =my/pass-expected-entries= is a list that has to be maintained. Adding a
+  credential to =config.org= without adding it there gives a guard that passes
+  while the thing it guards is missing — the same false-clean this ADR exists
+  to prevent, one level up.
+- Backup freshness depends on the user running the script. The guard warns that
+  the store is *gone*, not that the archive is stale.
+- The archive is a single-passphrase artifact on a world-writable mount. That is
+  a real, accepted narrowing of the store's protection, taken because an
+  unrecoverable GPG key is the worse outcome.
+- =pass-backup= turns out to be the cross-machine transport as well as the
+  backup: an encrypted archive is exactly what should cross a USB stick between
+  the laptop and this host, since removable media is usually FAT32 and carries
+  no permission bits. That was not the design intent, and it is worth noting
+  precisely because it means the tool now has two callers' expectations on it.
+
+** Rejected alternatives
+Recorded in the Candidates table above, with the reason each was dropped. The
+one worth restating: a decrypting startup check is strictly better at finding
+problems and strictly worse at continuing to exist.
+
+** Validation
+Recorded under Evidence. Not yet verified: an actual =pass-backup= run to
+completion, and a restore from its output into a scratch =$GNUPGHOME= — both
+need the user's terminal for the passphrase prompts. Until a restore has been
+exercised once, the recovery half is untested in the only way that counts.
+
+** Rollback
+Delete the "Credential store guard" section and the =~/.local/bin/pass-backup=
+block from =config.org=, re-tangle, and =rm ~/.local/bin/pass-backup=. Neither
+half writes persistent state into Emacs; existing archives under
+=/data/backups/pass/= remain readable with =gpg --decrypt= regardless.
+
+** Revisit when
+- A restore is actually performed, which is the moment to record whether the
+  recipe the script prints is correct and complete.
+- The mail layer is restored (Phase 2), since =~/.msmtprc= and =~/.mbsyncrc=
+  carry account addresses and credential references and need their own answer —
+  possibly tangling, possibly this archive.
+- A present-but-corrupt entry is ever observed, which is the trigger for the
+  decrypt-on-demand upgrade named above.
+- Any new credential is added to =config.org=, which is the moment
+  =my/pass-expected-entries= must grow with it.

@@ -805,6 +805,54 @@ region/buffer/project-file context already."
       :desc "Agent (Claude Code)"        "o l g" #'claude-code-ide-menu)
 #+end_src
 
+** Credential store guard
+#+begin_src emacs-lisp
+;; Credential store guard. On 2026-08-30 this host was found to have no
+;; `pass' store at all, so gptel's Anthropic and OpenAI backends had been
+;; dead here for an unknown length of time -- masked because
+;; claude-code-ide authenticates through the Claude CLI's own login and
+;; never touches `pass'. It was first read as state that had vanished; the
+;; truth is that James set the store up on his laptop and this desktop
+;; never had it (docs/inventory.org::inv-homedir-state-loss has the
+;; measurements). Either way nothing announced the broken path, which is
+;; what this guard fixes. ADR-035's answer -- tangle it from here -- cannot
+;; apply: these must never be committed. So this is the detection half; the
+;; recovery half is `~/.local/bin/pass-backup' (see the Shell layer), which
+;; doubles as the transport for the pending laptop-to-desktop transfer.
+;;
+;; Entry *files* are checked, not decrypted: calling `+pass-get-secret' here
+;; would fire a pinentry passphrase prompt on every startup, which is a much
+;; worse daily cost than the failure it guards against.
+;; ponytail: existence check only -- a present-but-corrupt entry still slips
+;; through. Decrypt-on-demand if that ever actually happens.
+(defvar my/pass-expected-entries
+  '("api/anthropic" "api/openai" "mail/oauth2-google-client")
+  "Entries `config.org' reads at runtime, checked for existence at startup.
+See docs/ai/providers.org for what consumes each one.")
+
+(defun my/pass-check-store ()
+  "Warn if the `pass' store or any expected entry is missing.
+Checks for the encrypted files only -- never decrypts, so it cannot
+prompt for a passphrase."
+  (let* ((dir (or (getenv "PASSWORD_STORE_DIR")
+                  (expand-file-name "~/.password-store")))
+         (missing (unless (file-directory-p dir)
+                    (list dir))))
+    (unless missing
+      (setq missing
+            (seq-remove (lambda (e)
+                          (file-exists-p (expand-file-name (concat e ".gpg") dir)))
+                        my/pass-expected-entries)))
+    (when missing
+      (delay-warning 'pass
+                     (format "pass store incomplete -- missing: %s.
+See PROJECT.org 7.7 and docs/ai/providers.org."
+                             (string-join missing ", "))
+                     :warning))))
+
+(add-hook 'emacs-startup-hook #'my/pass-check-store)
+#+end_src
+
 ** Email: mu4e
 #+begin_src emacs-lisp
 ;; Email: mu4e (+org +gmail +mbsync). Sync via mbsync (isync), send via
@@ -1931,7 +1979,11 @@ version control: a revert shows up as an unstaged diff, and =git checkout=
 restores it.
 
 These files are now *generated*. Editing =~/.bashrc= directly will be
-overwritten on the next tangle; edit the blocks below instead.
+overwritten on the next tangle; edit the blocks below instead. The same applies
+to =~/.local/bin/pass-backup=, which is here for a related but distinct reason
+-- see [[id:adr-credential-state-guard][ADR-038]]: the credential state it backs
+up is exactly the state that *cannot* be tangled, so the script that saves it is
+tangled instead.
 
 ** ~/.bashrc
 
@@ -2196,6 +2248,57 @@ fi
 # covered too in case that ever changes.
 bind -m vi-insert '"?": self-insert' 2>/dev/null
 bind -m emacs '"?": self-insert' 2>/dev/null
+#+end_src
+
+** ~/.local/bin/pass-backup
+The recovery half of the credential-store guard whose detection half lives in
+[[*Credential store guard][the Emacs section]]. The =pass= store and the GPG
+key that opens it cannot be tangled from here the way =~/.bashrc= is -- they
+must never be committed -- so they get an encrypted archive on a *different
+physical disk* instead. =/data= is =sda=; =$HOME= is =sdc=. A homedir wipe,
+which is what appears to have happened, leaves the archive standing.
+
+The archive contains the exported secret key, so its only protection is the
+symmetric passphrase =gpg= prompts for. =/data= is mode 777, hence the mode-700
+backup directory. Use a passphrase you have not used elsewhere and can actually
+remember -- an archive you cannot open is not a backup.
+
+Run it by hand after adding or rotating an entry. Deliberately not on a timer:
+it needs two interactive passphrase prompts (the key's, then the archive's),
+which no unattended job can satisfy.
+
+#+begin_src sh :tangle ~/.local/bin/pass-backup :shebang "#!/usr/bin/env bash" :tangle-mode (identity #o700)
+# Generated from ~/.config/doom/config.org -- edit there, not here.
+# Any change made directly to this file is lost on the next tangle.
+# See docs/decisions.org ADR-035, and PROJECT.org 7.6 for why this exists.
+
+set -euo pipefail
+umask 077
+
+store="${PASSWORD_STORE_DIR:-$HOME/.password-store}"
+dest="${PASS_BACKUP_DIR:-/data/backups/pass}"
+
+[ -d "$store" ] || { echo "pass-backup: no store at $store" >&2; exit 1; }
+[ -s "$store/.gpg-id" ] || { echo "pass-backup: $store/.gpg-id missing or empty" >&2; exit 1; }
+
+mkdir -p "$dest"
+chmod 700 "$dest"
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+cp -a "$store" "$work/password-store"
+# Prompts for the key passphrase. The export is why the archive must be encrypted.
+gpg --export-secret-keys --armor "$(cat "$store/.gpg-id")" > "$work/secret-key.asc"
+[ -s "$work/secret-key.asc" ] || { echo "pass-backup: secret key export was empty" >&2; exit 1; }
+
+out="$dest/pass-$(date +%F).tar.gpg"
+tar -C "$work" -cf - . | gpg --symmetric --cipher-algo AES256 --output "$out"
+
+echo "pass-backup: wrote $out ($(du -h "$out" | cut -f1))"
+echo "pass-backup: restore with"
+echo "  gpg --decrypt $out | tar -C \"\$restore_dir\" -xf -"
+echo "  gpg --import \"\$restore_dir/secret-key.asc\" && cp -a \"\$restore_dir/password-store\" ~/.password-store"
 #+end_src
 
 ** ~/.inputrc

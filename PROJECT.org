@@ -753,29 +753,69 @@ diff with no setup at all.
     not merely that we have none.
   - Phase 7's module flags, five new =:lang= modules, 19 grammars and ~15 new
     binaries added, each with its role.
-- [X] New =inv-homedir-state-loss= section — see below; this is the finding that
-  matters most out of the whole closeout.
+- [X] New =inv-homedir-state-loss= section — see below. Written as the biggest
+  finding of the closeout, then corrected the same day; the correction is the
+  finding that actually matters.
 
-**** Homedir state has gone missing, and nothing detected it
-Found while auditing the binary table. A significant amount of configuration
-living *only* in =$HOME= is simply gone: =msmtp= and =~/.msmtprc=, =oama= and
-its config and state directories, =~/.mbsyncrc=, the =mu= index, and one of the
-two mail accounts under =~/.mail= (498M survives, but only
-=mrniceguyjames-gmail= and =archive=). That is on top of the =pass= store and
-GPG key already recorded in 7.7. mu4e can neither send nor sync.
+**** Credential and mail state: this host never had it, and the docs did not say which host
+Found while auditing the binary table: no =pass= store, no GPG key, no =msmtp=,
+=oama=, =~/.mbsyncrc= or =mu= index under =$HOME=. Recorded as state that had
+*vanished* — the [[id:adr-literate-config][ADR-035]] pattern at larger scale,
+with the three tangled dotfiles as the survivors that proved the point.
 
-What survived: =~/.bashrc=, =~/.inputrc= and =~/.gitconfig= — the three files
-[[id:adr-literate-config][ADR-035]] made tangle targets after that layer silently reverted twice.
-The layers that vanished are exactly the ones still living only in =$HOME=.
+**Wrong.** James pointed out he had set the mail and credential stack up on his
+*laptop*. Measurements on this desktop settled it: every one of the 6775 files
+under =~/.mail/= is dated 2020, =~/.bash_history= records zero invocations of
+=oama=, =pass=, =msmtp= or =gpg=, and this repository's first commit here is
+2026-07-16. Nothing was lost; it was never here. The 498M under =~/.mail/= is a
+2020 leftover. =~/.bashrc= and friends did not "survive" anything on this host —
+they were tangled here.
+
+ADR-035's argument is unaffected: it rests on that layer's own two documented
+reversions, which stand. It simply gains no support from this incident and
+should not be cited as if it did.
+
+The real finding: *this project's documentation described one host while being
+read on another.* =docs/inventory.org= called itself "verified current state"
+without naming whose, and =docs/roadmap.org= marks Phase 3 credentials DONE —
+true on the laptop, false here. That gap produced a confident wrong diagnosis
+inside one session. Corrected 2026-08-30: =inventory.org='s header now names
+=PsychedPC=, its affected rows are re-scoped, and the section is rewritten
+around the correction. Guards below were built under the wrong reading and kept
+under the right one — an un-re-issuable GPG key and an unchecked store are the
+same exposure either way.
+
+- [ ] Decide whether the multi-host posture deserves its own ADR: what is
+  expected identical across machines (everything tangled from =config.org=)
+  versus per-host (credentials, mail state, installed binaries). Deferred —
+  scoping the docs was the cheap fix and it is done.
 
 - [ ] Decide what guard, if any, the mail configuration gets. ADR-035's answer
   (tangle it from =config.org=) works for =.msmtprc= and =.mbsyncrc= in
   principle, but both carry account addresses and reference credentials, so it
-  needs thought rather than a copy of the ADR-035 pattern.
-- [ ] The =pass= store and GPG key *cannot* take that answer — they must not be
-  committed. They need a different guard: an encrypted backup, or a startup
-  check that warns when an expected entry is unreadable. Currently there is
-  neither, and both losses were found by accident.
+  needs thought rather than a copy of the ADR-035 pattern. Deferred to Phase 2
+  with the mail layer itself — see [[id:adr-credential-state-guard][ADR-038]]'s
+  revisit condition.
+- [X] The =pass= store and GPG key *cannot* take that answer — they must not be
+  committed. Both guards built 2026-08-30, recorded as
+  [[id:adr-credential-state-guard][ADR-038]]:
+  - Detection: =my/pass-check-store= on =emacs-startup-hook=, in =config.org='s
+    "Credential store guard" section. Checks that the store directory and each
+    =<entry>.gpg= in =my/pass-expected-entries= exist. Existence only, never
+    decrypts — a decrypting check would fire pinentry at every startup, and a
+    guard with a daily cost gets disabled, which leaves no guard at all.
+    Verified in batch against both branches; against the real store it warns
+    naming all three missing entries, which is correct on this host today.
+  - Recovery: =~/.local/bin/pass-backup=, tangled from the Shell layer at mode
+    700. Store plus exported secret key, tarred and =gpg --symmetric=
+    AES256-encrypted into =/data/backups/pass/=. =/data= is =sda=, =$HOME= is
+    =sdc=, so a loss of this disk's =$HOME= does not take the archive with it.
+    Also the transport for the pending laptop transfer (§7.7). Run by hand — it
+    needs two passphrase prompts, so no timer can drive it. =bash -n= clean,
+    both precondition branches exercised.
+  - [ ] Run =pass-backup= once after the 7.7 inserts, then restore it into a
+    scratch =$GNUPGHOME= to prove the recipe. Until a restore is exercised, the
+    recovery half is untested in the only way that counts.
 - [ ] Restoring the mail layer itself is Phase 2 work, not Phase 7's.
 
 *** 7.7 Rebuild the =pass= credential store
@@ -830,6 +870,63 @@ which may pass through an agent or appear in any command output.
   false now. Rewrite as a dated historical note plus a "rebuilt 2026-08-30" row.
 - [ ] Re-verify gptel against both backends once the entries exist.
 
+**** Transfer the credentials from the laptop by USB — not yet done
+Found 2026-08-30: the =pass= store, the GPG key and the whole mail stack were
+never on this desktop (=PsychedPC=). They live on the laptop, which is where the
+2026-07/08 Phase 3 credential work actually happened. Evidence on this machine:
+all 6775 files under =~/.mail/= are dated 2020, and =~/.bash_history= has zero
+invocations of =oama=, =pass=, =msmtp= or =gpg=. So this is a *transfer*, not a
+rebuild — the OAuth client and both API keys already exist and no Google Cloud
+console visit is needed.
+
+Chosen route: encrypted archive on a USB stick. Deliberately not a raw copy of
+=~/.password-store= onto the stick — USB media is usually FAT32, which carries no
+permission bits, so a plain copy would leave the store world-readable on any
+machine that mounts it. The archive
+[[id:adr-credential-state-guard][ADR-038]]'s =pass-backup= already produces is
+passphrase-encrypted and therefore safe to sit on removable media, so it doubles
+as the transport. Nothing new needs writing.
+
+***** On the laptop
+- [ ] Confirm the repo is synced and =~/.local/bin/pass-backup= exists there. It
+  tangles from =config.org= on any host that runs =doom sync=, so it should
+  already be present; if not, pull and sync first.
+- [ ] Mount the stick and note its path (=lsblk=, or look under =/media/james/=).
+- [ ] =PASS_BACKUP_DIR=/media/james/<stick> pass-backup= — writes one
+  =pass-<date>.tar.gpg= holding the store plus the exported secret key. Two
+  passphrase prompts: the key's, then a new one for the archive. Use an archive
+  passphrase you will still have when you reach the desktop.
+- [ ] =sync= and unmount cleanly before pulling the stick.
+
+***** On this desktop
+- [ ] Mount, then unpack into a scratch directory —
+  =gpg --decrypt /media/james/<stick>/pass-<date>.tar.gpg | tar -C "$scratch" -xf -=.
+  The script prints this recipe itself on the way out.
+- [ ] =gpg --import "$scratch/secret-key.asc"=, then set ownertrust on the
+  imported key (=gpg --edit-key <fp>=, =trust=, =5=) so =pass= will encrypt to it
+  without complaint.
+- [ ] Replace the empty local store: =rm -rf ~/.password-store= and
+  =cp -a "$scratch/password-store" ~/.password-store=.
+- [ ] Re-encrypt to *both* keys so either machine's key opens either store:
+  =pass init <laptop-fp> 4F6F02436717EE9B823369EAE2F99AE2D3BDF9E1=. The desktop
+  key made on 2026-08-30 stays useful instead of being orphaned, and a future
+  laptop-side =pass init= with the same pair keeps them symmetric.
+- [ ] =pass ls= — structure only, never print a value. Expect =api/anthropic=,
+  =api/openai=, =mail/oauth2-google-client=.
+- [ ] Restart Emacs. =my/pass-check-store= should fall silent, and org-gcal
+  should reload its client instead of warning.
+- [ ] Shred the scratch directory (=rm -rf=; it held an exported secret key).
+- [ ] Decide the stick's fate: wipe it, or keep the archive as the off-machine
+  backup [[id:adr-credential-state-guard][ADR-038]] wants. If kept, it is a
+  single-passphrase artifact on removable media — label it and treat it as such.
+
+***** Then the follow-ups already scoped above
+- [ ] =docs/ai/providers.org= rows still say the store no longer exists.
+- [ ] Re-verify gptel against both backends.
+- [ ] Re-scope ADR-025's remaining calendar work — with the client credentials
+  in hand, the Google-side question narrows to whether the Calendar scope and
+  API were ever enabled on that project.
+
 **** Knock-on effects
 - [ ] [[id:roadmap-phase-5][Phase 5]]'s remaining blocker may have grown. It is
   scoped as "add the Calendar scope and re-authorize both accounts", which
@@ -837,7 +934,15 @@ which may pass through an agent or appear in any command output.
   =mail/oauth2-google-client= is genuinely gone rather than hidden, that becomes
   re-creating the client in the Google Cloud console first. Re-scope ADR-025's
   remaining work once the store is rebuilt and the truth is known.
-- [ ] =~/.authinfo.gpg= (169 bytes, dated 2020-11-08) is encrypted to a key that
-  no longer exists in the keyring, so it is unreadable. Determine what
-  =auth-source= was reading from it — mu4e is the likely consumer — and whether
-  anything still depends on it.
+- [X] =~/.authinfo.gpg= (169 bytes, dated 2020-11-08) — investigated 2026-08-30.
+  The earlier claim that it was encrypted to the lost key was wrong:
+  =gpg --list-packets= reports a single symkey-enc packet ("encrypted with 1
+  passphrase", AES256.CFB, s2k mode 3), so it is *symmetrically* encrypted and
+  opens with a remembered passphrase, independent of the keyring. Nothing in
+  =config.org= sets =auth-sources=, so it is only ever consulted through the
+  Emacs default list, behind the =pass= backend that =:tools pass +auth= adds.
+  At 169 bytes it holds one or two lines at most; mu4e remains the likely
+  consumer, and the mail layer is gone anyway. Left as-is — nothing depends on
+  it today.
+  - [ ] If the passphrase is remembered, decrypt it once to see what it held,
+    then either re-enter that into =pass= or delete the file. Not blocking.

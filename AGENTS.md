@@ -12,9 +12,9 @@ So are `~/.bashrc`, `~/.inputrc` and `~/.gitconfig` — the ADR-033 shell layer
 lives here too, which is what stops it silently reverting.
 
 **Edit `config.org`, never the tangled files.** A change written directly to
-`config.el` (or `init.el`, `packages.el`, or any of those three dotfiles) is
-overwritten by the next tangle, which happens on every `doom sync` and on every
-save of `config.org`. Edits to the `init.el` block take effect one sync late —
+`config.el` (or `init.el`, `packages.el`, any of those three dotfiles, or
+`~/.local/bin/pass-backup`) is overwritten by the next tangle, which happens on
+every `doom sync` and on every save of `config.org`. Edits to the `init.el` block take effect one sync late —
 Doom loads `init.el` before it tangles.
 
 Canonical long-form documentation is in `docs/*.org` and `docs/ai/*.org` — read

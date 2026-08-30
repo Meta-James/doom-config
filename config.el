@@ -735,6 +735,51 @@ region/buffer/project-file context already."
       :desc "Add diagnostics to context" "o l d" #'my/gptel-add-diagnostics
       :desc "Agent (Claude Code)"        "o l g" #'claude-code-ide-menu)
 
+;; Credential store guard. On 2026-08-30 this host was found to have no
+;; `pass' store at all, so gptel's Anthropic and OpenAI backends had been
+;; dead here for an unknown length of time -- masked because
+;; claude-code-ide authenticates through the Claude CLI's own login and
+;; never touches `pass'. It was first read as state that had vanished; the
+;; truth is that James set the store up on his laptop and this desktop
+;; never had it (docs/inventory.org::inv-homedir-state-loss has the
+;; measurements). Either way nothing announced the broken path, which is
+;; what this guard fixes. ADR-035's answer -- tangle it from here -- cannot
+;; apply: these must never be committed. So this is the detection half; the
+;; recovery half is `~/.local/bin/pass-backup' (see the Shell layer), which
+;; doubles as the transport for the pending laptop-to-desktop transfer.
+;;
+;; Entry *files* are checked, not decrypted: calling `+pass-get-secret' here
+;; would fire a pinentry passphrase prompt on every startup, which is a much
+;; worse daily cost than the failure it guards against.
+;; ponytail: existence check only -- a present-but-corrupt entry still slips
+;; through. Decrypt-on-demand if that ever actually happens.
+(defvar my/pass-expected-entries
+  '("api/anthropic" "api/openai" "mail/oauth2-google-client")
+  "Entries `config.org' reads at runtime, checked for existence at startup.
+See docs/ai/providers.org for what consumes each one.")
+
+(defun my/pass-check-store ()
+  "Warn if the `pass' store or any expected entry is missing.
+Checks for the encrypted files only -- never decrypts, so it cannot
+prompt for a passphrase."
+  (let* ((dir (or (getenv "PASSWORD_STORE_DIR")
+                  (expand-file-name "~/.password-store")))
+         (missing (unless (file-directory-p dir)
+                    (list dir))))
+    (unless missing
+      (setq missing
+            (seq-remove (lambda (e)
+                          (file-exists-p (expand-file-name (concat e ".gpg") dir)))
+                        my/pass-expected-entries)))
+    (when missing
+      (delay-warning 'pass
+                     (format "pass store incomplete -- missing: %s.
+See PROJECT.org 7.7 and docs/ai/providers.org."
+                             (string-join missing ", "))
+                     :warning))))
+
+(add-hook 'emacs-startup-hook #'my/pass-check-store)
+
 ;; Email: mu4e (+org +gmail +mbsync). Sync via mbsync (isync), send via
 ;; msmtp. Credentials never live here: the plain-password account resolves
 ;; via `pass show mail/<label>`, the two Google-backed accounts (one

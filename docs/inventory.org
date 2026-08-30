@@ -9,6 +9,15 @@ Verified, dated facts about this machine and this configuration. Not aspirationa
 if it's here, it was checked, not assumed. Superseded entries are struck through and
 dated rather than deleted, so history stays visible.
 
+*This machine is the desktop, hostname =PsychedPC=.* That qualifier was implicit
+until 2026-08-30 and it should not have been: there is a second host, James's
+laptop, and it is where the mail stack and the =pass= credential store actually
+live. Anything below describing =$HOME= state — credentials, mail, the binary
+table — is a claim about =PsychedPC= only. Anything describing the repository or
+its tangled output is host-independent by construction, which is
+[[id:adr-literate-config][ADR-035]]'s whole point. Where a fact differs between
+hosts, say which host.
+
 * Repository
 :PROPERTIES:
 :ID:       inv-repository
@@ -148,47 +157,74 @@ yasnippet and dape by their own modules; and Magit/forge have ~35 bindings under
 here, grep =~/.config/emacs/sources/doom+/modules/= first. Where a module owns
 it, the deliverable is [[id:docs-cheatsheet][the cheatsheet]], not elisp.
 
-* Homedir state that has gone missing
+* Credential and mail state: this host has never had it
 :PROPERTIES:
 :ID:       inv-homedir-state-loss
 :END:
 
-Recorded 2026-08-30. Two separate audits that day — external binaries for
-[[id:adr-module-flag-sweep][ADR-036]], then this file's own binary table — found that a
-significant amount of configuration living *only* in =$HOME=, outside any
-repository, is simply gone. Nothing in this project deleted it and nothing
-detected it; both discoveries were accidental, while chasing something else.
+Recorded 2026-08-30, *corrected the same day*. The correction matters more than
+the original finding, so it goes first.
 
-*Missing, confirmed by direct check:*
+** What this section said, and why it was wrong
+Two audits that day — external binaries for
+[[id:adr-module-flag-sweep][ADR-036]], then this file's own binary table —
+found that the =pass= store, the GPG secret key and most of the mail stack were
+absent from =$HOME=. This section concluded they had *vanished*: state living
+outside any repository, silently lost, nothing detecting it. That reading was
+adopted quickly because it fit [[id:adr-literate-config][ADR-035]]'s established
+pattern, and it fit a little too well.
 
-| Thing | Was | Consequence |
-|-------+-----+-------------|
-| =~/.password-store= | The whole credential store ([[id:adr-gptel-rework][ADR-006]], [[id:adr-email-mu4e][ADR-011]], [[id:adr-calendar-org-gcal][ADR-025]]) | =+pass-get-secret= for =api/anthropic= and =api/openai= failed, so gptel's Anthropic and OpenAI backends were broken. Rebuilt from empty on 2026-08-30 — new GPG key, =pass init= done, entries not yet re-entered |
-| =~/.gnupg/private-keys-v1.d/= | The user's GPG secret key | Empty, directory dated 2020-06-06. Also makes =~/.authinfo.gpg= (169 bytes, 2020-11-08) permanently unreadable |
-| =msmtp= + =~/.msmtprc= | SMTP send backend ([[id:adr-email-mu4e][ADR-011]]) | mu4e cannot send mail |
-| =oama= + =~/.config/oama/= + =~/.local/state/oama/= | Gmail XOAUTH2 token manager ([[id:adr-email-mu4e][ADR-011]]) | No token refresh, so mbsync cannot authenticate either |
-| =~/.mbsyncrc= | IMAP sync configuration | The =mbsync= binary survives with nothing to run |
-| =mu= index | =~/.cache/mu=, =~/.local/share/mu= | mu4e has no index |
-| =~/.mail/ualberta*= | One of the two configured accounts | 498M of mail survives under =~/.mail=, but only =mrniceguyjames-gmail= and =archive= |
+It was wrong. James pointed out that he set the mail and credential stack up on
+his *laptop*, not on this desktop. Direct checks on =PsychedPC= then settled it:
 
-*Survived:* =~/.bashrc=, =~/.inputrc=, =~/.gitconfig= — which is the whole
-point. Those three are tangled from =config.org= and under version control
-since [[id:adr-literate-config][ADR-035]], written precisely because that layer had already
-silently reverted twice. The layers that vanished are exactly the ones still
-living only in =$HOME=.
+- All 6775 files under =~/.mail/= are dated *2020*; nothing under it is newer
+  than 2026-01-01.
+- =~/.bash_history= records *zero* invocations of =oama=, =pass=, =msmtp= or
+  =gpg=. =mbsync= and =mu= appear three times each, consistent with the 2020
+  material and nothing since.
+- This repository's first commit here is 2026-07-16, months after that mail
+  directory was last written.
 
-That is the pattern worth acting on, and it generalises past this incident:
-=$HOME= state that no repository tracks and no check verifies disappears without
-anyone noticing. ADR-035 solved it for three dotfiles by making them tangle
-targets. Nothing equivalent covers the mail configuration, and nothing can cover
-the =pass= store or the GPG key, which must not be committed — those need a
-different guard (an encrypted backup, or a startup check that warns when an
-expected entry is unreadable), not version control.
+So the 2026-07/08 credential work — the OAuth client registration, the
+=mail/oauth2-google-client= entry, the 2026-08-06 re-authorization — all
+happened on the laptop. Nothing was lost from this machine. It was never here.
+The 498M under =~/.mail/= is a 2020 leftover, not a survivor.
 
-*Deliberately not acted on here.* Restoring the mail layer is Phase 2 work and
-re-entering credentials is the user's alone. This section exists so the next
-session starts from measured fact rather than from this file's previously
-confident "yes" rows.
+** What is actually true of this host
+
+| Thing | State on =PsychedPC= | Consequence |
+|-------+----------------------+-------------|
+| =~/.password-store= | Created 2026-08-30, empty. New GPG key =4F6F02436717EE9B823369EAE2F99AE2D3BDF9E1=, =pass init= done, no entries | =+pass-get-secret= for =api/anthropic= and =api/openai= returns nothing, so gptel's Anthropic and OpenAI backends do not work *here*. They work on the laptop |
+| =~/.gnupg/private-keys-v1.d/= | Was empty (dated 2020-06-06) until the 2026-08-30 key generation | Does *not* affect =~/.authinfo.gpg= (169 bytes, 2020-11-08): =gpg --list-packets= shows a symkey-enc packet ("encrypted with 1 passphrase", AES256.CFB), so it is symmetrically encrypted and needs a remembered passphrase, not a key — recoverable in principle, checked 2026-08-30 |
+| =msmtp=, =oama=, =~/.msmtprc=, =~/.mbsyncrc=, =mu= index | Never installed or configured here | mu4e on this host can neither send nor sync. This is un-built, not broken |
+| =~/.mail/= | =archive= and =mrniceguyjames-gmail=, all files 2020 | Stale. Not evidence of a partial sync |
+
+** What the finding actually generalises to
+The original conclusion — "=$HOME= state that no repository tracks disappears
+without anyone noticing" — survives, but it was already
+[[id:adr-literate-config][ADR-035]]'s conclusion, argued from that layer's own
+two documented reversions. This incident adds no evidence for it and should not
+be cited as if it did.
+
+The finding that *is* new, and is this section's real content: **this project's
+documentation had been describing one host while being read on another.**
+=roadmap.org= marks Phase 3 credentials DONE — true on the laptop, false here.
+This file called itself "verified current state" without saying whose. That is a
+documentation-scope defect, not a data-loss event, and it produced a confident
+wrong diagnosis within a single session. The header above now names the host.
+
+** Still to do
+- The credentials get transferred from the laptop by USB, as an encrypted
+  archive rather than a raw store copy. Full procedure in =PROJECT.org= §7.7,
+  "Transfer the credentials from the laptop by USB".
+- The =pass= store on this host has startup detection (=my/pass-check-store=)
+  and an off-disk encrypted backup (=~/.local/bin/pass-backup=), both generated
+  from =config.org= — see [[id:adr-credential-state-guard][ADR-038]]. Those were
+  built under the vanished-state reading and remain worth having under the
+  correct one: a second host that must not drift, and a store whose GPG key is
+  not re-issuable, both want detection and a backup.
+- Restoring the mail layer on this host is Phase 2 work, and is a fresh install
+  rather than a recovery.
 
 * Explicit packages (=packages.el=)
 :PROPERTIES:
@@ -233,10 +269,10 @@ confident "yes" rows.
 | aider   | no      | not installed                              |
 | gh      | no      | not installed                              |
 | mu / mu4e | yes   | =/usr/bin/mu=, =1.10.8= (apt =maildir-utils=/=mu4e=) — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
-| mbsync (isync) | binary yes, config no | =/usr/bin/mbsync= still present, but =~/.mbsyncrc= is **gone as of 2026-08-30** — the binary has nothing to run. See [[id:inv-homedir-state-loss][the homedir-state note]] |
-| msmtp   | *no*    | *Was* =/usr/bin/msmtp= =1.8.24=. **Gone as of 2026-08-30**, along with =~/.msmtprc=. mu4e cannot send. See [[id:inv-homedir-state-loss][the homedir-state note]] |
-| oama    | *no*    | *Was* =~/.local/bin/oama= =0.22.0=. **Gone as of 2026-08-30**, along with =~/.config/oama/= and =~/.local/state/oama/=. The Gmail XOAUTH2 refresh cycle has no token manager, so mbsync cannot authenticate either. See [[id:inv-homedir-state-loss][the homedir-state note]] |
-| pass    | yes     | =/usr/bin/pass= — installed 2026-08-30 (Phase 7). The *store* is separate: it did not exist at all until the same day, see [[id:inv-homedir-state-loss][the homedir-state note]] |
+| mbsync (isync) | binary yes, config no | =/usr/bin/mbsync= still present, but this host has **no =~/.mbsyncrc=** (checked 2026-08-30) — the binary has nothing to run. Never configured here; the working setup is on the laptop. See [[id:inv-homedir-state-loss][the host-scope note]] |
+| msmtp   | *no*    | **Not installed on this host** (checked 2026-08-30), and no =~/.msmtprc=. mu4e cannot send here. The =1.8.24= previously recorded describes the laptop. See [[id:inv-homedir-state-loss][the host-scope note]] |
+| oama    | *no*    | **Not installed on this host** (checked 2026-08-30); no =~/.config/oama/=, no =~/.local/state/oama/=. The Gmail XOAUTH2 refresh cycle has no token manager here, so mbsync could not authenticate either. The =0.22.0= previously recorded describes the laptop. See [[id:inv-homedir-state-loss][the host-scope note]] |
+| pass    | yes     | =/usr/bin/pass= — installed 2026-08-30 (Phase 7). The *store* is separate: this host had none until the same day, and it is still empty pending the USB transfer from the laptop, see [[id:inv-homedir-state-loss][the host-scope note]] |
 | pass-otp | yes    | apt =pass-otp= =1.2.0-10=. Installs a pass *extension* at =/usr/lib/password-store/extensions/otp.bash=, **not** a binary — =command -v pass-otp= will always report it missing |
 | xmllint | yes     | =/usr/bin/xmllint= (apt =libxml2-utils=) — XML formatting for =:lang data= (2026-08-30) |
 | tidy    | yes     | =/usr/bin/tidy= — HTML formatting for =:lang web= (2026-08-30) |
