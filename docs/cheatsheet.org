@@ -1,0 +1,279 @@
+#+TITLE: Capability Cheatsheet — what this config already does
+#+AUTHOR: James Cook
+#+STARTUP: overview
+:PROPERTIES:
+:ID:       docs-cheatsheet
+:END:
+
+* Why this file exists
+:PROPERTIES:
+:ID:       cheat-why
+:END:
+
+Phase 7 ([[id:roadmap-phase-7][roadmap]]) began from an audit finding that read
+badly: roughly 35 enabled modules had no configuration, and 55 installed
+packages were never named in =config.org=. The obvious conclusion — that a large
+amount of capability sat unwired — turned out to be wrong.
+
+Doom configures nearly all of it at *module* level. Absence from =config.org=
+usually means nothing was needed, not that nothing was done. The genuine gap was
+never configuration; it was knowing what is already there. That makes this
+document, rather than several hundred lines of new elisp, the main deliverable
+of the phase. See [[id:adr-module-flag-sweep][ADR-036]] for the sweep that came
+out of the same audit.
+
+*Scope.* This lists capability that exists and tends to go unused. It is not a
+complete keymap dump — =SPC h b b= (=describe-bindings=) and =SPC= followed by a
+pause (which-key) already do that better, and a hand-maintained copy of them
+would rot. What is here is the subset worth *knowing about* rather than
+discovering by accident.
+
+*Evidence standard.* Every binding below was read out of module source under
+=~/.config/emacs/sources/doom+/modules/= and is cited by file and line, the same
+standard [[id:ai-keybindings][keybindings.org]] holds itself to. None of it is
+recalled from memory or from upstream documentation, both of which drift from
+what a given Doom checkout actually does.
+
+Two path abbreviations used throughout:
+- =+evil-bindings.el= = =modules/config/default/+evil-bindings.el=
+- =evil/config.el= = =modules/editor/evil/config.el=
+
+* Motion and jumping
+:PROPERTIES:
+:ID:       cheat-motion
+:END:
+
+| Key | Command | Source |
+|-----+---------+--------|
+| =gs= | Easymotion prefix map (the whole avy layer hangs off this) | =evil/config.el:654= |
+| =gs s= | =evil-avy-goto-char-2= — jump to any two-character sequence on screen | =evil/config.el:659= |
+| =gs /= | =evil-avy-goto-char-timer= — type as many characters as you like, then jump | =evil/config.el:661= |
+| =gs SPC= | Same, across all visible windows | =evil/config.el:660= |
+| =gs a= / =gs A= | Jump forward/backward by function argument | =evil/config.el:657-658= |
+| =SPC s l= | =link-hint-open-link= — jump to any visible link | =+evil-bindings.el:823= |
+| =SPC s j= | =evil-show-jumps= — the jump list | =+evil-bindings.el:825= |
+| =SPC s r= | =evil-show-marks= | =+evil-bindings.el:833= |
+| =SPC s i= / =SPC s I= | =imenu= / =consult-imenu-multi= across open buffers | =+evil-bindings.el:819= |
+
+=gs= is the single most under-used key here. Easymotion turns any ordinary
+motion into a labelled jump, so it covers far more than =avy-goto-char=.
+
+* Windows
+:PROPERTIES:
+:ID:       cheat-windows
+:END:
+
+| Key | Command | Source |
+|-----+---------+--------|
+| =SPC w= | =evil-window-map= — the whole window layer | =+evil-bindings.el:342= |
+| =SPC 1= … =SPC 9= | =winum-select-window-N= — jump straight to a numbered window | =ui/window-select/config.el:33-42= |
+| (remap =other-window=) | =ace-window=, with home-row keys =asdfghjkl= | =ui/window-select/config.el:16,19= |
+
+The =+numbers= flag is why window numbers appear in the modeline at all, and
+=SPC <n>= is faster than any amount of =C-w= cycling.
+
+* Editing
+:PROPERTIES:
+:ID:       cheat-editing
+:END:
+
+| Key | Command | Source |
+|-----+---------+--------|
+| =v= repeatedly | =expand-region= — grow the selection semantically | =:editor multiple-cursors= |
+| =R= (visual) | =evil-multiedit-match-all= — edit every match at once | =+evil-bindings.el:310= |
+| =M-d= / =M-D= | Match symbol at point and next/previous | =+evil-bindings.el:311-312= |
+| =gz= prefix | evil-mc multi-cursor map (see below) | =+evil-bindings.el:127-145= |
+| =gz m= | =evil-mc-make-all-cursors= | =+evil-bindings.el:135= |
+| =gz d= / =gz D= | Cursor at next/previous match | =+evil-bindings.el:127-128= |
+| =gz j= / =gz k= | Cursor on the line below/above | =+evil-bindings.el:133-134= |
+| =gz q= | Remove all cursors | =+evil-bindings.el:140= |
+| =S= (visual) | =evil-surround-region= | =evil/config.el:674= |
+| =gl= / =gL= | =evil-lion= — align on a character, left/right | =evil/config.el:679-682= |
+| =]r= / =[r= | =rotate-text= — cycle =true=/=false=, =yes=/=no= and similar at point | =+evil-bindings.el:305-306= |
+
+evil-embrace extends =evil-surround= with mode-aware pairs — LaTeX, Org, Ruby,
+Emacs Lisp and C++ angle brackets all get their own (=evil/config.el:342-349=).
+
+* Search and lookup
+:PROPERTIES:
+:ID:       cheat-lookup
+:END:
+
+| Key | Command | Source |
+|-----+---------+--------|
+| =SPC s b= / =SPC s B= | Search this buffer / all open buffers | =+evil-bindings.el:808= |
+| =SPC s p= / =SPC s P= | Search project / another project | =+evil-bindings.el:831= |
+| =SPC s d= / =SPC s D= | Search this directory / another | =+evil-bindings.el:815= |
+| =SPC s t= | *Dictionary definition* of the word at point | =+evil-bindings.el:839= |
+| =SPC s T= | *Thesaurus* — synonyms via powerthesaurus | =+evil-bindings.el:840= |
+| =SPC s k= / =SPC s K= | Look up in local docsets / all docsets | =+evil-bindings.el:829= |
+| =SPC s o= / =SPC s O= | Look up online / choose the service | =+evil-bindings.el:827-828= |
+| =SPC c d= / =SPC c D= | Jump to definition / references | =+evil-bindings.el:457-458= |
+| =SPC c k= | Jump to documentation | =+evil-bindings.el:463= |
+
+The dictionary and thesaurus keys are the standout: =:tools lookup +dictionary
++offline= is enabled, =wn= (WordNet) is installed, and these two keys are the
+entire interface to it.
+
+* Git
+:PROPERTIES:
+:ID:       cheat-git
+:END:
+
+Roughly thirty-five bindings live under =SPC g= (=+evil-bindings.el:523-570=).
+The ones most often missed:
+
+| Key | Command | Source |
+|-----+---------+--------|
+| =SPC g g= | =magit-status= | =+evil-bindings.el:538= |
+| =SPC g '= | =forge-dispatch= — the whole GitHub layer | =+evil-bindings.el:537= |
+| =SPC g t= | =git-timemachine-toggle= — step through a file's history in place | =+evil-bindings.el:527= |
+| =SPC g y= / =SPC g Y= | Copy a permalink to the remote / to the homepage | =+evil-bindings.el:525-526= |
+| =SPC g B= | =magit-blame-addition= | =+evil-bindings.el:540= |
+| =SPC g L= | Log for this file only | =+evil-bindings.el:542= |
+| =SPC g s= / =SPC g S= | *Stage hunk at point* / stage this file | =+evil-bindings.el:530,544= |
+| =SPC g r= | Revert hunk at point | =+evil-bindings.el:529= |
+| =SPC g ]= / =SPC g [= | Next / previous hunk | =+evil-bindings.el:531-532= |
+| =SPC g f i= / =SPC g f p= | Find issue / pull request | =+evil-bindings.el:550-551= |
+| =SPC g l i= / =SPC g l p= / =SPC g l n= | List issues / PRs / notifications | =+evil-bindings.el:566-568= |
+| =SPC g o i= / =SPC g o p= | Browse an issue / PR in the browser | =+evil-bindings.el:558-559= |
+
+=SPC g s= is worth calling out. Until Phase 7 this config bound it to
+=magit-status=, which duplicated =SPC g g= and *overwrote* the stage-hunk
+binding. That line is gone; staging a hunk from the buffer works again.
+
+* AI
+:PROPERTIES:
+:ID:       cheat-ai
+:END:
+
+The =SPC o l= map is documented in full in [[id:ai-keybindings][keybindings.org]].
+What that file does *not* cover, because =:tools llm= wires it with no
+configuration from this repo:
+
+| Key | Command | Source |
+|-----+---------+--------|
+| =M-g= (in a commit buffer) | =gptel-magit-generate-message= — write the commit message from the staged diff | =gptel-magit.el:495= via =tools/llm/config.el= |
+| =M-r= (in a commit buffer) | Same, with a rationale prompt | =gptel-magit.el:496= |
+| =g= (in the =magit-commit= transient) | "Generate commit" | =gptel-magit.el:497-498= |
+| =x= (in the =magit-diff= transient) | "Explain" this diff | =gptel-magit.el:506= |
+
+=ob-gptel= is also live: its completion-at-point function is added to org
+buffers (=tools/llm/config.el=), so an Org Babel block can call a model
+directly. Both were believed unwired during the audit and are not.
+
+* Org and notes
+:PROPERTIES:
+:ID:       cheat-org
+:END:
+
+| Key | Command | Source |
+|-----+---------+--------|
+| =SPC n a= | =org-agenda= — the dispatcher, including this repo's own views below | =+evil-bindings.el:615= |
+| =SPC X= | =org-capture= from anywhere | =+evil-bindings.el:339= |
+| =SPC n n= / =SPC n N= | Org capture / go to the capture target | =+evil-bindings.el:633-634= |
+| =SPC n f= / =SPC n F= | Find file in notes / browse notes | =+evil-bindings.el:629-630= |
+| =SPC n s= / =SPC n S= | Search notes / search agenda headlines | =+evil-bindings.el:637-638= |
+| =SPC n e= | =org-noter= — annotate a PDF against an Org file | =+evil-bindings.el:627= |
+| =SPC m a c= / =p= / =P= | org-download: screenshot / clipboard / yank an image into the document | =lang/org/config.el:745-747= |
+| =C-c C-x @= | =org-cite-insert= | Org built-in |
+
+Custom agenda views added in Phase 7, reachable from =SPC n a= (defined in
+=config.org=, "Org Agenda custom views"):
+
+| Key | View |
+|-----+------|
+| =d= | Day — Today, In progress, Blocked, Inbox |
+| =w= | Week ahead |
+| =b= | Blocked — unblocking sweep |
+| =u= | Unfiled inbox (=todo.org=) |
+| =s= | Stale — TODOs with neither a scheduled date nor a deadline |
+
+=s= exists because such items appear in *no* ordinary agenda view; without it
+they are invisible until someone re-reads the file.
+
+Also live with no configuration from this repo: =org-modern= and =org-appear=
+(both hooked by the =+pretty= flag, =lang/org/contrib/pretty.el:7,11=),
+=toc-org= (=lang/org/config.el:902=) and =ox-pandoc= (=:524=).
+
+* Evaluate, build and debug
+:PROPERTIES:
+:ID:       cheat-eval
+:END:
+
+| Key | Command | Source |
+|-----+---------+--------|
+| =SPC c e= | Evaluate buffer or region, result in an overlay (=+overlay= flag) | =+evil-bindings.el:459= |
+| =SPC c E= | Evaluate and *replace* the region with its result | =+evil-bindings.el:460= |
+| =SPC c s= | Send buffer or region to a REPL | =+evil-bindings.el:464= |
+| =SPC o r= / =SPC o R= | Open a REPL in another window / this window | =+evil-bindings.el:687-688= |
+| =M-r= | =+eval/buffer= | =+evil-bindings.el:329= |
+| =SPC c c= / =SPC c C= | =compile= / =recompile= | =+evil-bindings.el:455-456= |
+| =SPC c f= | Format buffer or region | =+evil-bindings.el:461= |
+| =SPC c x= | List diagnostics | =+evil-bindings.el:469= |
+| =SPC d d= | =dape= — start a debug session | =+evil-bindings.el:473= |
+| =SPC d p= / =SPC d c= | Pause / continue | =+evil-bindings.el:474-475= |
+
+quickrun backs =+eval= for languages with no REPL, and has its own popup rule
+(=tools/eval/config.el:56-59=). =:tools make= runs project Make targets through
+=makefile-executor= (=tools/make/autoload.el=).
+
+* Buffers, UI and toggles
+:PROPERTIES:
+:ID:       cheat-ui
+:END:
+
+| Key | Command | Source |
+|-----+---------+--------|
+| =SPC b i= | =ibuffer= | =+evil-bindings.el:406= |
+| =SPC b I= | ibuffer scoped to the current workspace | =+evil-bindings.el:400= |
+| =SPC b x= | Scratch buffer | =+evil-bindings.el:421= |
+| =SPC f r= | Recent files | =+evil-bindings.el:513= |
+| =SPC f P= | Browse this private config | =+evil-bindings.el:512= |
+| =SPC f h= | *Open a heading in the literate config* — jumps into =config.org= | =+evil-bindings.el:509= |
+| =SPC t z= / =SPC t Z= | Zen mode / zen fullscreen | =+evil-bindings.el:873-874= |
+| =SPC t m= | Minimap (=demap-toggle=) | =+evil-bindings.el:860= |
+| =SPC t b= | Big font mode — for screen sharing | =+evil-bindings.el:847= |
+| =SPC t i= | Indent guides (=indent-bars-mode=) | =+evil-bindings.el:856= |
+| =SPC t l= | Line numbers | =+evil-bindings.el:858= |
+| =SPC t w= | Soft line wrapping | =+evil-bindings.el:871= |
+| =SPC t f= | Flycheck | =+evil-bindings.el:852= |
+| =SPC t p= | org-tree-slide presentation mode (new in Phase 7 via =org +present=) | =+evil-bindings.el:862= |
+| =SPC t s= | Spell checker | =+evil-bindings.el:867= |
+
+=SPC f h= deserves attention now that [[id:adr-literate-config][ADR-035]] made
+=config.org= the configuration: it jumps directly to a heading in it, which
+beats opening the file and searching.
+
+Undo: =undo-fu= is remapped onto the normal undo/redo keys
+(=emacs/undo/config.el:15-16=), sessions persist across restarts, and =vundo=
+(=:51=) draws the undo *tree* when linear undo is not enough.
+
+* Things that exist but have no key yet
+:PROPERTIES:
+:ID:       cheat-unbound
+:END:
+
+Recorded so they are not rediscovered from scratch:
+
+- =treesit-fold= — installed, and usable for the first time now that Phase 7
+  installed tree-sitter grammars. Doom's =:editor fold= dispatches the =z= keys
+  across hideshow, vimish-fold and treesit-fold, so it is partly reachable
+  already; no dedicated binding was added.
+- =consult-dir=, =consult-yasnippet=, =consult-flycheck=, =wgrep= — all
+  configured by the vertico module (=completion/vertico/config.el:196-320=). The
+  =embark-export= → =wgrep= loop (act on a search result set, export it to a
+  buffer, edit every match, save) is the highest-value unused workflow in this
+  config, and =embark-act= is on =SPC a=.
+- =crdt= (=:tools collab +tunnel=) and =:app irc= — enabled, no configuration, no
+  use to date.
+
+* Maintaining this file
+:PROPERTIES:
+:ID:       cheat-maintenance
+:END:
+
+Line numbers drift when Doom is upgraded. When a citation stops matching, re-read
+the source rather than patching the number from memory — the point of this file
+is that every row was verified once, and a guessed correction quietly destroys
+that property. =SPC h b b= remains the authority for what is bound *right now*.

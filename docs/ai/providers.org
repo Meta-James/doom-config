@@ -19,10 +19,46 @@ never storing the value in a variable. See [[id:adr-gptel-rework][ADR-006]].
 | Tool          | Credential source                          | Entry (pass path) | Status |
 |---------------+----------------------------------------------+----------------------+--------|
 | claude-code-ide.el (Phase 6) | Claude CLI's own subscription login | N/A — not a pass entry | Pending |
-| gptel (Anthropic, default)   | =:tools pass= =+pass-get-secret= | =api/anthropic= | Live — resolves to a 108-char string, verified without printing it |
-| gptel (OpenAI, secondary)    | =:tools pass= =+pass-get-secret= | =api/openai= | Live — resolves to a 164-char string, verified without printing it |
+| gptel (Anthropic, default)   | =:tools pass= =+pass-get-secret= | =api/anthropic= | *Broken as of 2026-08-30* — was live (108-char string, verified without printing it); the store no longer exists |
+| gptel (OpenAI, secondary)    | =:tools pass= =+pass-get-secret= | =api/openai= | *Broken as of 2026-08-30* — was live (164-char string, verified without printing it); the store no longer exists |
 | gptel (Gemini)               | N/A | =api/gemini= | Explicitly skipped per user request — see [[id:adr-gptel-rework][ADR-006]] |
 | copilot.el (Phase 5)         | GitHub's own device-code login flow (unrelated to =pass=) | N/A | Unchanged |
+
+* Store status, 2026-08-30
+:PROPERTIES:
+:ID:       providers-store-status
+:END:
+
+Found during the Phase 7 audit ([[id:roadmap-phase-7][roadmap]]): the password
+store this whole document describes is *gone*. Not misconfigured — absent.
+
+- No =pass= binary anywhere on the system, and no =pass= apt package installed.
+- No =~/.password-store=, no =~/.local/share/password-store=, and
+  =PASSWORD_STORE_DIR= unset.
+- =~/.gnupg/private-keys-v1.d/= is empty, directory dated 2020-06-06. There is
+  no GPG secret key, so even a recovered store could not be decrypted. The only
+  key in the public keyring belongs to a Debian developer and was presumably
+  imported for package verification.
+- No backup of a store was found anywhere under =/home/james=.
+
+Consequence: =config.org='s =+pass-get-secret= calls for =api/anthropic= and
+=api/openai= fail, so gptel's Anthropic and OpenAI backends do not work. This
+was plausibly unnoticed because agentic work goes through claude-code-ide.el,
+which uses the Claude CLI's own subscription login and never touches =pass=.
+=+pass-get-field= for =mail/oauth2-google-client= fails the same way, which is a
+second, independent reason [[id:adr-calendar-org-gcal][ADR-025]]'s calendar work
+has not been able to proceed.
+
+Rebuilding is not a recovery — there is nothing to decrypt. It means a new GPG
+key, =pass init=, and re-entering each secret from its provider's dashboard.
+Those steps are interactive by nature (a passphrase, and secret values) and are
+deliberately not scripted. =pass= and =pass-otp= are installed; the remaining
+sequence is recorded as a checklist in PROJECT.org §7.7, which also records the
+one detail that had been an open question since [[id:adr-calendar-org-gcal][ADR-025]]: the client-id field
+name is =client_id=, settled from =auth-source-pass= source rather than guessed.
+
+When the store is rebuilt, update the Status column above rather than leaving
+this section to contradict it.
 
 Requirements carried over from [[id:std-credentials][standards.org]]: no secret values in git, in Org
 Babel results, in command transcripts, or in =CLAUDE.md=/=AGENTS.md=/prompts/logs.

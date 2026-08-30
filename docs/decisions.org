@@ -6121,3 +6121,305 @@ one-directional.
 - Doom changes =:config literate='s tangling internals — the =defadvice!=
   overrides a module-internal hook function, which is exactly the kind of thing
   an upstream refactor renames.
+
+* ADR-036: Phase 7 module-flag and =:lang= sweep — activate flags on modules already enabled
+:PROPERTIES:
+:ID:       adr-module-flag-sweep
+:STATUS:   Implemented; live verification pending in the user's own session
+:DATE:     2026-08-30
+:END:
+
+** Context
+[[id:adr-module-sweep-non-lang][ADR-029]] enabled 22 modules at Doom defaults and recorded that none of them
+had any configuration. An audit on 2026-08-30 went a level deeper and asked a
+different question: not "which modules are off?" but "which modules are on and
+doing nothing?"
+
+The measurement: the Emacs half of =config.org= is about 590 lines of code, and
+over half of it belongs to four areas (ghostel, Vulpea, mu4e, Python/LSP). About
+35 enabled modules and module flags have zero configuration, and 55 installed
+packages are never named in =config.org= at all.
+
+Most of that is not a problem to fix with elisp — Doom binds keys for avy,
+embark, vundo, git-timemachine, quickrun and the =:tools lookup= stack whether
+this repo configures them or not, so the gap there is discoverability and
+belongs in a document, not in =config.el=. But a subset was genuinely inert, and
+another subset was a flag that had simply never been turned on.
+
+The most serious finding was tree-sitter. =treesit-available-p= returned =t=,
+Doom's =:tools tree-sitter= module set =treesit-enabled-modes t= and
+=treesit-font-lock-level 4=, and =+tree-sitter= was on =:lang json=, =markdown=
+and =python= — but =treesit-language-available-p= returned =nil= for every
+language checked, and no grammar directory existed anywhere under
+=~/.config/emacs/.local=. Every =*-ts-mode= had been silently falling back for
+as long as the flags had been set.
+
+** Decision drivers
+- Capability that is enabled but inert is worse than capability that is off: it
+  reads as working in =init.el= and in =docs/inventory.org=, so nobody looks.
+- Doom-first ([[file:../AGENTS.md][AGENTS.md]]): a flag Doom already ships beats
+  configuration written here.
+- One tool per responsibility per axis ([[id:std-no-duplication][standards.org]]).
+  Several attractive flags fail this test, and failing it is a reason to decline
+  a flag, not a reason to make an exception.
+- A flag whose external binary is absent is not an activation, it is a warning
+  in =doom doctor= plus a fresh piece of inert configuration.
+
+** Candidates
+| Candidate | Fate | Reason |
+|-----------+------+--------|
+| Turn on every available flag on every enabled module | Rejected | Three of them collide with a documented contract or a package already owning that axis; two more have no backing binary installed |
+| Turn on nothing, document the gap only | Rejected | Leaves tree-sitter inert, which was the finding that prompted the audit |
+| Selective activation, each flag justified against an existing contract | Chosen | What is recorded below |
+
+** Decision
+Enabled, in the =init.el= block of =config.org=:
+
+| Module | Change | Why |
+|--------+--------+-----|
+| =:completion vertico= | =+childframe= | Minibuffer completion in a child frame; no second engine involved |
+| =:checkers syntax= | =+childframe +icons= | The module previously ran with *no flags at all* |
+| =:editor format= | =+lsp= | Formatting previously reached Python only, via an explicit =set-formatter!= |
+| =:lang latex= | =+cdlatex +fold= | =auctex= and =auctex-cont-latexmk= were already installed |
+| =:lang org= | =+present +crypt= | Extends a module already heavily used |
+| =:lang data= | enabled | CSV/XML/TOML editing, previously commented out |
+| =:lang graphviz= | enabled | =dot= is installed; one of the five left commented in [[id:adr-init-flag-audit][ADR-026]] |
+| =:lang rest= | =+jq= | =jq= is installed |
+| =:lang web= | =+tree-sitter= | Grammars installed as part of this ADR |
+| =:lang yaml= | =+tree-sitter= | Same |
+
+Tree-sitter grammars were installed into
+=~/.config/emacs/.local/etc/tree-sitter/= — nineteen of them, using Doom's own
+=treesit-language-source-alist=, which is ABI-gated per language and already
+redirects installs to the profile data directory. No grammar recipes were added
+to =config.org=; there was nothing to add.
+
+** Evidence
+- Grammar absence, before: =treesit-language-available-p= returned =nil= for
+  =python json bash markdown c yaml toml=, and =~/.config/emacs/.local= contained
+  no =tree-sitter= directory and no =libtree-sitter-*.so= anywhere.
+- Grammar presence, after: nineteen =.so= files installed; a fresh process
+  reports =t= for =python json bash markdown yaml html css javascript typescript
+  latex org toml c regex=. Two grammars (=make=, =bibtex=) build and install but
+  still report unavailable — the shared object exists and the language symbol
+  inside it does not match. Cosmetic, and neither has a major mode in use here.
+- End-to-end, in a disposable headless daemon: visiting =t.py=, =t.json= and
+  =t.yaml= yields =python-ts-mode=, =json-ts-mode= and =yaml-ts-mode=. Before
+  this ADR all three fell back to their non-tree-sitter modes.
+- =doom doctor= after the sweep: five warnings. One is the standing false
+  positive about Emacs 31.1 being a "development build". The other four are
+  =:lang data= and =:lang web= reporting absent optional binaries (=xmllint=,
+  =tidy=, =stylelint=, =js-beautify=), all installed the same day; see PROJECT.org
+  §7.0 for the itemised list.
+- The batch approach that does *not* work, recorded so it is not retried:
+  =doom emacs --batch -l script.el= loads Emacs without Doom's module
+  configuration, so =treesit-language-source-alist= is empty (0 recipes) and
+  =treesit-extra-load-path= is =nil=. A disposable headless daemon sees all 73
+  recipes and the correct install directory.
+
+** Rejected alternatives
+- =:completion corfu +tng= — TAB-and-go. Rejected *for now*, not on principle.
+  =docs/ai/keybindings.org= records a live-verified TAB precedence chain
+  (Copilot overlay, then a yasnippet field, then Corfu, then a pending NES edit,
+  then ordinary indent) in which Corfu accepts on =RET=, deliberately. =+tng=
+  rewires exactly that. It is a candidate for its own ADR with its own
+  headless-daemon verification, not a line in a sweep.
+- =:lang org +journal= — org-journal duplicates the Vulpea dailies at
+  =config.org::Vulpea dailies=, roughly fifty lines of working code with its own
+  keybindings under =SPC n v=. [[id:adr-org-roam-with-vulpea][ADR-027]] already
+  settled that Vulpea wins on overlap; the same reasoning applies unchanged.
+- =:tools lsp +booster= — this was in the approved plan and had to be withdrawn.
+  Doom's own doctor for the module reads =(error! "+booster does nothing without
+  +eglot")=, and the lsp-mode half of the integration in =modules/tools/lsp/
+  +lsp.el= is commented out behind a =TODO=. This config uses lsp-mode, with
+  =lsp-pyright=, =lsp-ui= and =lsp-treemacs= configured against it. The flag
+  would install a binary that nothing calls. Revisit only alongside a genuine
+  lsp-mode-to-eglot migration, which is a much larger decision.
+- =:lang nix=, =:lang plantuml= — neither =nix= nor =plantuml= is installed, so
+  enabling either produces a doctor warning and an inert major mode.
+- =:lang yaml +lsp=, =:lang web +lsp= — =yaml-language-server= and
+  =typescript-language-server= are not installed. The flags become correct the
+  moment their language servers are installed (done 2026-08-30), and are cheap to
+  add now.
+- =:lang python +uv= — =uv= is not installed and =poetry= and =pyenv= are, both
+  already covered by existing flags.
+
+** Consequences
+- Ten previously commented-out or unflagged module lines are now active, and
+  =doom sync= installed the packages behind them: =vertico-posframe=,
+  =flycheck-posframe=, =cdlatex=, =org-tree-slide=, =restclient=,
+  =ob-restclient=, =web-mode=, =yaml-mode=, =graphviz-dot-mode=, =csv-mode=.
+- Python, JSON, YAML, HTML, CSS, JavaScript, TypeScript, Markdown, LaTeX, Org
+  and shell buffers now use tree-sitter major modes with
+  =treesit-font-lock-level 4=. This is a visible change to syntax highlighting
+  in daily use, not only an internal one.
+- =treesit-fold=, installed and never referenced in =config.org=, now has
+  something to fold. It is not bound to anything yet.
+- Four new =doom doctor= warnings until the optional binaries are installed
+  (done 2026-08-30; doctor is back to one standing false positive).
+- =init.el= block edits take effect one =doom sync= late, so this ADR's changes
+  required two syncs, as [[id:adr-literate-config][ADR-035]] predicted.
+
+** Validation
+- =doom sync= twice, then =doom doctor=: five warnings, all accounted for above.
+- Grammar availability from a fresh process, and =major-mode= on real files in a
+  disposable daemon. Both recorded under Evidence.
+- Not yet done, and needing the user's own session: confirming that
+  =+childframe= on =vertico= and =syntax= behaves in a real graphical frame, that
+  =format +onsave +lsp= does not fight the explicit =black= formatter set for
+  Python, and that tree-sitter highlighting is an improvement rather than a
+  surprise in Org and LaTeX buffers specifically.
+
+** Rollback
+Revert the =init.el= block in =config.org= and =doom sync= twice. Grammars are
+inert data: deleting =~/.config/emacs/.local/etc/tree-sitter/= returns every
+=*-ts-mode= to its fallback with no other effect, and Doom's module handles the
+missing-grammar case explicitly.
+
+** Revisit when
+- The language servers are in place (they now are), at which point =yaml +lsp= and
+  =web +lsp= become worth adding.
+- A migration from lsp-mode to eglot is genuinely on the table, which is the
+  only thing that makes =+booster= meaningful.
+- The =+tng= question is picked up as its own decision.
+- =make= or =bibtex= tree-sitter grammars start mattering, at which point the
+  symbol-name mismatch is worth chasing rather than noting.
+
+* ADR-037: Adopt a subset of the Emacs 30.x/31.1 built-ins, and record the ones this config should not take
+:PROPERTIES:
+:ID:       adr-emacs-31-builtins
+:STATUS:   Implemented; live verification pending in the user's own session
+:DATE:     2026-08-30
+:END:
+
+** Context
+Emacs 31.1 was installed on 2026-08-26. This configuration predates it and was
+written against the 29/30 feature set, so the 30.1, 30.2 and 31.1 releases
+shipped a quantity of built-in functionality that nothing here uses. A read of
+=/usr/local/share/emacs/31.1/etc/NEWS= and =NEWS.30= against =config.org= found
+roughly twenty-five candidates with zero mentions.
+
+The interesting half of this decision is not which ones to take. It is that most
+of the attractive-sounding ones are second implementations of something Doom or
+an installed package already owns, and taking them would violate
+[[id:std-no-duplication][=std-no-duplication=]] while looking like modernization.
+Those are recorded here explicitly so the question is answered once rather than
+re-asked at every Emacs release.
+
+** Decision drivers
+- Every symbol must be confirmed to exist in *this* build before it is set.
+  Version-gated NEWS entries and =boundp= are not the same claim.
+- One implementation per axis. "It is built in now" is not by itself a reason to
+  displace something that works.
+- Prefer settings that need no keybinding. The TAB and leader-key surfaces here
+  are already documented contracts.
+
+** Candidates and decision
+Adopted, in a new =config.org= section, "Emacs 31.1 built-ins":
+
+| Symbol | Version | What it buys |
+|--------+---------+--------------|
+| =trusted-content= | 30.1 | Allowlist for evaluating embedded code without prompting; gates elisp Flymake and local variables |
+| =kill-region-dwim= | 31.1 | =C-w= with no region kills the previous word instead of signalling |
+| =eldoc-help-at-pt= | 31.1 | =help-echo= text (Flycheck overlays, LSP hovers) via ElDoc, no mouse needed |
+| =split-window-preferred-direction= | 31.1 | Automatic splits follow the longer axis instead of always splitting vertically |
+| =minibuffer-regexp-mode= | 31.1 | Highlights regexp metacharacters while typing one in the minibuffer |
+| =find-function-mode= | 31.1 | Installs =C-x F= / =C-x V= / =C-x K= for find-function/variable/key |
+| =hs-show-indicators=, =hs-display-lines-hidden= | 31.1 | Fold markers in the fringe and a hidden-line count |
+
+=trusted-content= is scoped to two directories — this repository and =~/org= —
+rather than =:all=. It is an allowlist of paths whose code Emacs will run
+without asking, and it exists because of CVE-2024-53920, so the narrow scope is
+the point. It is set here at all because [[id:adr-literate-config][ADR-035]] made
+=config.org= the configuration itself, re-tangling on every save.
+
+** Evidence
+Every adopted symbol was checked with =boundp=/=fboundp= in this build before
+being written, several after =require='ing the library that defines them
+(=hideshow=, =project=, =xref=, =dired=). After tangling, a disposable headless
+daemon returned:
+
+#+begin_example
+(:trusted ("/home/james/.config/doom/" "/home/james/org/") :kill emacs-word
+ :eldoc t :split longest :minire t :findfn t :hs (t t))
+#+end_example
+
+with no errors or warnings during daemon startup.
+
+** Rejected alternatives
+Each of these was a real candidate, and each is rejected for a specific reason
+rather than on taste:
+
+- =global-completion-preview-mode= (30.1) — a third engine on the in-buffer
+  completion axis, alongside Corfu and Copilot. Directly against
+  [[id:adr-corfu-migration][ADR-021]] and =std-no-duplication=.
+- =mode-line-collapse-minor-modes= (31.1) — pointless here. Doom sets
+  =doom-modeline-minor-modes nil= in =modules/ui/modeline/config.el:20=, so minor
+  modes are already hidden, and doom-modeline builds its own segments rather
+  than consuming the vanilla ones this option affects.
+- =vc-auto-revert-mode= (31.1) — Doom ships =doom-auto-revert-mode=
+  (=lisp/doom-emacs.el:1391=), described in its own docstring as "a more
+  performant alternative to =global-auto-revert-mode=", hooked to
+  =doom-first-file-hook=. Taking the built-in would mean two revert systems.
+- =project-mode-line=, =project-list-exclude=, =project-prune-zombie-projects=
+  (30.1/31.1) — projectile is the primary project system here and doom-modeline
+  already displays the project. =project.el= appears once in =config.org=, for a
+  single =project-switch-commands= entry.
+- =completion-eager-display=, =minibuffer-visible-completions= (31.1) — Vertico
+  owns the minibuffer axis.
+- =delete-selection-local-mode= (31.1) — Evil owns selection behavior.
+- =package-autosuggest-mode= (31.1) — assumes =package.el=. This config is
+  straight-only, and =std-doom-first= forbids a second package manager.
+- =etags-regen-mode= (30.1) — lsp-mode and dumb-jump cover it.
+- =global-visual-wrap-prefix-mode= (30.1), built-in =which-key=, built-in
+  =editorconfig= — already provided by =:editor word-wrap=, Doom core, and
+  =:tools editorconfig=. Nothing to do; recorded so the question is not re-asked.
+- =hs-cycle= / =hs-toggle-all= bound to TAB — the obvious binding is the one key
+  this config cannot spend. =docs/ai/keybindings.org= documents a live-verified
+  TAB precedence chain. The *display* halves of the same NEWS entry are adopted
+  above precisely because they need no key.
+- =timeout= (31.1, throttle/debounce) — this was in the approved plan, aimed at
+  the Vulpea backlinks updater, and is withdrawn on inspection.
+  =my/vulpea-buffer--maybe-update= already returns immediately unless the
+  backlinks window is visible, and re-renders only when the note ID actually
+  changed. The one real cost is a =vulpea-db-query-by-file-path= call per window
+  change while the panel is open, and no slowness has been observed or measured.
+  Debouncing it now would be optimizing a problem nobody has reported.
+- =system-taskbar-mode= (31.1) — deferred to the "notifications and desktop
+  integration" future phase in =docs/roadmap.org=, not pulled forward.
+- =native-comp-async-on-battery-power= — not bound in this build.
+
+** Consequences
+- Seven new settings, no new packages, no new keybindings, and no change to any
+  documented key contract.
+- =trusted-content= means Emacs will evaluate file-local variables and run elisp
+  Flymake inside =~/.config/doom/= and =~/org/= without prompting. That is a
+  deliberate, scoped reduction in prompting, and it is the one entry in this ADR
+  with a security dimension. Anything placed in either tree is trusted code.
+- A list of built-ins this config should *not* adopt now exists, with reasons,
+  which is the part most likely to save work at the next Emacs release.
+
+** Validation
+Recorded under Evidence: symbol existence checks before writing, and a live
+readback of all seven values from a headless daemon after tangling, with a clean
+startup log. Not yet verified in the user's own session: that =hs-show-indicators=
+renders acceptably in the fringe alongside =:ui vc-gutter +pretty=, and that
+=find-function-mode='s =C-x= bindings do not collide with anything Evil or Doom
+puts there.
+
+** Rollback
+Delete the "Emacs 31.1 built-ins" section from =config.org= and re-tangle. Every
+entry is a =setq= or a global minor mode with no persistent state; nothing needs
+undoing beyond the removal itself.
+
+** Revisit when
+- Emacs 32 ships, at which point the rejected list above is the place to start
+  rather than re-reading NEWS from scratch.
+- The completion axis changes — a move away from Corfu or Copilot would reopen
+  =completion-preview-mode=.
+- doom-modeline is dropped or replaced, which would reopen
+  =mode-line-collapse-minor-modes= and =project-mode-line=.
+- The Vulpea backlinks panel is actually observed to be slow, which is the
+  condition for reconsidering =timeout=.
+- =:editor fold= is reworked, which is the natural moment to reconsider whether
+  =hs-cycle= deserves a key after all.

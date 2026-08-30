@@ -115,7 +115,12 @@ method, and rollback/removal method.
 
 - Don't activate or redesign EXWM until its own phase.
 - Don't build the full Org Agenda system until its own phase.
-- Don't migrate this entire configuration to literate programming.
+- ~~Don't migrate this entire configuration to literate programming.~~
+  *Superseded 2026-08-29 by [[id:adr-literate-config][ADR-035]]*, which did
+  exactly that: =config.org= is now the single source of truth and tangles
+  =init.el=, =packages.el=, =config.el=, =~/.bashrc=, =~/.inputrc= and
+  =~/.gitconfig=. The rule stood while the config was three hand-edited files
+  and the shell layer kept silently reverting; the ADR resolved both.
 - Don't create a private Doom module (=config/development.el= etc.) until a
   subsystem is stable enough to justify the split.
 

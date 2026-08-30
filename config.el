@@ -221,6 +221,52 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
         doom-modeline-time nil           ; set to t if you want a clock
         doom-modeline-battery nil))      ; set to t on laptops
 
+;; Emacs 31.1 built-ins (docs/decisions.org ADR-037).
+
+;; `trusted-content' (30.1) is an allowlist of files and directories whose
+;; embedded code Emacs may evaluate without prompting -- it gates elisp Flymake
+;; and local-variable evaluation, and exists because of CVE-2024-53920. It is
+;; scoped here to exactly two trees rather than set to `:all': this repo, whose
+;; config.org *is* the configuration and re-tangles on every save (ADR-035), and
+;; the Org directory. Directory entries must be absolute and end in a slash.
+(setq trusted-content
+      (list (file-name-as-directory (expand-file-name "~/.config/doom"))
+            (file-name-as-directory (expand-file-name "~/org"))))
+
+;; `kill-region-dwim' (31.1): C-w with no active region kills the previous word
+;; instead of signalling an error. Only reachable in Emacs state and the
+;; minibuffer -- Evil owns C-w in insert state -- but harmless there and it
+;; removes a papercut in `M-x' and `read-string' prompts.
+(setq kill-region-dwim 'emacs-word)
+
+;; `eldoc-help-at-pt' (31.1): surface `help-echo' text (Flycheck overlays, LSP
+;; hovers, button help) through ElDoc instead of requiring a mouse hover.
+(setq eldoc-help-at-pt t)
+
+;; `split-window-preferred-direction' (31.1): when Emacs splits a window on its
+;; own -- a popup that will not fit, `display-buffer' fallbacks -- split along
+;; whichever axis has more room rather than always vertically.
+(setq split-window-preferred-direction 'longest)
+
+;; `minibuffer-regexp-mode' (31.1): syntax-highlight regexp metacharacters while
+;; typing one in the minibuffer. Applies to `query-replace-regexp', `rgrep' and
+;; Consult prompts alike; costs nothing and is on by default upstream.
+(minibuffer-regexp-mode +1)
+
+;; `find-function-mode' (31.1): installs C-x F / C-x V / C-x K (find function,
+;; variable, key definition at point). Worth having in a config that is itself
+;; several hundred lines of Elisp plus a large module tree to read.
+(find-function-mode +1)
+
+;; Hideshow gained fold affordances in 31.1. Doom's `:editor fold' dispatches
+;; z-prefixed Evil keys across hideshow, vimish-fold and treesit-fold already,
+;; so only the *display* halves are set here -- no new keybindings, because
+;; `hs-cycle' would have to take TAB and TAB is a documented precedence chain
+;; (docs/ai/keybindings.org): Copilot, then yasnippet, then Corfu, then NES.
+(after! hideshow
+  (setq hs-show-indicators t          ; fringe/margin marker on a folded region
+        hs-display-lines-hidden t))   ; and a count of the lines it swallowed
+
 ;; --- Rice pass (docs/decisions.org ADR-022) -------------------------------
 ;; Theme stays doom-zenburn; this section covers font, transparency, cursor
 ;; motion feedback, zen-mode focus dimming, and the dashboard banner.
@@ -384,16 +430,25 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
 (after! projectile
   (setq projectile-project-search-path '("~/Documents/")
         projectile-indexing-method 'alien) ; uses external tools (fast)
-  (add-to-list 'projectile-globally-ignored-directories ".venv")
-  (add-to-list 'projectile-globally-ignored-directories "__pycache__")
-  (add-to-list 'projectile-globally-ignored-directories ".mypy_cache")
-  (add-to-list 'projectile-globally-ignored-directories ".ruff_cache"))
+  ;; Was two `after! projectile' blocks, the second a superset of the first
+  ;; (it added "venv" and ".pytest_cache"). Merged in Phase 7.
+  (dolist (dir '(".venv" "venv" "__pycache__" ".mypy_cache" ".pytest_cache" ".ruff_cache"))
+    (add-to-list 'projectile-globally-ignored-directories dir)))
 
-(after! projectile
-  (dolist (p '(".venv" "venv" "__pycache__" ".mypy_cache" ".pytest_cache" ".ruff_cache"))
-    (add-to-list 'projectile-globally-ignored-directories p)))
-
-(map! :leader :desc "Magit status" "g s" #'magit-status)
+;; No Magit keybinding here on purpose. Doom's `:config default +bindings'
+;; already binds roughly thirty-five keys under `SPC g' -- status at `SPC g g',
+;; the forge dispatch at `SPC g '', git-timemachine at `SPC g t', git-link at
+;; `SPC g y', and issue/PR find-browse-list submaps under `f'/`o'/`l'. This repo
+;; previously added `SPC g s' -> `magit-status', which did two unhelpful things:
+;; it duplicated `SPC g g', and because `config.el' loads after all modules it
+;; *overwrote* Doom's `SPC g s' -> `+vc-gutter/stage-hunk'. Measured in a
+;; headless daemon before removal: `(lookup-key doom-leader-map (kbd "g s"))'
+;; and `(kbd "g g")' both returned `magit-status'. Same shadowing mechanism as
+;; ADR-028's `SPC o l' collision, on a smaller scale.
+;;
+;; `gptel-magit' needs nothing here either: `:tools llm' installs it via
+;; `:hook (magit-mode . gptel-magit-install)', which binds `M-g' in the commit
+;; buffer and adds "Generate commit" to the `magit-commit' transient.
 
 ;; `my/project-ghostel' lived here from the vterm era (ADR-014) purely because
 ;; vterm shipped no project-root-scoped entry point of its own. Ghostel does:
@@ -961,7 +1016,25 @@ matching window is found."
 ;; the file target, so the note gets an ID/backlinks like any
 ;; `vulpea-find'-created note would).
 (after! org
-  (setq org-agenda-files (list org-directory)
+  ;; `org-agenda-files' expands a *directory* entry non-recursively -- it picks
+  ;; up that directory's own .org files and does not descend. The original
+  ;; `(list org-directory)' therefore resolved to exactly two files,
+  ;; ~/org/todo.org and ~/org/doom.org, while ADR-017 and the comment above both
+  ;; describe it as covering "the whole pre-existing `org-directory' tree".
+  ;; Measured in a headless daemon during Phase 7: `(org-agenda-files)' returned
+  ;; those two paths out of 68 .org files in the tree -- work/ (15 files),
+  ;; personal/ (3), calendar/ (2, org-gcal-owned), daily/, mtg/ and test/ were
+  ;; all invisible to every agenda view. The calendar/ case also quietly
+  ;; undercut ADR-025, which assumes synced Google events reach the agenda.
+  ;;
+  ;; Listing `org-directory' plus each of its immediate subdirectories gives the
+  ;; documented behaviour. Depth-1 only, and evaluated at load: a *new*
+  ;; subdirectory needs a reload to be picked up, which is the tradeoff for not
+  ;; re-scanning the tree on every agenda build.
+  (setq org-agenda-files
+        (cons org-directory
+              (seq-filter #'file-directory-p
+                          (directory-files org-directory t "\\`[^.]")))
         org-todo-keywords
         '((sequence "TODO(t)" "IN-PROGRESS(i)" "BLOCKED(b)" "|" "DONE(d)" "REJECTED(r)"))
         org-capture-templates
@@ -976,6 +1049,48 @@ matching window is found."
                     (vulpea-note-path
                      (vulpea-create (read-string "Title: ")))))
            "%?"))))
+
+(after! org
+  (setq org-agenda-custom-commands
+        `(("d" "Day — what is actually live"
+           ((agenda "" ((org-agenda-span 1)
+                        ;; Doom sets `org-agenda-start-day' to "-3d" globally, so
+                        ;; a span-1 view that does not override it renders three
+                        ;; days ago under the heading "Today". Caught in a daemon:
+                        ;; the block was labelled Today and dated 27 August while
+                        ;; the system clock said the 30th.
+                        (org-agenda-start-day nil)
+                        (org-agenda-overriding-header "Today")))
+            (todo "IN-PROGRESS"
+                  ((org-agenda-overriding-header "In progress")))
+            (todo "BLOCKED"
+                  ((org-agenda-overriding-header "Blocked — needs something")))
+            (todo "TODO"
+                  ((org-agenda-files
+                    (list ,(expand-file-name "todo.org" org-directory)))
+                   (org-agenda-overriding-header "Inbox")))))
+
+          ("w" "Week ahead"
+           ((agenda "" ((org-agenda-span 7)
+                        (org-agenda-start-day nil) ; same -3d inheritance
+                        (org-agenda-overriding-header "Next seven days")))))
+
+          ("b" "Blocked — unblocking sweep"
+           todo "BLOCKED"
+           ((org-agenda-overriding-header "Everything blocked")))
+
+          ("u" "Unfiled inbox"
+           todo "TODO"
+           ((org-agenda-files
+             (list ,(expand-file-name "todo.org" org-directory)))
+            (org-agenda-overriding-header "Inbox — file or schedule these")))
+
+          ("s" "Stale — TODOs with no date attached"
+           todo "TODO"
+           ((org-agenda-skip-function
+             '(org-agenda-skip-entry-if 'scheduled 'deadline))
+            (org-agenda-overriding-header
+             "Unscheduled TODOs (no scheduled date, no deadline)"))))))
 
 ;; Vulpea dailies (docs/decisions.org ADR-018): a hand-rolled equivalent of
 ;; org-roam-dailies -- Vulpea itself has no daily-note concept. Each day is

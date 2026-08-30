@@ -1028,3 +1028,94 @@ subcommand: =doom --force sync --rebuild=.
 a wrapper layer silently eating a subprocess's output — but a different cause
 (the rtk Bash hook, not a missing TTY). If a =doom= command is silent, try the
 =script= wrapper first; if an =emacsclient= command is silent, try =rtk proxy=.
+
+* RESOLVED: =doom sync= hangs forever when stdin is left over from a heredoc
+:PROPERTIES:
+:ID:       tshoot-daemon-blocks-doom-sync
+:DATE:     2026-08-30
+:END:
+
+** Symptom
+=doom sync= runs forever with no output and no error. Other syncs in the same
+session finish in about six seconds; this one was still running after ten and a
+half minutes.
+
+The tell is in =ps=, not in the output:
+
+#+begin_example
+PID     ELAPSED  TIME      STAT %CPU
+103398  10:41    00:00:00  SN   0.0
+#+end_example
+
+Ten and a half minutes elapsed against *zero* accumulated CPU time, process
+state =SN=, and =find ~/.config/emacs/.local -newermt '-3 minutes'= returning
+nothing. It is blocked, not working. A sync that is genuinely compiling shows
+CPU time climbing and files being written.
+
+** Cause
+Doom's CLI reads standard input. When it is invoked from a shell whose stdin has
+been left in an unusual state — specifically, in the same shell invocation as an
+earlier heredoc (=python3 - <<'PYEOF' ... PYEOF=, the shape an agent uses to
+patch =config.org= before re-tangling) — that read blocks forever instead of
+returning EOF.
+
+This is the same underlying sensitivity as
+[[id:tshoot-doom-cli-needs-pty][the no-PTY entry]], with the opposite outcome:
+no PTY makes the CLI exit 1 immediately, while consumed-heredoc stdin makes it
+block indefinitely.
+
+*Isolated with two 25-second probes*, identical but for stdin:
+
+| Probe | stdin                        | Result             |
+|-------+------------------------------+--------------------|
+| A     | inherited after a heredoc    | hangs, exit 124    |
+| B     | =</dev/null=                 | 5.7s, exit 0       |
+
+** An earlier, wrong diagnosis — recorded on purpose
+The first version of this entry blamed a leftover =emacs --daemon= that happened
+to be running during the first hang. Killing it did make the next sync succeed,
+which looked like confirmation. It was a coincidence: the second hang occurred
+with *no daemon running at all*, and the probes above then isolated stdin as the
+real variable.
+
+Worth remembering as a method point, not just a fact: "I changed X and the
+symptom went away" is weak evidence when the change was not the only thing that
+differed between the two runs. The successful sync was also a standalone command
+with clean stdin.
+
+** Fix
+Redirect stdin explicitly whenever a Doom CLI command follows anything else in
+the same shell invocation:
+
+#+begin_src sh
+~/.config/emacs/bin/doom sync </dev/null
+#+end_src
+
+Running =doom sync= as its own separate command, with nothing before it, also
+works — that is why standalone syncs never showed the problem.
+
+** Diagnosis shortcut
+When a sync exceeds roughly a minute, check =ps -o pid,etime,time,stat -p <pid>=
+before waiting any longer. Zero CPU time against large elapsed time distinguishes
+"blocked" from "slow" immediately, and there is no other signal — no output, no
+error, no exit.
+
+** Two shell hazards met while cleaning this up
+Both bit during this investigation and both are specific to how the agent's Bash
+tool wraps commands:
+
+- =pkill -f <pattern>= and =kill $(... | grep <pattern>)= match *the invoking
+  shell itself*, because the wrapper embeds the whole command string in the
+  process's argv. The shell kills itself and the tool reports exit 144. This
+  happened twice here, the second time while cleaning up after the first.
+- =pgrep -f <pattern>= reports phantom matches for the same reason — its own
+  wrapper, plus any other agent shell whose command line mentions the pattern.
+
+  Filter on =comm= instead, which holds the executable name and can never be the
+  bash wrapper:
+
+  #+begin_src sh
+  ps -eo pid,comm,args | awk '($2=="emacs" || $2=="sh") && /doom/ {print $1}'
+  #+end_src
+
+  =ps -eo pid,args | grep "[e]macs --daemon"= (the bracket trick) is also safe.

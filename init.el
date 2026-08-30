@@ -35,7 +35,7 @@
        ;;helm              ; the *other* search engine for love and life [+childframe +fuzzy +icons]
        ;;ido               ; the other *other* search engine...
        ;;ivy               ; a search engine for love and life [+childframe +fuzzy +icons +prescient]
-       (vertico +icons)    ; the search engine of the future [+childframe +icons]
+       (vertico +icons +childframe) ; the search engine of the future [+childframe +icons]
 
        :ui
        ;;deft              ; notational velocity for Emacs
@@ -66,7 +66,7 @@
        (evil +everywhere)  ; come to the dark side, we have cookies [+everywhere]
        file-templates      ; auto-snippets for empty files
        fold                ; (nigh) universal code folding
-       (format +onsave)    ; automated prettiness [+lsp +onsave]
+       (format +onsave +lsp) ; automated prettiness [+lsp +onsave]
        ;;god               ; run Emacs commands without modifier keys
        lispy               ; vim for lisp, for people who don't like vim
        multiple-cursors    ; editing in many places at once
@@ -94,7 +94,7 @@
        ;;vterm             ; the best terminal emulation in Emacs -- migrated to ghostel, see ADR-014
 
        :checkers
-       syntax              ; tasing you for every semicolon you forget [+childframe +flymake +icons]
+       (syntax +childframe +icons) ; tasing you for every semicolon you forget [+childframe +flymake +icons]
        (spell +flyspell +aspell +everywhere) ; tasing you for misspelling mispelling [+aspell +enchant +everywhere +flyspell +hunspell]
        grammar             ; tasing grammar mistake every you make
 
@@ -134,7 +134,7 @@
        ;;coq               ; proofs-as-programs
        ;;crystal           ; ruby at the speed of c [+lsp]
        ;;csharp            ; unity, .NET, and mono shenanigans [+dotnet +lsp +tree-sitter +unity]
-       ;;data              ; config/data formats
+       data                ; config/data formats
        ;;(dart +flutter)   ; paint ui and not much else [+flutter +lsp +tree-sitter]
        ;;dhall             ; config as code
        ;;elixir            ; erlang done right [+lsp +tree-sitter]
@@ -150,7 +150,7 @@
        ;;gdscript          ; the language you waited for [+lsp +tree-sitter]
        ;;(go +lsp)         ; the hipster dialect [+lsp +tree-sitter]
        ;;(graphql +lsp)    ; Give queries a REST [+lsp +tree-sitter]
-       ;;graphviz          ; diagrams to confuse yourself even more
+       graphviz            ; diagrams to confuse yourself even more
        ;;(haskell +lsp)    ; a language that's lazier than I am [+lsp +tree-sitter]
        ;;hy                ; readability of scheme w/ speed of python
        ;;idris             ; a language you can depend on [+lsp]
@@ -160,7 +160,7 @@
        ;;javascript        ; all(hope(abandon(ye(who(enter(here)))))) [+lsp +tree-sitter]
        ;;julia             ; a better, faster MATLAB [+lsp +snail +tree-sitter]
        ;;kotlin            ; a better, slicker Java(Script) [+lsp +tree-sitter]
-       (latex +lsp)        ; writing papers in Emacs has never been so fun [+cdlatex +fold +lsp]
+       (latex +lsp +cdlatex +fold) ; writing papers in Emacs has never been so fun [+cdlatex +fold +lsp]
        ;;lean              ; for folks with too much to prove [+lsp +v3]
        ;;ledger            ; be audit you can be
        ;;lua               ; one-based indices? one-based indices [+fennel +lsp +moonscript +tree-sitter]
@@ -169,7 +169,7 @@
        ;;nix               ; I hereby declare "nix geht mehr!" [+lsp +tree-sitter]
        ;;ocaml             ; an objective camel [+lsp]
        ;;odin              ; C, minus its footguns [+lsp +tree-sitter]
-       (org +pandoc +roam +gnuplot +jupyter +pretty +noter +dragndrop) ; organize your plain life in plain text [+crypt +dragndrop +gnuplot +journal +jupyter +noter +pandoc +present +pretty +roam]
+       (org +pandoc +roam +gnuplot +jupyter +pretty +noter +dragndrop +present +crypt) ; organize your plain life in plain text [+crypt +dragndrop +gnuplot +journal +jupyter +noter +pandoc +present +pretty +roam]
        ;;php               ; perl's insecure younger brother [+hack +lsp +tree-sitter]
        ;;plantuml          ; diagrams for confusing people more
        ;;purescript        ; javascript, but functional [+lsp]
@@ -177,7 +177,7 @@
        ;;qt                ; the 'cutest' gui framework ever [+lsp +tree-sitter]
        ;;racket            ; a DSL for DSLs [+hash-lang +lsp +xp]
        ;;raku              ; the artist formerly known as perl6
-       ;;rest              ; Emacs as a REST client [+jq]
+       (rest +jq)          ; Emacs as a REST client [+jq]
        ;;rst               ; ReST in peace
        ;;(ruby +rails)     ; 1.step {|i| p "Ruby is #{i.even? ? 'love' : 'life'}"} [+chruby +lsp +rails +rbenv +rvm +tree-sitter]
        ;;(rust +lsp)       ; Fe2O3.unwrap().unwrap().unwrap().unwrap() [+lsp +tree-sitter]
@@ -189,8 +189,8 @@
        ;;solidity          ; do you need a blockchain? No.
        ;;swift             ; who asked for emoji variables? [+lsp +tree-sitter]
        ;;terra             ; Earth and Moon in alignment for performance.
-       ;;web               ; the tubes [+lsp +tree-sitter]
-       ;;yaml              ; JSON, but readable [+lsp +tree-sitter]
+       (web +tree-sitter)  ; the tubes [+lsp +tree-sitter]
+       (yaml +tree-sitter) ; JSON, but readable [+lsp +tree-sitter]
        ;;zig               ; C, but simpler [+lsp +tree-sitter]
 
        :email

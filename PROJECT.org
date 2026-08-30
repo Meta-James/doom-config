@@ -485,3 +485,304 @@ entries. Full writeup: [[id:adr-literate-config][ADR-035]].
 - [ ] Later, incremental: promote in-code comments to Org prose section by
   section, where it earns its keep. Deliberately not done during the migration
   — it would have made the byte-for-byte check impossible.
+
+** TODO Phase 7 — Capability activation: use what is already installed
+:PROPERTIES:
+:ID:       project-phase-7
+:EFFORT:   8h
+:END:
+
+Scoped 2026-08-30 from an audit of enabled-but-unused modules and packages, and
+of the Emacs 30.x/31.1 built-ins this config predates. Roadmap entry:
+[[id:roadmap-phase-7][Phase 7]]. Decisions: [[id:adr-module-flag-sweep][ADR-036]]
+(module flags and =:lang= sweep) and [[id:adr-emacs-31-builtins][ADR-037]] (Emacs
+31.1 built-ins).
+
+*** 7.0 External binaries
+Done 2026-08-30. A one-off =scripts/install-deps.sh= was written to drive this
+(idempotent, =command -v= guarded, with =--check= and =--optional= modes) and
+*deleted afterwards at the user's request* — it had served its purpose and a
+provisioning script is out of scope until the "reproducible machine
+provisioning" future phase wants one properly. The durable part is the list
+below, which is why it is recorded here rather than left in a deleted file.
+
+- [X] Installed, by tier:
+  - *A, unblocks existing config:* =pass=, =pass-otp=, =pyright= (there were no
+    global npm packages at all, so lsp-mode never started for Python, which also
+    disabled =my/python-flycheck-chain-lsp-then-ruff=), and the poppler headers
+    =libpng-dev zlib1g-dev libpoppler-glib-dev libpoppler-private-dev= so
+    =pdf-tools-install= could build =epdfinfo= (its server had only ever existed
+    as =.c= sources). =ruff= and =languagetool= installed by the user via snap.
+  - *B, the four new doctor warnings:* =libxml2-utils= (=xmllint=), =tidy=,
+    =stylelint= + =stylelint-config-standard=, =js-beautify=.
+  - *C, language servers:* =yaml-language-server=, =typescript=,
+    =typescript-language-server=. Already present: =bash-language-server=,
+    =vscode-json/html/css-language-server=, =texlab=, =marksman=.
+  - *D, formatters:* =prettier=, =isort=, =mypy=. Already present: =black=,
+    =shfmt=, =shellcheck=.
+  - *E, LaTeX:* =latexmk=, =texlive-extra-utils= (=latexindent=), =biber=,
+    =texlive-xetex=.
+- [X] Deliberately *not* installed, with reasons: =emacs-lsp-booster= (Doom's own
+  doctor errors "+booster does nothing without +eglot"; this config is
+  lsp-mode), =hunspell= (aspell and enchant-2 work), =mpd= (emms drives mpv),
+  =go= and =nix= (no module enabled).
+- [X] =M-x pdf-tools-install= run — =epdfinfo= now built at
+  =straight/build-31.1/pdf-tools/epdfinfo=, so =:tools pdf=, =org-noter=,
+  =org-pdftools= and images in =nov= work for the first time.
+- [X] =doom doctor= down to *one* warning: the standing false "development build
+  of Emacs (31.1)" positive.
+- [X] Two bugs the script surfaced, worth keeping: =latexmk= is its own apt
+  package on Ubuntu (=texlive-extra-utils= provides =latexindent= but *not*
+  =latexmk=), and =pass-otp= ships a pass *extension* at
+  =/usr/lib/password-store/extensions/otp.bash= rather than a binary, so
+  =command -v pass-otp= never finds it and reports it perpetually missing.
+
+*** 7.1 Repair inert capability
+- [X] Install tree-sitter grammars — 19 of them, via Doom's own ABI-gated
+  =treesit-language-source-alist=, into
+  =~/.config/emacs/.local/etc/tree-sitter/=. Verified end-to-end: =t.py=,
+  =t.json= and =t.yaml= now open in =python-ts-mode=, =json-ts-mode= and
+  =yaml-ts-mode=; before this they all fell back.
+- [X] Correct three stale documentation lines: =docs/standards.org= still
+  forbade literate configuration (ADR-035 did it), =docs/architecture.org= still
+  said Phase 1 was in progress, and =docs/ai/workflows.org= still named vterm as
+  the terminal host (ghostel replaced it 2026-08-17, and the same file's
+  =wf-agent= section already said so).
+- [ ] =make= and =bibtex= grammars build and install but report unavailable —
+  the =.so= exists and its language symbol does not match. Cosmetic; neither has
+  a major mode in use here.
+- [ ] Re-verify elfeed's =+youtube= path and correct the "inert until mpv is
+  installed" comment in =config.org= — =mpv= and =yt-dlp= are both present now.
+- [ ] Decide =:checkers grammar=: =languagetool= is installed now, so wire it or
+  record =writegood-mode= as the working half.
+
+*** 7.2 Module flags and new =:lang= modules ([[id:adr-module-flag-sweep][ADR-036]])
+- [X] Enable =vertico +childframe=, =syntax +childframe +icons=,
+  =format +onsave +lsp=, =latex +cdlatex +fold=, =org +present +crypt=,
+  =:lang data=, =graphviz=, =rest +jq=, =web +tree-sitter=, =yaml +tree-sitter=.
+- [X] Two =doom sync= passes (=init.el= edits land one sync late); new packages
+  built: vertico-posframe, flycheck-posframe, cdlatex, org-tree-slide,
+  restclient, ob-restclient, web-mode, yaml-mode, graphviz-dot-mode, csv-mode.
+- [X] =doom doctor=: five warnings — the standing false "development build"
+  positive, plus four absent optional binaries for =:lang data=/=:lang web=,
+  all covered by tier B of the install script.
+- [X] Declined with reasons recorded in the ADR: =corfu +tng= (rewrites the
+  live-verified TAB contract), =org +journal= (Vulpea owns dailies per ADR-027),
+  =lsp +booster= (Doom's own doctor: "+booster does nothing without +eglot"),
+  =:lang nix= and =:lang plantuml= (no binary), =python +uv= (no binary).
+- [ ] Live-verify in the user's own session: both childframes in a real
+  graphical frame, =format +onsave +lsp= not fighting the explicit =black=
+  formatter, and tree-sitter highlighting in Org and LaTeX specifically.
+
+*** 7.3 Emacs 31.1 built-ins ([[id:adr-emacs-31-builtins][ADR-037]])
+- [X] Adopt seven: =trusted-content= (scoped to this repo and =~/org=, not
+  =:all=), =kill-region-dwim=, =eldoc-help-at-pt=,
+  =split-window-preferred-direction=, =minibuffer-regexp-mode=,
+  =find-function-mode=, and hideshow's =hs-show-indicators= /
+  =hs-display-lines-hidden=.
+- [X] Verify all seven live in a disposable headless daemon, with a clean
+  startup log.
+- [X] Record twelve rejected candidates with reasons, so the question is not
+  re-asked at the next Emacs release. The three worth remembering:
+  =completion-preview-mode= is a third engine on the Corfu/Copilot axis;
+  =vc-auto-revert-mode= duplicates Doom's own =doom-auto-revert-mode=;
+  =mode-line-collapse-minor-modes= is inert because Doom already sets
+  =doom-modeline-minor-modes nil=.
+- [X] =timeout= withdrawn from the plan on inspection — the Vulpea backlinks
+  updater already short-circuits when the panel is hidden and when the note ID
+  is unchanged, and no slowness has been observed. Debouncing it would optimize
+  a problem nobody has reported.
+- [ ] Live-verify: =hs-show-indicators= in the fringe alongside
+  =:ui vc-gutter +pretty=, and =find-function-mode='s =C-x= bindings against
+  Evil and Doom.
+
+*** 7.4 Wire the unwired packages — mostly dissolved on inspection
+The audit that scoped this phase counted "packages installed but never named in
+=config.org=" and got 55. That metric turns out to measure the wrong thing:
+Doom configures the overwhelming majority of them at *module* level, so absence
+from =config.org= means nothing was needed, not that nothing was done.
+
+Checked against module sources, and against a live headless daemon where a hook
+could be observed rather than inferred:
+
+| Believed unwired | Actually | Where |
+|------------------+----------+-------|
+| =gptel-magit= | Already installed by =:tools llm= via =:hook (magit-mode . gptel-magit-install)=. Binds =M-g= in the commit buffer, adds "Generate commit"/"Generate with rationale" to the =magit-commit= transient and "Explain" to =magit-diff= | =modules/tools/llm/config.el=; hook confirmed present on =magit-mode-hook= |
+| =ob-gptel= | Already hooked: =ob-gptel-capf= added to =completion-at-point-functions= in org buffers | same file; confirmed on =org-mode-hook= |
+| =org-modern=, =org-appear= | Already hooked into =org-mode= by the =+pretty= flag this config already sets | =modules/lang/org/contrib/pretty.el:7,11=; both confirmed live |
+| =toc-org= | Already hooked, with =toc-org-hrefify-default= set | =modules/lang/org/config.el:902= |
+| =org-download= | Already configured *and bound* at =SPC m a c/p/P= | same file, =:745-747= |
+| =ox-pandoc= | Already configured | same file, =:524= |
+| =org-noter= | Available; =+noter= is enabled | module |
+| embark, embark-consult, marginalia, consult, =consult-dir=, =consult-flycheck=, =consult-yasnippet=, wgrep, vertico-posframe, vertico-multiform | All have their own =use-package!= blocks in the vertico module | =modules/completion/vertico/config.el:106-335= |
+| yasnippet, =auto-yasnippet= | Configured | =modules/editor/snippets/config.el:10,135= |
+| dape | Configured, and bound under Doom's debugger leader map | =modules/tools/debugger/config.el:6= |
+| magit, forge, git-timemachine, git-link | ~35 bindings under =SPC g=, including the full forge find/browse/list submaps | =modules/config/default/+evil-bindings.el:523-570= |
+
+So this sub-phase is not "write configuration for 55 packages". It is one bug,
+one genuine gap, and a large transfer into [[*7.5 Capability cheatsheet][7.5]],
+which is now clearly the main deliverable of the phase.
+
+- [X] *Bug found and fixed.* =config.org= bound =SPC g s= to =magit-status=. That
+  duplicated =SPC g g= (Doom's own status binding) *and*, because =config.el=
+  loads after all modules, overwrote Doom's =SPC g s= =>
+  =+vc-gutter/stage-hunk=. Measured in a headless daemon before removal:
+  =(lookup-key doom-leader-map (kbd "g s"))= and =(kbd "g g")= both returned
+  =magit-status=. Same shadowing mechanism as [[id:adr-llm-module-owns-ai-keys][ADR-028]]'s =SPC o l= collision,
+  smaller blast radius. Binding deleted; the reasoning is now a comment at the
+  call site so it does not get re-added.
+- [X] Merged two duplicate =after! projectile= blocks — the second was a superset
+  of the first.
+- [X] *Custom agenda views written* — five, keyed =d w b u s=, all built and
+  rendered in a headless daemon. Deliberately written against this config's own
+  keyword sequence (=TODO= / =IN-PROGRESS= / =BLOCKED= / =DONE= / =REJECTED=);
+  most published agenda recipes assume =NEXT= and =WAITING=, which do not exist
+  here and would have matched nothing while appearing to work. =d= is a
+  composite (Today / In progress / Blocked / Inbox), =w= is the week, =b= is an
+  unblocking sweep, =u= is the =todo.org= inbox, and =s= lists TODOs with
+  neither a scheduled date nor a deadline — items that no ordinary agenda view
+  can show at all. No new keybinding: =SPC n a= already runs the dispatcher.
+- [X] *Bug in the new views, caught before shipping.* Doom sets
+  =org-agenda-start-day= to ="-3d"= globally, so a span-1 view that does not
+  override it renders three days ago under the heading "Today" — the daemon
+  showed "Today / 27 August" against a system clock reading the 30th. Fixed with
+  =(org-agenda-start-day nil)= in the =d= and =w= blocks; re-verified as
+  "30 August 2026".
+- [X] *Pre-existing bug found while verifying: =org-agenda-files= covered two
+  files, not the tree.* =org-agenda-files= was =(list org-directory)=, and Org
+  expands a directory entry *non-recursively*. It resolved to exactly
+  =~/org/todo.org= and =~/org/doom.org= — 2 of the 68 =.org= files in the tree.
+  =work/= (15 files), =personal/= (3), =calendar/= (2), =daily/=, =mtg/= and
+  =test/= were invisible to every agenda view, while both =config.org= and
+  [[id:adr-org-agenda-capture-basics][ADR-017]] describe the setting as covering
+  "the whole pre-existing =org-directory= tree". The =calendar/= case also
+  quietly undercut [[id:adr-calendar-org-gcal][ADR-025]], which assumes synced
+  Google events reach the agenda — they could not have. Fixed by listing
+  =org-directory= plus its immediate subdirectories: =(org-agenda-files)= now
+  returns 26 files from 10 entries. Depth-1 and evaluated at load, so a new
+  subdirectory needs a reload.
+- [ ] ADR-017 needs a LOGBOOK entry recording that its stated agenda-files
+  behaviour never matched reality, and ADR-025's live-verification step should
+  note that the calendar files were unreachable until this fix.
+- [X] =citar= — *declined by the user 2026-08-30, backed out.* It had been
+  configured and verified first (=~/org/bib/references.bib= created,
+  =citar-bibliography= set, =org-cite-global-bibliography= confirmed to resolve),
+  then removed on the user's call: config section deleted from =config.org=, the
+  template =.bib= and its directory deleted, re-tangled. The file contained no
+  real entries, only comments, so nothing was lost.
+
+  Worth keeping from the exercise: =:tools biblio= needs exactly *one* setting,
+  =citar-bibliography=, and it must be set at top level rather than inside an
+  =after!= — Doom derives =org-cite-global-bibliography= from it inside
+  =(after! oc ...)=, so a later value arrives too late and the global
+  bibliography ends up nil. Same ordering hazard as =oauth2-auto-plstore=. If a
+  bibliography is ever wanted, that is the whole job.
+- [ ] Decide whether any popup rule is actually missing. The config has one
+  =set-popup-rule!= (ghostel), but =:ui popup +defaults +all= is enabled and
+  handles the general case, so "only one rule" is not itself evidence of a gap.
+- [X] =code-review= rejected without needing an ADR of its own: claude-code-ide
+  opens Ediff automatically and Magit plus forge cover the rest, so a third
+  review surface has no distinct responsibility ([[id:std-no-duplication][std-no-duplication]]).
+
+*** 7.5 Capability cheatsheet
+- [X] =docs/cheatsheet.org= written — 279 lines, 106 table rows, with =:ID:=
+  properties and =id:= cross-links per =std-org-first=. All links validated
+  against defined IDs; zero broken.
+- [X] Every binding read out of module source and cited by file and line, the
+  standard [[id:ai-keybindings][keybindings.org]] holds itself to. Nothing recalled
+  from memory or from upstream docs, both of which drift from what a given Doom
+  checkout does. Nineteen citations that were first written approximately
+  (="el:~825"=) were then pinned to exact lines by grepping the source, and two
+  were wrong on the first pass and corrected (=evil-surround-region= is at
+  =evil/config.el:674=, not 676; =evil-lion= at =679-682=, not =681-684=).
+- [X] Sections: motion and jumping, windows, editing, search and lookup, git, AI,
+  org and notes, evaluate/build/debug, buffers and UI toggles, plus an explicit
+  "exists but has no key yet" list so those are not rediscovered from scratch.
+- [X] Deliberately *not* a full keymap dump — =SPC h b b= and which-key already
+  do that better and do not rot. The file covers the subset worth knowing about
+  rather than discovering by accident, and says so.
+- [X] A maintenance note at the end: when a line citation stops matching after a
+  Doom upgrade, re-read the source rather than patching the number from memory,
+  because a guessed correction quietly destroys the property that makes the file
+  worth having.
+
+Highlights the audit had missed entirely, now documented: =gs= is a whole
+easymotion layer rather than a single avy key; =SPC s t= / =SPC s T= are the
+entire interface to the dictionary and thesaurus stack that =:tools lookup
++dictionary +offline= provides; =SPC f h= jumps straight to a heading in
+=config.org=, which matters much more now that ADR-035 made it the
+configuration; and =gptel-magit='s =M-g= writes a commit message from the staged
+diff with no setup at all.
+
+*** 7.6 Closeout
+- [ ] =doom sync=, =doom doctor= clean.
+- [ ] =docs/inventory.org=: the "none of the 22 has any configuration" line, the
+  =gcc= "unused by this project" line (grammars compile with it now), the
+  gptel-magit/gptel-quick/ob-gptel row, the new module and package rows, and
+  every new binary per =std-binaries= (role, install method, version check,
+  upgrade, rollback).
+- [ ] Set =:STATUS:= on ADR-036 and ADR-037 once live-verified.
+
+*** 7.7 Rebuild the =pass= credential store
+Found 2026-08-30 while auditing external binaries. =:tools pass +auth= is
+enabled and =docs/ai/providers.org= records =api/anthropic= and =api/openai= as
+"Live — verified", but nothing backing that survives: no =pass= binary, no
+=~/.password-store=, =PASSWORD_STORE_DIR= unset, and
+=~/.gnupg/private-keys-v1.d/= empty (directory dated 2020-06-06). No backup of a
+store exists anywhere under =/home/james=. So =config.org:740= and =:746= call
+=+pass-get-secret= against nothing, and gptel's Anthropic and OpenAI backends
+are broken — masked in daily use because claude-code-ide authenticates through
+the Claude CLI's own login and never touches =pass=.
+
+This is a rebuild from empty, not a recovery. The API keys have to come from the
+provider dashboards again; there is nothing to decrypt.
+
+Steps 2–6 are the user's own — a passphrase and three secret values, none of
+which may pass through an agent or appear in any command output.
+
+- [X] =sudo apt install -y pass pass-otp= — both present; =pass-otp= installs a
+  pass *extension* at =/usr/lib/password-store/extensions/otp.bash=, not a
+  binary, which is worth knowing because =command -v pass-otp= will never find
+  it — check for the extension file instead.
+- [X] =gpg --full-generate-key= — done 2026-08-30. ed25519 =[SC]= primary with a
+  cv25519 =[E]= encryption subkey (the one =pass= actually uses), uid
+  "James Cook (PsychedPC) <mrniceguyjames@gmail.com>", trust =[ultimate]=.
+  Fingerprint =4F6F02436717EE9B823369EAE2F99AE2D3BDF9E1=, short key ID
+  =E2F99AE2D3BDF9E1=. Read back with
+  =gpg --list-secret-keys --keyid-format=long=; fingerprints are public by
+  design, so recording it here is fine.
+- [X] =pass init 4F6F02436717EE9B823369EAE2F99AE2D3BDF9E1= — done 2026-08-30.
+  =~/.password-store/.gpg-id= holds the fingerprint.
+- [ ] =pass insert api/anthropic= — read by =config.org:740=. Prompts without
+  echoing and never enters shell history.
+- [ ] =pass insert api/openai= — read by =config.org:746=.
+- [ ] =pass insert -m mail/oauth2-google-client= — multiline. Line 1 is the
+  client *secret*; line 2 is =client_id: <id>.apps.googleusercontent.com=.
+
+  The field name [[id:roadmap-phase-5][Phase 5]] recorded as unconfirmed is now
+  settled *from source*, 2026-08-30. Doom's =+pass-get-field=
+  (=modules/tools/pass/autoload/pass.el=) is a =defalias= onto
+  =auth-source-pass-parse-entry=, which parses an entry as: line 1 is the secret
+  (=auth-source-pass--parse-secret=), and every later line is split at its
+  *first* colon into a =key: value= pair with both halves =string-trim='d
+  (=auth-source-pass--parse-data=, =auth-source-pass.el:219-233=). Lookup is
+  =assoc=, so keys are plain strings and the space after the colon is optional.
+  =config.org:1320= already tries =client_id=, =client-id=, =login=, =user= in
+  order, so any of the four resolves and the first match wins. Use =client_id=.
+- [ ] =pass ls= to confirm the structure. Structure only — never print a value.
+- [ ] Correct =docs/ai/providers.org=: the =api/anthropic= and =api/openai= rows
+  claim "Live — resolves to a 108/164-char string, verified". True when written,
+  false now. Rewrite as a dated historical note plus a "rebuilt 2026-08-30" row.
+- [ ] Re-verify gptel against both backends once the entries exist.
+
+**** Knock-on effects
+- [ ] [[id:roadmap-phase-5][Phase 5]]'s remaining blocker may have grown. It is
+  scoped as "add the Calendar scope and re-authorize both accounts", which
+  assumed the OAuth client credentials still existed. If
+  =mail/oauth2-google-client= is genuinely gone rather than hidden, that becomes
+  re-creating the client in the Google Cloud console first. Re-scope ADR-025's
+  remaining work once the store is rebuilt and the truth is known.
+- [ ] =~/.authinfo.gpg= (169 bytes, dated 2020-11-08) is encrypted to a key that
+  no longer exists in the keyring, so it is unreadable. Determine what
+  =auth-source= was reading from it — mu4e is the likely consumer — and whether
+  anything still depends on it.

@@ -14,8 +14,10 @@ subsystem architecture without redesigning this one.
 
 | Subsystem        | Status | Doc |
 |-------------------+----------+-------------------------------------------|
-| AI integration    | Phase 1, in progress | [[id:ai-architecture][docs/ai/architecture.org]] |
-| Everything else   | unmodified Doom defaults | [[id:docs-inventory][inventory.org]] |
+| AI integration    | Phase 1 complete 2026-07-21 | [[id:ai-architecture][docs/ai/architecture.org]] |
+| Configuration     | literate since 2026-08-29 ([[id:adr-literate-config][ADR-035]]); =config.org= is the source | [[id:docs-inventory][inventory.org]] |
+| Capability activation | Phase 7, in progress ([[id:adr-module-flag-sweep][ADR-036]], [[id:adr-emacs-31-builtins][ADR-037]]) | [[id:docs-roadmap][roadmap.org]] |
+| Everything else   | Doom defaults, see the module sweep record | [[id:docs-inventory][inventory.org]] |
 
 * Cross-subsystem rules
 

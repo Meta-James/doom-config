@@ -137,7 +137,7 @@ plain org editing.
 |-----------+--------+-------|
 | Enable =:app calendar=, =doom sync= | Done | Enabled by the ADR-029 sweep 2026-08-23 (=init.el:202=); calfw, calfw-org/cal/ical and org-gcal installed at the module's pins |
 | Verify org-gcal's real API against installed source | Done | 2026-08-23 — variables exist as named, but credentials can't be lazy, tokens live in =oauth2-auto-plstore=, and =org-gcal-sync= is already async. Corrections in [[id:adr-calendar-org-gcal][ADR-025]]'s LOGBOOK |
-| Google Cloud: add Calendar scope, re-authorize both accounts | Not started | User action — reuses the existing =mail/oauth2-google-client= OAuth client from [[id:adr-email-mu4e][ADR-011]], whose consent screen is already published. Also needs the entry's client-id *field name* confirmed; the agent can't read the store |
+| Google Cloud: add Calendar scope, re-authorize both accounts | Blocked, and re-scoped 2026-08-30 | The client-id *field name* is no longer open — settled from =auth-source-pass= source as =client_id= (see [[id:roadmap-phase-7][Phase 7]] §7.7). But the =pass= store was found empty that same day, so this is no longer "re-authorize an existing client": if =mail/oauth2-google-client= is genuinely gone, the OAuth client itself has to be re-created in the Google Cloud console first. Re-scope once the store is repopulated |
 | =config.el=: credentials + =org-gcal-fetch-file-alist= | Done | Values set as strings (org-gcal's API rules out ADR-006's lazy pattern), both lookups NOERROR so a missing entry warns rather than breaking the agenda. =~/org/calendar/= created |
 | =config.el=: manual sync binding + agenda-open hook | Done | =SPC o C= syncs, =SPC o c= opens calfw; hook guarded by a 1-hour staleness interval, the sync lock, and the presence of a stored token |
 | =doom doctor= | Done | Clean — 77 modules, 230 packages, only the pre-existing =markdown +tree-sitter= warning |
@@ -150,6 +150,46 @@ events with other attendees, which email everyone on each change.
 =ualberta='s Workspace tenant may block third-party Calendar API access
 regardless of the consent screen, and the shared OAuth client now couples mail
 and calendar together.
+
+* Phase 7 — Capability activation (in progress)
+:PROPERTIES:
+:ID:       roadmap-phase-7
+:END:
+
+Scoped 2026-08-30 after an audit that asked a different question from
+[[id:adr-module-sweep-non-lang][ADR-029]]'s. ADR-029 asked which modules were
+off; this asks which modules are *on and doing nothing*.
+
+The measurement: the Emacs half of =config.org= is about 590 code lines, over
+half of it in four areas (ghostel, Vulpea, mu4e, Python/LSP). Roughly 35 enabled
+modules and flags have zero configuration, and 55 installed packages are never
+named in =config.org=. Three different problems were tangled together in that
+number, and the phase separates them:
+
+1. *Inert* — enabled, and unable to work as configured. Tree-sitter was the
+   headline: every =+tree-sitter= flag was set and not one grammar was installed.
+2. *Unconfigured but usable* — Doom binds avy, embark, vundo, git-timemachine,
+   quickrun and the =:tools lookup= stack regardless. The gap is knowing the
+   keys, so the fix is a document, not elisp.
+3. *Genuinely unwired* — packages that ship with an enabled module and do
+   nothing without configuration: =gptel-magit=, =ob-gptel=, =org-modern=,
+   =org-noter=, =org-download=, =dape=, =citar=, =consult-dir=, =wgrep=.
+
+| Sub-phase | Status | Notes |
+|-----------+--------+-------|
+| 7.0 External binaries | Done | All five tiers installed 2026-08-30 — see [[id:project-phase-7][PROJECT.org 7.0]] for the itemised list and the "deliberately not installed" set. Driven by a one-off script that was deleted afterwards. =doom doctor= down to one warning, the standing false "development build" positive |
+| 7.1 Repair inert capability | Partly done | 19 tree-sitter grammars installed and verified end-to-end; =epdfinfo= compiled; three stale doc lines corrected. Outstanding: the elfeed/mpv comment, and the =:checkers grammar= langtool decision now that the binary exists |
+| 7.7 Rebuild the =pass= credential store | Not started | Found during 7.0: no store, no GPG secret key, no backup, while =docs/ai/providers.org= records two entries as live. gptel's Anthropic and OpenAI backends are broken. =pass= installed and a key generated; =pass init= onward is the user's own |
+| 7.2 Module flags and new =:lang= modules | Done | Ten module lines changed, packages installed, =doom doctor= accounted for. See [[id:adr-module-flag-sweep][ADR-036]] |
+| 7.3 Emacs 31.1 built-ins | Done | Seven settings adopted, twelve candidates explicitly rejected with reasons. See [[id:adr-emacs-31-builtins][ADR-037]] |
+| 7.4 Wire the unwired packages | Mostly dissolved | The "55 packages never named in =config.org=" metric measured the wrong thing — Doom configures nearly all of them at module level, verified against module sources and a live daemon. What survived: one shadowing bug fixed (=SPC g s= was overwriting =+vc-gutter/stage-hunk=), and custom agenda views as the one genuine gap. The rest transferred to 7.5 |
+| 7.5 Capability cheatsheet | Done | [[id:docs-cheatsheet][=docs/cheatsheet.org=]] — 106 rows, every binding cited to module source by file and line, all =id:= links validated. The phase's main deliverable, once 7.4 dissolved |
+| 7.6 Closeout | Not started | =doom doctor=, =docs/inventory.org= updates, ADR =:STATUS:= lines |
+
+Deliberately out of scope: migrating lsp-mode to eglot (the only thing that
+would make =:tools lsp +booster= meaningful), and =:completion corfu +tng=,
+which rewrites the live-verified TAB precedence contract and needs its own
+decision rather than a line in a sweep.
 
 * Future phases (named, not implemented)
 :PROPERTIES:

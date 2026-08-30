@@ -155,10 +155,12 @@ the git authority.
 :ID:       wf-terminal
 :END:
 
-Doom's =vterm= module remains the terminal host — both the existing
-=my/project-vterm= helper and claude-code-ide.el's own vterm backend share it. No
-=eat=/=ghostel= adoption planned; only reconsider if vterm demonstrably breaks the
-agent workflow (see [[id:adr-primary-agent][ADR-004]] revisit condition).
+Doom's =ghostel= module is the terminal host, replacing vterm on 2026-08-17
+([[id:adr-terminal-backend-ghostel][ADR-014]]) — both =my/project-ghostel= (renamed from
+=my/project-vterm=) and claude-code-ide.el share it. This section previously said
+vterm was the host and that no =eat=/=ghostel= adoption was planned; that was
+already contradicted by [[id:wf-agent][the agent workflow section]] below and is
+corrected here.
 
 * Diagnostics and status (existing, unchanged)
 :PROPERTIES:
