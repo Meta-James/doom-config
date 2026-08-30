@@ -1119,3 +1119,64 @@ tool wraps commands:
   #+end_src
 
   =ps -eo pid,args | grep "[e]macs --daemon"= (the bracket trick) is also safe.
+
+* RESOLVED: tangling to =config.el= dropped its =lexical-binding= cookie
+:PROPERTIES:
+:ID:       tshoot-tangle-drops-file-local-vars
+:DATE:     2026-08-30
+:END:
+
+** Symptom
+Every graphical frame creation logged three identical errors to =*Messages*=:
+
+#+begin_example
+Error running timer: (void-variable frame) [3 times]
+#+end_example
+
+Nothing else was visibly broken, which is why it survived unnoticed: the
+maximize behaviour it belongs to still worked, because a *separate* call path
+(the =window-setup-hook= one, added when the startup frame was root-caused —
+see the frame-maximize history) does not go through a timer.
+
+** Cause
+=config.el= is tangled output since [[id:adr-literate-config][ADR-035]], and the
+conversion carried the *bodies* of the old hand-written files across verbatim
+while silently losing their first line. Doom's stock =config.el= opens with
+
+#+begin_example
+;;; $DOOMDIR/config.el -*- lexical-binding: t; -*-
+#+end_example
+
+and that line was not inside any source block, so nothing tangled it. The
+tangled file therefore loaded under *dynamic* binding.
+
+Under dynamic binding a lambda does not capture its enclosing lexical
+environment, so the three closures in =+my/maximize-frame= — one per entry in
+its ='(0 0.1 0.3)= retry list, hence exactly three errors — could not see
+=frame= when the timers fired.
+
+=init.el= was unaffected: its cookie happens to sit inside a tangled block, so
+it survived. =packages.el= has =no-byte-compile= for the same reason and is
+likewise fine.
+
+** Fix
+Put the cookie inside the first source block that tangles to =config.el=, so it
+lands on line 1 of the output:
+
+#+begin_src emacs-lisp
+;;; config.el -*- lexical-binding: t; -*-
+#+end_src
+
+Verify with =head -1 config.el= after a sync, not by reading =config.org=.
+
+** The general class, which is the reason this entry exists
+File-local variables live in a file's *first line* (or a trailing =Local
+Variables:= block). Tangling composes a file out of block bodies, so any
+file-local setting that was not deliberately written into a block is dropped —
+silently, with no tangle warning and no load error. =lexical-binding= is the
+dangerous member of that family because its failure mode is not "config does not
+load" but "closures quietly misbehave at runtime, somewhere else, later".
+
+When moving any further file under the literate config, check its first line and
+its tail for file-local variables *before* converting the body, and re-check the
+tangled output afterwards.
