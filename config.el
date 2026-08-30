@@ -1,3 +1,5 @@
+;;; config.el -*- lexical-binding: t; -*-
+
 (defadvice! +my/literate-tangle-only-config-a (&rest _)
   "Tangle on save only for `+literate-config-file' itself.
 

@@ -55,6 +55,9 @@
 (package! perfect-margin)
 (package! claude-code-ide
   :recipe (:host github :repo "manzaltu/claude-code-ide.el"))
+;; Required by `claude-code-ide-emacs-tools-setup' -- without it the MCP
+;; server refuses to start and Emacs-side tools are unavailable to the agent.
+(package! web-server)
 (package! vulpea)
 
 ;; Rice pass (docs/decisions.org ADR-022): animated cursor-motion pulse,

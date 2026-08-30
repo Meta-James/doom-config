@@ -26,6 +26,8 @@ Narrow Doom's tangle-on-save hook, which is otherwise scoped to the
 whole of =$DOOMDIR= rather than to this file.
 
 #+begin_src emacs-lisp
+;;; config.el -*- lexical-binding: t; -*-
+
 (defadvice! +my/literate-tangle-only-config-a (&rest _)
   "Tangle on save only for `+literate-config-file' itself.
 
@@ -1674,6 +1676,9 @@ lives in =docs/decisions.org=, and the verified state in =docs/inventory.org=.
 (package! perfect-margin)
 (package! claude-code-ide
   :recipe (:host github :repo "manzaltu/claude-code-ide.el"))
+;; Required by `claude-code-ide-emacs-tools-setup' -- without it the MCP
+;; server refuses to start and Emacs-side tools are unavailable to the agent.
+(package! web-server)
 (package! vulpea)
 
 ;; Rice pass (docs/decisions.org ADR-022): animated cursor-motion pulse,
