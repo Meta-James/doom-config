@@ -999,16 +999,22 @@ Errors for any account not listed in `+mu4e-spam-accounts'."
 ;; RSS: elfeed (+org +youtube). Feeds are managed as an Org outline at
 ;; org-directory/elfeed.org (elfeed-org), not as a `elfeed-feeds' list here --
 ;; see that file for actual subscriptions. `+youtube' adds elfeed-tube, which
-;; gives transcript fetching (`F' in the search and show buffers) -- that half
-;; works. The mpv follow-along half does not, and not for the reason this
-;; comment used to give: `mpv' and `yt-dlp' are both installed now, but
-;; `elfeed-tube-mpv-follow-mode' and `elfeed-tube-mpv-where' live in
-;; elfeed-tube-mpv.el, a separate MELPA package depending on the `mpv' package,
-;; and Doom's `:app rss +youtube' declares neither. The module still binds
-;; `C-c C-f' and `C-c C-w' to them in `elfeed-show-mode-map', so both keys are
-;; void-function until (package! mpv) and (package! elfeed-tube-mpv) are added.
-;; See docs/decisions.org for the RSS integration ADR.
+;; gives transcript fetching (`F' in the search and show buffers). See
+;; docs/decisions.org for the RSS integration ADR.
 (map! :leader :desc "RSS (elfeed)" "o r" #'elfeed)
+
+;; The mpv half of elfeed-tube, declared in the packages section above. Doom's
+;; module binds `C-c C-f' and `C-c C-w' to `elfeed-tube-mpv-follow-mode' and
+;; `elfeed-tube-mpv-where' but never declares the package they come from, so
+;; both keys were `void-function'.
+;;
+;; `:after elfeed-tube' rather than relying on autoloads, because only two of
+;; the three commands carry an autoload cookie -- `elfeed-tube-mpv-where'
+;; (elfeed-tube-mpv.el:260) has none, and `map!' does not force a load. Loading
+;; alongside elfeed-tube defines all three, and elfeed-tube is itself deferred
+;; behind elfeed, so this costs nothing until `SPC o r'.
+(use-package! elfeed-tube-mpv
+  :after elfeed-tube)
 
 ;; Auto-refresh feeds whenever the elfeed search buffer is opened, so `SPC o r'
 ;; doesn't show a buffer that's stale since the last manual `elfeed-update'.
@@ -1777,6 +1783,16 @@ lives in =docs/decisions.org=, and the verified state in =docs/inventory.org=.
 ;; EPUB reading (docs/decisions.org ADR-034): Doom ships no ebook module, and
 ;; nov.el is the only maintained Emacs EPUB renderer.
 (package! nov)
+
+;; elfeed-tube's mpv half. `:app rss +youtube' declares elfeed-tube only, but
+;; its config.el binds `C-c C-f' and `C-c C-w' to `elfeed-tube-mpv-follow-mode'
+;; and `elfeed-tube-mpv-where' unconditionally -- and those live in
+;; elfeed-tube-mpv.el, a separate MELPA package. Without these two declarations
+;; both keys are `void-function'. `mpv' is elfeed-tube-mpv's own dependency
+;; (Package-Requires: (mpv "0.2.0")); it drives the mpv binary over its JSON
+;; IPC socket, which is how follow-along knows the playback position.
+(package! mpv)
+(package! elfeed-tube-mpv)
 #+end_src
 
 * Module activation

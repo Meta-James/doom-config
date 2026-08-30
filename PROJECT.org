@@ -572,10 +572,22 @@ below, which is why it is recorded here rather than left in a deleted file.
   =C-c C-f= and =C-c C-w= to those commands unconditionally
   (=app/rss/config.el:105-109=), so both keys are =void-function= today.
   Comment in =config.org= now says this.
-- [ ] *Decide*: wire the follow-along half or drop the two dead keys. Wiring is
-  =(package! mpv)= + =(package! elfeed-tube-mpv)= and a two-line =use-package!=
-  — but it is two package installs, so it needs explicit approval and a
-  =doom sync=.
+- [X] *Decided 2026-08-30: wired.* =(package! mpv)= and
+  =(package! elfeed-tube-mpv)= added, plus a =use-package! elfeed-tube-mpv
+  :after elfeed-tube=. =:after= rather than autoloads because only two of the
+  three commands carry an autoload cookie — =elfeed-tube-mpv-where=
+  (=elfeed-tube-mpv.el:260=) has none, and =map!= does not force a load, so
+  =C-c C-w= would have stayed void. Cost is nil until =SPC o r=, since
+  elfeed-tube is itself deferred behind elfeed. Verified in a disposable
+  headless daemon: =elfeed-tube-mpv= loads with elfeed-tube, all three commands
+  are =fboundp=, and =elfeed-show-mode-map= now resolves =C-c C-f= to
+  =elfeed-tube-mpv-follow-mode= and =C-c C-w= to =elfeed-tube-mpv-where=. mpv
+  0.37.0 is the binary the =mpv= package drives over its JSON IPC socket.
+  =doom sync= clean at 315 packages, =doom doctor= still at the one standing
+  false positive.
+- [ ] Play a video end-to-end from a real YouTube entry in the user's own
+  session — headless proves the commands exist and are bound, not that mpv
+  IPC and transcript-position follow-along behave.
 - [X] Decide =:checkers grammar= — *wired 2026-08-30*, and the obvious wiring
   would have been broken. =writegood-mode= was already the working half (the
   module hooks it into org/markdown/rst/latex). For =langtool=, the module

@@ -73,3 +73,13 @@
 ;; EPUB reading (docs/decisions.org ADR-034): Doom ships no ebook module, and
 ;; nov.el is the only maintained Emacs EPUB renderer.
 (package! nov)
+
+;; elfeed-tube's mpv half. `:app rss +youtube' declares elfeed-tube only, but
+;; its config.el binds `C-c C-f' and `C-c C-w' to `elfeed-tube-mpv-follow-mode'
+;; and `elfeed-tube-mpv-where' unconditionally -- and those live in
+;; elfeed-tube-mpv.el, a separate MELPA package. Without these two declarations
+;; both keys are `void-function'. `mpv' is elfeed-tube-mpv's own dependency
+;; (Package-Requires: (mpv "0.2.0")); it drives the mpv binary over its JSON
+;; IPC socket, which is how follow-along knows the playback position.
+(package! mpv)
+(package! elfeed-tube-mpv)
