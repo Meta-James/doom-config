@@ -729,6 +729,35 @@ Does not write to disk unless you save."
   (evil-escape-mode 1))
 #+end_src
 
+** Prose checking: LanguageTool
+#+begin_src emacs-lisp
+;; `:checkers grammar' ships two halves. `writegood-mode' is already live -- the
+;; module hooks it into org/markdown/rst/latex and puts `g' and `r' on the
+;; localleader. `langtool' is the other half, and it needs a LanguageTool
+;; install to point at.
+;;
+;; The install here is the snap (`languagetool' 6.7, publisher vasilisc), and
+;; the module's autodetection picks the wrong thing from it: it runs
+;; `(executable-find "languagetool")', which finds /snap/bin/languagetool, a
+;; wrapper whose run.sh hardcodes `java -jar languagetool.jar' -- the *GUI*. It
+;; ignores every argument langtool.el passes it. A snap wrapper could not serve
+;; anyway: langtool.el hands LanguageTool a temp file under /tmp for any
+;; modified buffer, and a strictly-confined snap gets a private /tmp.
+;;
+;; The snap does ship the real commandline jar, so point langtool at that and
+;; let the system JRE run it -- /snap is world-readable and the jar's relative
+;; Class-Path resolves inside the snap. Verified 2026-08-30:
+;; `java -jar <jar> -c utf8 -l en-US FILE' returns normal LanguageTool output.
+;;
+;; Setting this at top level rather than in an `after!' is what suppresses the
+;; bad autodetect: the module's cond is guarded by `unless langtool-bin
+;; langtool-language-tool-jar langtool-java-classpath', config.el loads before
+;; langtool does, so a value set here is already in place when that cond runs.
+(let ((jar "/snap/languagetool/current/usr/bin/languagetool-commandline.jar"))
+  (when (file-readable-p jar)
+    (setq langtool-language-tool-jar jar)))
+#+end_src
+
 ** AI: chat and focused transformation via gptel
 #+begin_src emacs-lisp
 ;; AI: chat and focused transformation via gptel.
@@ -969,10 +998,16 @@ Errors for any account not listed in `+mu4e-spam-accounts'."
 #+begin_src emacs-lisp
 ;; RSS: elfeed (+org +youtube). Feeds are managed as an Org outline at
 ;; org-directory/elfeed.org (elfeed-org), not as a `elfeed-feeds' list here --
-;; see that file for actual subscriptions. `+youtube' adds elfeed-tube
-;; (transcript fetching, mpv follow-along -- the mpv-specific keybindings are
-;; inert until `mpv' is installed on this system). See docs/decisions.org for
-;; the RSS integration ADR.
+;; see that file for actual subscriptions. `+youtube' adds elfeed-tube, which
+;; gives transcript fetching (`F' in the search and show buffers) -- that half
+;; works. The mpv follow-along half does not, and not for the reason this
+;; comment used to give: `mpv' and `yt-dlp' are both installed now, but
+;; `elfeed-tube-mpv-follow-mode' and `elfeed-tube-mpv-where' live in
+;; elfeed-tube-mpv.el, a separate MELPA package depending on the `mpv' package,
+;; and Doom's `:app rss +youtube' declares neither. The module still binds
+;; `C-c C-f' and `C-c C-w' to them in `elfeed-show-mode-map', so both keys are
+;; void-function until (package! mpv) and (package! elfeed-tube-mpv) are added.
+;; See docs/decisions.org for the RSS integration ADR.
 (map! :leader :desc "RSS (elfeed)" "o r" #'elfeed)
 
 ;; Auto-refresh feeds whenever the elfeed search buffer is opened, so `SPC o r'

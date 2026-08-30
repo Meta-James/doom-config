@@ -548,13 +548,58 @@ below, which is why it is recorded here rather than left in a deleted file.
   said Phase 1 was in progress, and =docs/ai/workflows.org= still named vterm as
   the terminal host (ghostel replaced it 2026-08-17, and the same file's
   =wf-agent= section already said so).
-- [ ] =make= and =bibtex= grammars build and install but report unavailable —
-  the =.so= exists and its language symbol does not match. Cosmetic; neither has
-  a major mode in use here.
-- [ ] Re-verify elfeed's =+youtube= path and correct the "inert until mpv is
-  installed" comment in =config.org= — =mpv= and =yt-dlp= are both present now.
-- [ ] Decide =:checkers grammar=: =languagetool= is installed now, so wire it or
-  record =writegood-mode= as the working half.
+- [X] =make= and =bibtex= grammars build and install but report unavailable —
+  *diagnosed 2026-08-30, and the cause recorded here first was wrong.* The
+  language symbols are fine (=nm -D= shows =tree_sitter_make= and
+  =tree_sitter_bibtex= exported). The real cause is grammar ABI: both =.so=
+  files are ABI 15, and Emacs 31.1's =treesit= supports 13–14, so
+  =(treesit-language-available-p 'make t)= returns
+  =(nil language-grammar-version-mismatch "…ABI version is 15, but supported
+  versions are 13-14")=. The other 17 grammars built at ABI 14 and load fine.
+  *Left unfixed deliberately*: the fix is pinning an older upstream revision for
+  those two repos and rebuilding, and neither =make= nor =bibtex= has a major
+  mode in use here. Revisit if Emacs gains ABI 15 support or a Makefile
+  =*-ts-mode= is ever wanted.
+- [X] Re-verify elfeed's =+youtube= path and correct the "inert until mpv is
+  installed" comment in =config.org= — done 2026-08-30, and the comment was
+  wrong about *why*. =mpv= (=/usr/bin/mpv=) and =yt-dlp= are both installed, and
+  the transcript half of elfeed-tube works. The follow-along half cannot:
+  =elfeed-tube-mpv-follow-mode= and =elfeed-tube-mpv-where= live in
+  =elfeed-tube-mpv.el=, a *separate* MELPA package
+  (=Package-Requires: … (mpv "0.2.0")=), and =:app rss +youtube= declares only
+  =elfeed-tube=. Straight therefore never builds that file —
+  =build-31.1/elfeed-tube/= has no =elfeed-tube-mpv.el=. The module still binds
+  =C-c C-f= and =C-c C-w= to those commands unconditionally
+  (=app/rss/config.el:105-109=), so both keys are =void-function= today.
+  Comment in =config.org= now says this.
+- [ ] *Decide*: wire the follow-along half or drop the two dead keys. Wiring is
+  =(package! mpv)= + =(package! elfeed-tube-mpv)= and a two-line =use-package!=
+  — but it is two package installs, so it needs explicit approval and a
+  =doom sync=.
+- [X] Decide =:checkers grammar= — *wired 2026-08-30*, and the obvious wiring
+  would have been broken. =writegood-mode= was already the working half (the
+  module hooks it into org/markdown/rst/latex). For =langtool=, the module
+  autodetects =(executable-find "languagetool")=, which on this machine finds
+  the snap wrapper =/snap/bin/languagetool= — whose =run.sh= hardcodes
+  =java -jar languagetool.jar=, the *GUI*, ignoring every argument langtool.el
+  passes. Confirmed by reading =/snap/languagetool/current/usr/bin/run.sh= and
+  by running the wrapper with =-c utf8 -l en-US FILE=: no output at all. A snap
+  wrapper is unusable here regardless — langtool.el writes modified buffers to a
+  temp file under =/tmp= and a strictly-confined snap gets a private =/tmp=.
+  The snap does ship =languagetool-commandline.jar=, so =config.org= now sets
+  =langtool-language-tool-jar= to it at top level (which also suppresses the bad
+  autodetect, since the module's cond is =unless= those three variables) and
+  lets the system JRE run it. Verified:
+  =java -jar <jar> -c utf8 -l en-US FILE= on a seeded bad sentence returned four
+  normal LanguageTool findings, and =--version= reports 6.7-SNAPSHOT.
+- [X] Live-check =langtool-check= through langtool.el, not only the jar — done
+  2026-08-30 in a disposable headless daemon running the real config:
+  =langtool-language-tool-jar= resolved to the snap jar with =langtool-bin= and
+  =langtool-java-classpath= both nil (so the bad autodetect really is
+  suppressed), and =langtool-check-buffer= on a seeded bad sentence finished in
+  5s and left *4* overlays — the same four findings the jar produced from the
+  shell. =M-x langtool-check= in the user's own session is now a spot check
+  rather than an open question.
 
 *** 7.2 Module flags and new =:lang= modules ([[id:adr-module-flag-sweep][ADR-036]])
 - [X] Enable =vertico +childframe=, =syntax +childframe +icons=,
@@ -661,9 +706,14 @@ which is now clearly the main deliverable of the phase.
   =org-directory= plus its immediate subdirectories: =(org-agenda-files)= now
   returns 26 files from 10 entries. Depth-1 and evaluated at load, so a new
   subdirectory needs a reload.
-- [ ] ADR-017 needs a LOGBOOK entry recording that its stated agenda-files
+- [X] ADR-017 needs a LOGBOOK entry recording that its stated agenda-files
   behaviour never matched reality, and ADR-025's live-verification step should
-  note that the calendar files were unreachable until this fix.
+  note that the calendar files were unreachable until this fix — *already done*;
+  checked 2026-08-30 and both entries exist. ADR-017's LOGBOOK carries the
+  correction plus the method point about smoke tests only covering the path
+  tried, and ADR-025's carries it as re-scope item 1. Only ADR-025's re-scope
+  item 2 is now stale ("the =pass= store does not exist"), which belongs with
+  the credential work, not here.
 - [X] =citar= — *declined by the user 2026-08-30, backed out.* It had been
   configured and verified first (=~/org/bib/references.bib= created,
   =citar-bibliography= set, =org-cite-global-bibliography= confirmed to resolve),
@@ -677,9 +727,16 @@ which is now clearly the main deliverable of the phase.
   =(after! oc ...)=, so a later value arrives too late and the global
   bibliography ends up nil. Same ordering hazard as =oauth2-auto-plstore=. If a
   bibliography is ever wanted, that is the whole job.
-- [ ] Decide whether any popup rule is actually missing. The config has one
-  =set-popup-rule!= (ghostel), but =:ui popup +defaults +all= is enabled and
-  handles the general case, so "only one rule" is not itself evidence of a gap.
+- [X] Decide whether any popup rule is actually missing — *decided 2026-08-30:
+  none is.* =:ui popup +defaults +all= is enabled; =+defaults= supplies Doom's
+  curated rule set and =+all= makes every remaining temporary window obey popup
+  management, so the covered case is "everything" by construction. The one
+  custom rule (=^\\*ghostel=, =config.org:616=) exists because a specific buffer
+  needed specific geometry, which is the only thing that justifies a rule. The
+  other two popup surfaces this config touches are owned upstream — gptel's
+  =gptel-display-buffer-action= by =:tools llm=, calfw's rule by
+  =:app calendar=. A rule per buffer written in advance is speculative
+  configuration; add one when a named buffer actually misbehaves.
 - [X] =code-review= rejected without needing an ADR of its own: claude-code-ide
   opens Ediff automatically and Magit plus forge cover the rest, so a third
   review surface has no distinct responsibility ([[id:std-no-duplication][std-no-duplication]]).
