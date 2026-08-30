@@ -535,6 +535,12 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
 ;; dense output legible without costing a visible amount of height.
 (setq-hook! 'ghostel-mode-hook line-spacing 0.1)
 
+;; Emojify replaces emoji characters with images, which breaks terminal column
+;; alignment (an image is one glyph wide where the emulator laid out two) and
+;; churns on high-volume output. Terminal output renders as the shell sent it.
+(after! emojify
+  (add-to-list 'emojify-inhibit-major-modes 'ghostel-mode))
+
 ;; No popup rule existed, so `SPC p t' reused whatever window it landed in.
 ;; :quit nil and :ttl nil keep a live shell from being closed by `C-g' or
 ;; reaped while idle -- a terminal holding a running process is not a
