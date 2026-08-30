@@ -5937,3 +5937,187 @@ harmlessly in =doom-state-dir=.
   whole basis of the Candidates table.
 - Emacs gains, or Doom adopts, a first-party ebook module, which would make
   this a module flag instead of a package declaration.
+
+* ADR-035: Literate configuration — one =config.org= tangling Emacs and the shell layer
+:PROPERTIES:
+:ID:       adr-literate-config
+:STATUS:   Implemented; not live-verified (needs an Emacs restart in the user's own session)
+:DATE:     2026-08-29
+:END:
+
+** Context
+Two problems, one shape.
+
+The first is [[id:adr-terminal-layer-pass][ADR-033]]'s shell layer. It lives in
+=$HOME= — =~/.bashrc=, =~/.inputrc=, =~/.gitconfig= — outside any repository,
+and it has silently reverted to stock *twice*. The second time took its own
+=~/.bashrc.bak*= backups with it, so there was nothing to diff against and no
+record of when or why. Both times it was found by accident, chasing an
+unrelated symptom. Nothing in this project could detect a third occurrence.
+
+The second is that =config.el= had grown to 1328 lines whose reasoning lives in
+comments, cross-referencing ADRs by number. The prose and the code are already
+inseparable; they were just in the wrong file format for that.
+
+A literate config solves both: prose and code in one =config.org=, and the
+shell files become tangle targets, which puts them under version control where
+a revert is a visible diff rather than a silent loss.
+
+** Decision drivers
+- The shell layer needs a regression guard that requires no discipline to
+  work. Both prior regressions went unnoticed *because* noticing depended on
+  someone looking.
+- Doom-first ([[file:../AGENTS.md][AGENTS.md]]): use the =:config literate=
+  module Doom already ships, not a hand-rolled tangling scheme.
+- The migration must be provably lossless. 1610 lines of working config across
+  three files, plus three live dotfiles, is not something to retype.
+- =docs/decisions.org= stays the home of long-form reasoning; =config.org= gets
+  section-level prose and links, not a duplicate of the ADRs.
+
+** Candidates
+| Candidate                                | Fate     | Reason                                                                                                       |
+|------------------------------------------+----------+---------------------------------------------------------------------------------------------------------------|
+| Doom =:config literate= + one =config.org= | Chosen   | Ships with Doom, tangles on =doom sync= and on save, and per-block =:tangle= targets reach outside =$DOOMDIR= — verified, see Evidence |
+| =config.org= + separate =shell.org=        | Rejected | The module only tangles =+literate-config-file=; a second file needs its own =bin/org-tangle= step for no gain |
+| Dotfiles repo + GNU Stow symlinks          | Rejected | Solves the shell half only, adds a second tool and a second repo, and leaves =config.el= as-is               |
+| Verification script asserting ADR-033      | Rejected | Only fires when run, so it inherits the exact failure mode — depending on someone to look                    |
+| Status quo, log the audit and move on      | Rejected | This is the posture that produced two silent regressions                                                     |
+
+** Evidence
+Four things were tested before any file was touched, each because the design
+depended on the answer:
+
+1. *Per-block tangle targets work.* A scratch =config.org= with four blocks
+   tangled to four destinations: the default dest, =packages.el=, a path
+   outside the org file's directory, and =:tangle no= (skipped). The DEST
+   argument Doom passes to =org-babel-tangle-file= only sets the default; an
+   explicit per-block =:tangle= wins. This is what makes the dotfiles
+   reachable at all.
+2. *Blank-line fidelity.* Org pads exactly one blank line between blocks
+   tangled to the same file, and =:padline no= instead *strips* a block's
+   trailing blank. Neither is what a verbatim copy needs. The working
+   combination is: cut sections at blank lines, strip each block's trailing
+   blanks, and let the default padding re-insert exactly one.
+3. *Column-0 =*= survives.* =~/.bashrc:71= has a bare =*)= case pattern at
+   column 0, which is also Org heading syntax. Tangled through a =sh= block it
+   came back byte-identical and =bash -n= clean, so no comma-escaping is
+   needed.
+4. *The migration is lossless.* Generated =config.org= was tangled in a scratch
+   directory against a fake =$HOME=, and all six outputs compared with =cmp=:
+   =config.el=, =packages.el=, =init.el=, =~/.bashrc=, =~/.inputrc=,
+   =~/.gitconfig= — *all six byte-identical* to the files they replace. Only
+   after that did the two deliberate additions go in (below), and the final
+   diff against the originals contains additions only, no removed or altered
+   line, in any of the six.
+
+After installation: =doom sync= clean (5.3s, 290 packages), =doom doctor=
+clean at 78 modules (up from 77 — the =literate= module) and 231 packages, with
+only the standing false "development build of Emacs (31.1)" warning.
+=check-parens= in =emacs-lisp-mode= passes on the tangled =config.el=,
+=init.el= and =packages.el=; =bash -n= passes on =~/.bashrc=; =git config
+--list= parses =~/.gitconfig=.
+
+*Not* verified: the config has not been loaded by a real Emacs. The daemon was
+not restarted, so every runtime claim here rests on tangling, syntax checks and
+=doom doctor=, not on a running session.
+
+** Decision
+=init.el=: enable =:config literate=.
+
+=$DOOMDIR/config.org= becomes the single source, tangling to six targets:
+
+| Target          | Via                                | Note                                    |
+|-----------------+------------------------------------+-----------------------------------------|
+| =config.el=     | file-level =header-args= default   | 24 sections, one per subsystem          |
+| =packages.el=   | =:tangle packages.el=              | one block, unchanged                    |
+| =init.el=       | =:tangle init.el=                  | one block — =doom!= is a single form    |
+| =~/.bashrc=     | =:tangle ~/.bashrc=, 4 blocks      | stock Ubuntu / toolchains / direnv / ADR-033 |
+| =~/.inputrc=    | =:tangle ~/.inputrc=               |                                         |
+| =~/.gitconfig=  | =:tangle ~/.gitconfig=             |                                         |
+
+Two deliberate additions beyond a verbatim copy:
+
+1. A =defadvice!= =:override= on =+literate-recompile-maybe-h=. Doom's
+   tangle-on-save fires for *any* org file under =doom-user-dir=, and this repo
+   keeps =PROJECT.org= and all of =docs/*.org= there — saving a 6000-line ADR
+   file would otherwise spawn a full retangle. The override narrows it to
+   =+literate-config-file= itself.
+2. A three-line generated-by banner at the head of each tangled dotfile,
+   naming =config.org= and this ADR, so anyone (or any agent) opening
+   =~/.bashrc= directly is told their edit will be overwritten.
+
+This is deliberately a *faithful* conversion: every in-code comment stayed in
+its block rather than being promoted to Org prose. That promotion is a later,
+incremental pass, done section by section where it earns its keep — doing it
+during the migration would have made the byte-for-byte check impossible, which
+was the whole safety argument.
+
+** Consequences
+- *The shell layer is now under version control.* A third regression shows up
+  as an unstaged diff in =config.org=, and =git checkout= restores it. This is
+  the point of the exercise.
+- *Those dotfiles are now generated.* Editing =~/.bashrc= directly is lost on
+  the next tangle — which happens on every =doom sync= and on every save of
+  =config.org=. The banner says so in the file itself.
+- *=init.el= edits land one sync late.* Doom loads =init.el= long before it
+  tangles =config.org= during =doom sync=, so an edit to that block is written
+  during one sync and takes effect on the next. Doom's own FAQ documents this;
+  =bin/org-tangle= is the escape hatch if it ever matters.
+- *=config.el=, =init.el= and =packages.el= stay committed*, even though they
+  are now generated. Doom needs them on disk, and committing them keeps tangle
+  drift visible in =git status= instead of silent.
+- *Agent instructions change.* =AGENTS.md= and =.claude/rules/doom-emacs.md=
+  both said configuration goes in =config.el=. Editing =config.el= now means
+  writing to a file that the next tangle overwrites. Both were updated
+  alongside this ADR.
+- Tangling binds =org-confirm-babel-evaluate= to nil, so a src block *can*
+  execute at tangle time. Nothing here does, but it is a real property of the
+  file now: a block added to =config.org= is trusted code.
+- One more module in =init.el= (77 → 78) and no new packages — the literate
+  module installs none.
+
+** Rejected alternatives
+See the Candidates table above.
+
+** Validation
+Done, 2026-08-29:
+- Byte-identical round-trip of all six targets in an isolated scratch
+  directory before installation (see Evidence 4).
+- Post-install diff against the originals: additions only, no removed or
+  altered lines, in all six files.
+- =doom sync= clean; =doom doctor= clean at 78 modules / 231 packages, one
+  standing false warning.
+- =check-parens= (in =emacs-lisp-mode=) on the three tangled elisp files;
+  =bash -n= on =~/.bashrc=; =git config --list= on =~/.gitconfig=.
+- Pre-tangle backups taken: =~/.bashrc.bak-20260829-202429= and matching
+  =.inputrc=/=.gitconfig= copies, plus a set outside =$HOME= entirely.
+
+Outstanding, needs the user's own session:
+- Restart Emacs and confirm the config loads with no error — in particular the
+  =defadvice!= against =+literate-recompile-maybe-h=, which has never run.
+- Save =config.org= and confirm it retangles; save a =docs/*.org= file and
+  confirm it does *not*.
+- Open a new terminal and confirm the shell layer is unchanged in practice
+  (prompt colors, =C-r= atuin, =eza= aliases, vi-mode indicators).
+
+** Rollback
+=git checkout= =init.el= to restore the commented-out =literate= line, then
+=doom sync=. =config.el=/=packages.el= are already in git at their pre-migration
+content, and the shell files can be restored from
+=~/.bashrc.bak-20260829-202429= and its siblings. Deleting =config.org= after
+that leaves no trace of the migration. Nothing about this decision is
+one-directional.
+
+** Revisit when
+- A third shell-layer regression happens anyway — which would mean the guard
+  failed, and the failure mode is worth understanding before adding another.
+- The prose-promotion pass makes a section's block diverge from what it
+  replaced, at which point that section's byte-for-byte provenance is gone and
+  only the ADR trail explains it.
+- =init.el='s one-sync-late behavior actually bites, making =bin/org-tangle=
+  worth wiring into a real workflow rather than being noted as an escape hatch.
+- Tangle time becomes noticeable on save. =config.org= is ~2100 lines now; the
+  async path exists but has not been measured.
+- Doom changes =:config literate='s tangling internals — the =defadvice!=
+  overrides a module-internal hook function, which is exactly the kind of thing
+  an upstream refactor renames.

@@ -206,5 +206,5 @@
        (rss +org +youtube) ; emacs as an RSS reader [+org +youtube]
 
        :config
-       ;;literate          ; disguise your config as poor documentation
+       literate            ; disguise your config as poor documentation
        (default +bindings +smartparens +gnupg)) ; [+bindings +gnupg +smartparens]

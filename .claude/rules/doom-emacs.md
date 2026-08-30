@@ -6,9 +6,16 @@ paths:
 
 # Doom Emacs conventions
 
-- Module activation belongs in `init.el`, package declarations in `packages.el`,
-  configuration in `config.el` (or `config/*.el` loaded via `load!`, once the
-  subsystem is stable enough to justify the split — see `docs/standards.org`).
+- **This config is literate (ADR-035).** All edits go in `$DOOMDIR/config.org`;
+  `init.el`, `packages.el`, `config.el`, `~/.bashrc`, `~/.inputrc` and
+  `~/.gitconfig` are tangled output and are overwritten on the next tangle.
+  Within `config.org`, module activation still belongs in the `init.el` block,
+  package declarations in the `packages.el` block, and configuration in the
+  `config.el` sections.
+- Tangling runs on every `doom sync` and on every save of `config.org` (that
+  save hook is narrowed to `config.org` alone, so saving `docs/*.org` does not
+  trigger it). Edits to the `init.el` block land one sync late, because Doom
+  loads `init.el` before tangling.
 - Use `after!` for config that depends on a package being loaded; `use-package!`
   for package configuration; `map!` for keybindings; `set-popup-rule!` for
   temporary buffers (chat, agent, diff-review popups).

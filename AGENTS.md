@@ -5,11 +5,22 @@ personal configuration).
 
 ## What this repo is
 
-A Doom Emacs `$DOOMDIR`: `init.el` (module activation), `packages.el` (package
-declarations), `config.el` (configuration). Canonical long-form documentation is
-in `docs/*.org` and `docs/ai/*.org` — read those before making non-trivial
-changes, don't re-derive architecture from scratch. `docs/roadmap.org` and
-`PROJECT.org` show what phase of work is currently active.
+A Doom Emacs `$DOOMDIR`, and since ADR-035 a **literate** one: `config.org` is
+the single source of truth, and `init.el` (module activation), `packages.el`
+(package declarations) and `config.el` (configuration) are all *tangled output*.
+So are `~/.bashrc`, `~/.inputrc` and `~/.gitconfig` — the ADR-033 shell layer
+lives here too, which is what stops it silently reverting.
+
+**Edit `config.org`, never the tangled files.** A change written directly to
+`config.el` (or `init.el`, `packages.el`, or any of those three dotfiles) is
+overwritten by the next tangle, which happens on every `doom sync` and on every
+save of `config.org`. Edits to the `init.el` block take effect one sync late —
+Doom loads `init.el` before it tangles.
+
+Canonical long-form documentation is in `docs/*.org` and `docs/ai/*.org` — read
+those before making non-trivial changes, don't re-derive architecture from
+scratch. `docs/roadmap.org` and `PROJECT.org` show what phase of work is
+currently active.
 
 ## Hard rules
 

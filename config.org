@@ -1,3 +1,31 @@
+#+title: Doom Emacs literate configuration
+#+author: James Cook
+#+startup: overview
+:PROPERTIES:
+:ID:       doom-literate-config
+:END:
+
+The tangled source of truth for this machine's Emacs *and* shell layer. Running
+=doom sync= tangles this file; see [[id:adr-literate-config][ADR-035]] for why,
+and =docs/decisions.org= generally for the reasoning behind each section.
+
+Every block below is carried over verbatim from the hand-written files it
+replaces, so the tangled output can be diffed against them. The in-code
+comments have deliberately *not* been promoted into Org prose yet -- that is a
+later, incremental pass, done section by section where it earns its keep.
+
+* Emacs configuration
+:PROPERTIES:
+:header-args:emacs-lisp: :tangle config.el
+:END:
+
+Tangles to =config.el=.
+
+** Literate housekeeping
+Narrow Doom's tangle-on-save hook, which is otherwise scoped to the
+whole of =$DOOMDIR= rather than to this file.
+
+#+begin_src emacs-lisp
 (defadvice! +my/literate-tangle-only-config-a (&rest _)
   "Tangle on save only for `+literate-config-file' itself.
 
@@ -9,7 +37,10 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
              (file-equal-p (buffer-file-name (buffer-base-buffer))
                            (file-truename +literate-config-file)))
     (+literate-tangle-h)))
+#+end_src
 
+** Preamble, environment, and identity
+#+begin_src emacs-lisp
 ;;; $DOOMDIR/config.el -*- lexical-binding: t; -*-
 
 ;; Place your private configuration here! Remember, you do not need to run 'doom
@@ -104,7 +135,10 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
 ;;
 ;; You can also try 'gd' (or 'C-c c d') to jump to their definition and see how
 ;; they are implemented.
+#+end_src
 
+** Frames: maximizing, decorations, and margins
+#+begin_src emacs-lisp
 ;; Maximize every new graphical frame, and resize splash screen.
 ;;
 ;; Without `frame-resize-pixelwise', Emacs quantizes its frame to whole
@@ -183,7 +217,10 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
   (perfect-margin-mode t)
   (after! doom-modeline
     (setq mode-line-right-align-edge 'right-fringe)))
+#+end_src
 
+** Editor defaults and the modeline
+#+begin_src emacs-lisp
 ;; Better default behavior
 ;;     - No permanent deletion, use trash
 ;;     - Smoother scrolling
@@ -220,7 +257,10 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
         doom-modeline-buffer-encoding nil ; hide UTF-8, etc. (usually not needed)
         doom-modeline-time nil           ; set to t if you want a clock
         doom-modeline-battery nil))      ; set to t on laptops
+#+end_src
 
+** Rice pass: font, transparency, cursor, dashboard
+#+begin_src emacs-lisp
 ;; --- Rice pass (docs/decisions.org ADR-022) -------------------------------
 ;; Theme stays doom-zenburn; this section covers font, transparency, cursor
 ;; motion feedback, zen-mode focus dimming, and the dashboard banner.
@@ -287,7 +327,10 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
    'face '+dashboard-banner))
 (setq +dashboard-ascii-banner-fn #'+my/dashboard-hostname-banner-fn)
 ;; --- end rice pass ---------------------------------------------------------
+#+end_src
 
+** Tabs and the leftover cosmetic-module bindings
+#+begin_src emacs-lisp
 ;; centaur-tabs' new-tab button (the `+' at the right end of the tab bar) and
 ;; its interactive equivalent both funnel through
 ;; `centaur-tabs--create-new-tab', which opens a blank "Untitled" buffer.
@@ -358,7 +401,10 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
 (map! :leader
       :desc "Dashboard (home)" "o h" #'+dashboard/open
       :desc "TODOs in buffer"  "s h" #'hl-todo-occur)
+#+end_src
 
+** Project sidebars: treemacs and dirvish-side
+#+begin_src emacs-lisp
 ;; `:ui treemacs' and `:emacs dired +dirvish' both bind `SPC o p' to "Project
 ;; sidebar"; treemacs' binding is declared later in Doom's `+evil-bindings.el',
 ;; so it wins and `dirvish-side' becomes reachable only from `M-x'. Rather than
@@ -369,7 +415,10 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
 ;; file manipulation -- rename, chmod, wdired -- in a narrow window.
 ;; Full dirvish stays on `SPC o /'.
 (map! :leader :desc "Project sidebar (dirvish)" "o s" #'dirvish-side)
+#+end_src
 
+** Completion, projects, and Magit
+#+begin_src emacs-lisp
 ;; Save minibuffer history (Vertico likes this)
 (after! savehist
   (savehist-mode 1))
@@ -394,7 +443,10 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
     (add-to-list 'projectile-globally-ignored-directories p)))
 
 (map! :leader :desc "Magit status" "g s" #'magit-status)
+#+end_src
 
+** Terminal layer: ghostel
+#+begin_src emacs-lisp
 ;; `my/project-ghostel' lived here from the vterm era (ADR-014) purely because
 ;; vterm shipped no project-root-scoped entry point of its own. Ghostel does:
 ;; `ghostel-project' resolves the root, reuses an existing terminal for the
@@ -509,7 +561,10 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
 ;; ghostel--window-adjust-process-window-size call), which vterm never had.
 ;; If the same visual-corruption symptom ever recurs under ghostel, revisit
 ;; with an equivalent freeze scoped to ghostel-mode-hook instead.
+#+end_src
 
+** Dev tooling: direnv, flycheck, Python, LSP
+#+begin_src emacs-lisp
 (after! envrc
   (envrc-global-mode))
 
@@ -598,7 +653,10 @@ Does not write to disk unless you save."
   (setq evil-escape-key-sequence "jk"
         evil-escape-delay 0.20)
   (evil-escape-mode 1))
+#+end_src
 
+** AI: chat and focused transformation via gptel
+#+begin_src emacs-lisp
 ;; AI: chat and focused transformation via gptel.
 ;; `:tools llm' owns gptel itself -- its package pin, `gptel-default-mode',
 ;; `gptel-display-buffer-action' and popup rule, the `SPC o l' keybinds, plus
@@ -671,7 +729,10 @@ region/buffer/project-file context already."
 (map! :leader
       :desc "Add diagnostics to context" "o l d" #'my/gptel-add-diagnostics
       :desc "Agent (Claude Code)"        "o l g" #'claude-code-ide-menu)
+#+end_src
 
+** Email: mu4e
+#+begin_src emacs-lisp
 ;; Email: mu4e (+org +gmail +mbsync). Sync via mbsync (isync), send via
 ;; msmtp. Credentials never live here: the plain-password account resolves
 ;; via `pass show mail/<label>`, the two Google-backed accounts (one
@@ -780,7 +841,10 @@ Errors for any account not listed in `+mu4e-spam-accounts'."
     (smtpmail-smtp-server . "mail.gandi.net")
     (smtpmail-smtp-service . 465)
     (smtpmail-stream-type  . ssl)))
+#+end_src
 
+** RSS: elfeed
+#+begin_src emacs-lisp
 ;; RSS: elfeed (+org +youtube). Feeds are managed as an Org outline at
 ;; org-directory/elfeed.org (elfeed-org), not as a `elfeed-feeds' list here --
 ;; see that file for actual subscriptions. `+youtube' adds elfeed-tube
@@ -792,7 +856,10 @@ Errors for any account not listed in `+mu4e-spam-accounts'."
 ;; Auto-refresh feeds whenever the elfeed search buffer is opened, so `SPC o r'
 ;; doesn't show a buffer that's stale since the last manual `elfeed-update'.
 (add-hook 'elfeed-search-mode-hook #'elfeed-update)
+#+end_src
 
+** Torrents: transmission
+#+begin_src emacs-lisp
 ;; Torrents: transmission.el drives a local transmission-daemon over its RPC
 ;; API (see docs/decisions.org ADR-030). The daemon runs as a *user* systemd
 ;; unit (~/.config/systemd/user/transmission-daemon.service), not the packaged
@@ -820,7 +887,10 @@ Errors for any account not listed in `+mu4e-spam-accounts'."
              (cons "\\`magnet:"
                    (lambda (url &optional _new-window)
                      (transmission-add url))))
+#+end_src
 
+** EPUB reading: nov.el
+#+begin_src emacs-lisp
 ;; --- EPUB reading (docs/decisions.org ADR-034) -----------------------------
 ;; nov.el renders EPUB through `shr'. Nothing else is configured here on
 ;; purpose: Evil bindings come from evil-collection (`:editor evil
@@ -833,7 +903,10 @@ Errors for any account not listed in `+mu4e-spam-accounts'."
   ;; `perfect-margin' already owns the text column; nov's own hard fill
   ;; would wrap a second time inside those margins.
   (setq nov-text-width t))
+#+end_src
 
+** App launcher
+#+begin_src emacs-lisp
 ;; App launcher: SPC o L -- raise-or-launch external GUI apps, plus a couple
 ;; of "the Emacs command *is* the app" bindings (calc, proced) that need no
 ;; process launching at all. This is a plain process launcher, not a window-
@@ -867,7 +940,10 @@ matching window is found."
        :desc "VLC"                      "v" (cmd! (my/launch-or-focus "vlc"))
        :desc "Calculator (calc)"        "c" #'calc
        :desc "Process monitor (proced)" "t" #'proced))
+#+end_src
 
+** Inline completion: Copilot and next-edit suggestions
+#+begin_src emacs-lisp
 ;; Inline completion: Copilot overlay + Next Edit Suggestions.
 ;; TAB/C-TAB below are copilot.el's own default bindings (`copilot-completion-map'
 ;; and `copilot-nes-mode-map'), not re-bound here -- both are activated via
@@ -883,7 +959,10 @@ matching window is found."
   (set-face-attribute 'copilot-overlay-face nil
                       :foreground "#9FC59F"  ;; zenburn green+2, bright but still subtle
                       :background 'unspecified))
+#+end_src
 
+** Agentic coding: claude-code-ide.el
+#+begin_src emacs-lisp
 ;; Primary agentic coding workflow: claude-code-ide.el drives the already-
 ;; installed Claude Code CLI over MCP. Ediff-based review matches this
 ;; config's existing incumbent (docs/decisions.org ADR-004). Terminal backend
@@ -902,7 +981,10 @@ matching window is found."
         claude-code-ide-use-ide-diff t)
   :config
   (claude-code-ide-emacs-tools-setup))
+#+end_src
 
+** Note management: Vulpea
+#+begin_src emacs-lisp
 ;; Note management: Vulpea indexes any org entry (file- or heading-level)
 ;; carrying an `ID' property into its own sqlite database -- titles, tags,
 ;; id: links, and description-list metadata. Vulpea 2.x is standalone (its
@@ -916,7 +998,10 @@ matching window is found."
   :defer t :after-call doom-first-input-hook
   :config
   (vulpea-db-autosync-mode +1))
+#+end_src
 
+** org-roam alongside Vulpea
+#+begin_src emacs-lisp
 ;; org-roam runs alongside Vulpea (docs/decisions.org ADR-027), with Vulpea
 ;; winning every overlap. Three settings hold that line; each corresponds to
 ;; a place the two packages would otherwise both answer the same question:
@@ -939,7 +1024,10 @@ matching window is found."
 (after! org-roam
   (setq org-roam-completion-everywhere nil
         +org-roam-auto-backlinks-buffer nil))
+#+end_src
 
+** Org Agenda and Capture basics
+#+begin_src emacs-lisp
 ;; Org Agenda & Capture basics (docs/decisions.org ADR-017). Deliberately
 ;; minimal per docs/standards.org std-no-scope-creep ("don't build the full
 ;; Org Agenda system until its own phase") -- this *is* that phase, scoped to
@@ -970,7 +1058,10 @@ matching window is found."
                     (vulpea-note-path
                      (vulpea-create (read-string "Title: ")))))
            "%?"))))
+#+end_src
 
+** Vulpea dailies
+#+begin_src emacs-lisp
 ;; Vulpea dailies (docs/decisions.org ADR-018): a hand-rolled equivalent of
 ;; org-roam-dailies -- Vulpea itself has no daily-note concept. Each day is
 ;; its own real Vulpea file-level note (ID, backlinks, findable via
@@ -1034,7 +1125,10 @@ DIRECTION is `previous' or `next'."
   "Visit the next existing daily note."
   (interactive)
   (my/vulpea-daily--adjacent 'next))
+#+end_src
 
+** Vulpea backlinks buffer
+#+begin_src emacs-lisp
 ;; Vulpea backlinks buffer (docs/decisions.org ADR-018): a hand-rolled,
 ;; deliberately scoped equivalent of org-roam-buffer -- Vulpea only ships
 ;; jump-to-backlink (`vulpea-find-backlink'), not a live panel. Shows the
@@ -1123,7 +1217,10 @@ DIRECTION is `previous' or `next'."
        :desc "Daily: pick date" "J" #'my/vulpea-daily-date
        :desc "Daily: previous"  "p" #'my/vulpea-daily-previous
        :desc "Daily: next"      "n" #'my/vulpea-daily-next))
+#+end_src
 
+** Calendar: calfw and org-gcal
+#+begin_src emacs-lisp
 ;; Calendar: calfw view + two-way org-gcal sync (docs/decisions.org ADR-025).
 ;; The `:app calendar' module already ships calfw's evil keymap, its popup rule
 ;; and the `=calendar' command, so only credentials, the calendar-to-file
@@ -1209,7 +1306,10 @@ agenda is being drawn. Authorizing is a user-initiated act: do it once via
 (map! :leader
       :desc "Calendar (calfw)"         "o c" #'=calendar
       :desc "Calendar sync (org-gcal)" "o C" #'org-gcal-sync)
+#+end_src
 
+** emacs-everywhere
+#+begin_src emacs-lisp
 ;; emacs-everywhere buffers must not get a file template (ADR-032).
 ;;
 ;; `emacs-everywhere' opens a brand-new temp file (`/tmp/emacs-everywhere-<ts>-<app>')
@@ -1338,3 +1438,641 @@ agenda is being drawn. Authorizing is a user-initiated act: do it once via
 ;; (exwm-enable)
 
 ;; ;; Open Workspaces and start programs?
+#+end_src
+
+* Package declarations
+:PROPERTIES:
+:header-args:emacs-lisp: :tangle packages.el
+:END:
+
+Tangles to =packages.el=. Straight recipes and pins; the reasoning for each
+lives in =docs/decisions.org=, and the verified state in =docs/inventory.org=.
+
+#+begin_src emacs-lisp
+;; -*- no-byte-compile: t; -*-
+;;; $DOOMDIR/packages.el
+
+;; To install a package with Doom you must declare them here and run 'doom sync'
+;; on the command line, then restart Emacs for the changes to take effect -- or
+;; use 'M-x doom/reload'.
+
+
+;; To install SOME-PACKAGE from MELPA, ELPA or emacsmirror:
+;; (package! some-package)
+
+;; To install a package directly from a remote git repo, you must specify a
+;; `:recipe'. You'll find documentation on what `:recipe' accepts here:
+;; https://github.com/radian-software/straight.el#the-recipe-format
+;; (package! another-package
+;;   :recipe (:host github :repo "username/repo"))
+
+;; If the package you are trying to install does not contain a PACKAGENAME.el
+;; file, or is located in a subdirectory of the repo, you'll need to specify
+;; `:files' in the `:recipe':
+;; (package! this-package
+;;   :recipe (:host github :repo "username/repo"
+;;            :files ("some-file.el" "src/lisp/*.el")))
+
+;; If you'd like to disable a package included with Doom, you can do so here
+;; with the `:disable' property:
+;; (package! builtin-package :disable t)
+
+;; You can override the recipe of a built in package without having to specify
+;; all the properties for `:recipe'. These will inherit the rest of its recipe
+;; from Doom or MELPA/ELPA/Emacsmirror:
+;; (package! builtin-package :recipe (:nonrecursive t))
+;; (package! builtin-package-2 :recipe (:repo "myfork/package"))
+
+;; Specify a `:branch' to install a package from a particular branch or tag.
+;; This is required for some packages whose default branch isn't 'master' (which
+;; our package manager can't deal with; see radian-software/straight.el#279)
+;; (package! builtin-package :recipe (:branch "develop"))
+
+;; Use `:pin' to specify a particular commit to install.
+;; (package! builtin-package :pin "1a2b3c4d5e")
+
+
+;; Doom's packages are pinned to a specific commit and updated from release to
+;; release. The `unpin!' macro allows you to unpin single packages...
+;; (unpin! pinned-package)
+;; ...or multiple packages
+;; (unpin! pinned-package another-pinned-package)
+;; ...Or *all* packages (NOT RECOMMENDED; will likely break things)
+;; (unpin! t)
+;; (package! seq :recipe (:type built-in))
+;; gptel is declared (and pinned) by `:tools llm' -- don't re-declare it here.
+(package! copilot
+  :recipe (:host github :repo "copilot-emacs/copilot.el" :files ("*.el")))
+(package! perfect-margin)
+(package! claude-code-ide
+  :recipe (:host github :repo "manzaltu/claude-code-ide.el"))
+(package! vulpea)
+
+;; Rice pass (docs/decisions.org ADR-022): animated cursor-motion pulse,
+;; replacing the plain nav-flash blink Doom's :ui nav-flash module would
+;; otherwise provide.
+(package! pulsar)
+
+;; Torrents (docs/decisions.org ADR-030): Emacs front-end for a local
+;; transmission-daemon over its RPC API. No Doom module ships a torrent
+;; client, and this is the only maintained Emacs one.
+(package! transmission)
+
+;; EPUB reading (docs/decisions.org ADR-034): Doom ships no ebook module, and
+;; nov.el is the only maintained Emacs EPUB renderer.
+(package! nov)
+#+end_src
+
+* Module activation
+:PROPERTIES:
+:header-args:emacs-lisp: :tangle init.el
+:END:
+
+Tangles to =init.el=. One caveat that cannot be designed away: Doom loads
+=init.el= long before it tangles this file during =doom sync=, so an edit here
+lands on disk during one sync and only takes effect on the *next* one. The
+=doom!= block is a single form, so it stays a single block.
+
+#+begin_src emacs-lisp
+;;; init.el -*- lexical-binding: t; -*-
+
+;; This file controls what Doom modules are enabled and what order they load
+;; in. Remember to run 'doom sync' after modifying it!
+
+;; NOTE Press 'SPC h d h' (or 'C-h d h' for non-vim users) to access Doom's
+;;      documentation. There you'll find a link to Doom's Module Index where all
+;;      of our modules are listed, including what flags they support.
+
+;; NOTE Move your cursor over a module's name (or its flags) and press 'K' (or
+;;      'C-c c k' for non-vim users) to view its documentation. This works on
+;;      flags as well (those symbols that start with a plus).
+;;
+;;      Alternatively, press 'gd' (or 'C-c c d') on a module to browse its
+;;      directory (for easy access to its source code).
+
+;; NOTE Every flag a module accepts is listed in [brackets] at the end of its
+;;      comment, enabled or not -- so the line shows both what's on and what
+;;      else is available. A module with no bracket takes no flags at all.
+;;      Flag lists were read out of
+;;      ~/.config/emacs/sources/doom+/modules (each module's README.org
+;;      "Module flags" section plus its own 'modulep!' calls) on 2026-08-23,
+;;      against doom core ad55ed0; re-derive them rather than trusting this
+;;      comment after a 'doom upgrade'.
+
+(doom! :input
+       ;;bidi              ; (tfel ot) thgir etirw uoy gnipleh
+       ;;chinese           ; spend your 3 hours a week in Emacs [+childframe +rime]
+       ;;japanese          ; ah, a man of culture
+       ;;layout            ; auie,ctsrnm is the superior home row [+azerty +bepo]
+
+       :completion
+       ;;(company +childframe) ; the ultimate code completion backend [+childframe +tng]
+       (corfu +orderless +icons +dabbrev) ; complete with cap(f), cape and a flying feather! [+dabbrev +icons +orderless]
+       ;;helm              ; the *other* search engine for love and life [+childframe +fuzzy +icons]
+       ;;ido               ; the other *other* search engine...
+       ;;ivy               ; a search engine for love and life [+childframe +fuzzy +icons +prescient]
+       (vertico +icons)    ; the search engine of the future [+childframe +icons]
+
+       :ui
+       ;;deft              ; notational velocity for Emacs
+       doom                ; what makes DOOM look the way it does
+       dashboard           ; a nifty splash screen for Emacs
+       doom-quit           ; DOOM quit-message prompts when you quit Emacs
+       (emoji +ascii +github +unicode) ; 🙂 [+ascii +github +unicode]
+       hl-todo             ; highlight TODO/FIXME/NOTE/DEPRECATED/HACK/REVIEW
+       indent-guides       ; highlighted indent columns
+       (ligatures +extra)  ; ligatures and symbols to make your code pretty again [+extra]
+       minimap             ; show a map of the code on the side
+       modeline            ; snazzy, Atom-inspired modeline, plus API [+light]
+       ;;nav-flash         ; blink cursor line after big motions -- superseded by pulsar, see config.el
+       ;;neotree           ; a project drawer, like NERDTree for vim
+       ophints             ; highlight the region an operation acts on
+       (popup +defaults +all) ; tame sudden yet inevitable temporary windows [+all +defaults]
+       (smooth-scroll +interpolate) ; So smooth you won't believe it's not butter [+interpolate]
+       tabs                ; a tab bar for Emacs
+       (treemacs +lsp)     ; a project drawer, like neotree but cooler [+lsp]
+       unicode             ; extended unicode support for various languages
+       (vc-gutter +pretty) ; vcs diff in the fringe [+pretty]
+       vi-tilde-fringe     ; fringe tildes to mark beyond EOB
+       (window-select +numbers) ; visually switch windows [+numbers +switch-window]
+       workspaces          ; tab emulation, persistence & separate workspaces
+       (zen +focus)        ; distraction-free coding or writing [+focus]
+
+       :editor
+       (evil +everywhere)  ; come to the dark side, we have cookies [+everywhere]
+       file-templates      ; auto-snippets for empty files
+       fold                ; (nigh) universal code folding
+       (format +onsave)    ; automated prettiness [+lsp +onsave]
+       ;;god               ; run Emacs commands without modifier keys
+       lispy               ; vim for lisp, for people who don't like vim
+       multiple-cursors    ; editing in many places at once
+       ;;objed             ; text object editing for the innocent [+manual]
+       ;;parinfer          ; turn lisp into python, sort of
+       rotate-text         ; cycle region at point between text candidates
+       snippets            ; my elves. They type so I don't have to
+       (whitespace +guess +trim) ; a butler for your whitespace [+guess +trim]
+       word-wrap           ; soft wrapping with language-aware indent
+
+       :emacs
+       (dired +icons +dirvish) ; making dired pretty [functional] [+dirvish +icons]
+       electric            ; smarter, keyword-based electric-indent
+       eww                 ; the internet is gross
+       (ibuffer +icons)    ; interactive buffer management [+icons]
+       tramp               ; remote files at your arthritic fingertips
+       undo                ; persistent, smarter undo for your inevitable mistakes [+tree]
+       vc                  ; version-control and Emacs, sitting in a tree
+
+       :term
+       ;;eshell            ; the elisp shell that works everywhere
+       (ghostel +everywhere) ; libghostty-vt powered terminal emulation [+everywhere]
+       ;;shell             ; simple shell REPL for Emacs
+       ;;term              ; basic terminal emulator for Emacs
+       ;;vterm             ; the best terminal emulation in Emacs -- migrated to ghostel, see ADR-014
+
+       :checkers
+       syntax              ; tasing you for every semicolon you forget [+childframe +flymake +icons]
+       (spell +flyspell +aspell +everywhere) ; tasing you for misspelling mispelling [+aspell +enchant +everywhere +flyspell +hunspell]
+       grammar             ; tasing grammar mistake every you make
+
+       :tools
+       ;;ansible           ; allow silly people to focus on silly things
+       biblio              ; Writes a PhD for you (citation needed)
+       (collab +tunnel)    ; buffers with friends [+tunnel]
+       debugger            ; FIXME stepping through code, to help you add bugs [+lsp]
+       direnv              ; save (or destroy) the environment at your leisure
+       ;;docker            ; contain your enthusiasm [+lsp +tree-sitter]
+       editorconfig        ; let someone else argue about tabs vs spaces
+       ;;ein               ; tame Jupyter notebooks with emacs
+       (eval +overlay)     ; run code, run (also, repls) [+overlay]
+       llm                 ; when I said you needed friends, I didn't mean...
+       (lookup +dictionary +docsets +offline) ; navigate your code and its documentation [+dictionary +docsets +offline +yandex]
+       (lsp +peek)         ; M-x vscode [+booster +eglot +peek]
+       (magit +forge)      ; a git porcelain for Emacs [+forge]
+       make                ; run make tasks from Emacs
+       (pass +auth)        ; password manager for nerds [+auth]
+       pdf                 ; pdf enhancements
+       ;;terraform         ; infrastructure as code [+lsp]
+       tmux                ; an API for interacting with tmux
+       tree-sitter         ; syntax and parsing, sitting in a tree...
+       upload              ; map local to remote projects via ssh/ftp
+
+       :os
+       (:if (featurep :system 'macos) macos) ; improve compatibility with macOS
+       (tty +osc)          ; improve the terminal Emacs experience [+osc]
+
+       :lang
+       ;;ada               ; in strong typing we (blindly) trust [+lsp +tree-sitter]
+       ;;agda              ; types of types of types of types... [+local +tree-sitter]
+       ;;beancount         ; mind the GAAP [+lsp]
+       ;;(cc +lsp)         ; C > C++ == 1 [+lsp +tree-sitter]
+       ;;clojure           ; java with a lisp [+lsp +tree-sitter]
+       ;;common-lisp       ; if you've seen one lisp, you've seen them all
+       ;;coq               ; proofs-as-programs
+       ;;crystal           ; ruby at the speed of c [+lsp]
+       ;;csharp            ; unity, .NET, and mono shenanigans [+dotnet +lsp +tree-sitter +unity]
+       ;;data              ; config/data formats
+       ;;(dart +flutter)   ; paint ui and not much else [+flutter +lsp +tree-sitter]
+       ;;dhall             ; config as code
+       ;;elixir            ; erlang done right [+lsp +tree-sitter]
+       ;;elm               ; care for a cup of TEA? [+lsp]
+       emacs-lisp          ; drown in parentheses
+       ;;erlang            ; an elegant language for a more civilized age [+lsp +tree-sitter]
+       ;;ess               ; emacs speaks statistics [+lsp +stan]
+       ;;factor            ; a concatenative language with a stack of parens
+       ;;faust             ; dsp, but you get to keep your soul
+       ;;fortran           ; in FORTRAN, GOD is REAL (unless declared INTEGER) [+intel +lsp]
+       ;;fsharp            ; ML stands for Microsoft's Language [+lsp +tree-sitter]
+       ;;fstar             ; (dependent) types and (monadic) effects and Z3
+       ;;gdscript          ; the language you waited for [+lsp +tree-sitter]
+       ;;(go +lsp)         ; the hipster dialect [+lsp +tree-sitter]
+       ;;(graphql +lsp)    ; Give queries a REST [+lsp +tree-sitter]
+       ;;graphviz          ; diagrams to confuse yourself even more
+       ;;(haskell +lsp)    ; a language that's lazier than I am [+lsp +tree-sitter]
+       ;;hy                ; readability of scheme w/ speed of python
+       ;;idris             ; a language you can depend on [+lsp]
+       (json +lsp +tree-sitter) ; At least it ain't XML [+lsp +tree-sitter]
+       ;;janet             ; fun fact: Janet is me! [+tree-sitter]
+       ;;(java +lsp)       ; the poster child for carpal tunnel syndrome [+lsp +tree-sitter]
+       ;;javascript        ; all(hope(abandon(ye(who(enter(here)))))) [+lsp +tree-sitter]
+       ;;julia             ; a better, faster MATLAB [+lsp +snail +tree-sitter]
+       ;;kotlin            ; a better, slicker Java(Script) [+lsp +tree-sitter]
+       (latex +lsp)        ; writing papers in Emacs has never been so fun [+cdlatex +fold +lsp]
+       ;;lean              ; for folks with too much to prove [+lsp +v3]
+       ;;ledger            ; be audit you can be
+       ;;lua               ; one-based indices? one-based indices [+fennel +lsp +moonscript +tree-sitter]
+       (markdown +lsp +grip +tree-sitter) ; writing docs for people to ignore [+grip +lsp +tree-sitter]
+       ;;nim               ; python + lisp at the speed of c
+       ;;nix               ; I hereby declare "nix geht mehr!" [+lsp +tree-sitter]
+       ;;ocaml             ; an objective camel [+lsp]
+       ;;odin              ; C, minus its footguns [+lsp +tree-sitter]
+       (org +pandoc +roam +gnuplot +jupyter +pretty +noter +dragndrop) ; organize your plain life in plain text [+crypt +dragndrop +gnuplot +journal +jupyter +noter +pandoc +present +pretty +roam]
+       ;;php               ; perl's insecure younger brother [+hack +lsp +tree-sitter]
+       ;;plantuml          ; diagrams for confusing people more
+       ;;purescript        ; javascript, but functional [+lsp]
+       (python +lsp +pyenv +poetry +pyright +tree-sitter) ; beautiful is better than ugly [+conda +cython +lsp +poetry +pyenv +pyright +tree-sitter +uv]
+       ;;qt                ; the 'cutest' gui framework ever [+lsp +tree-sitter]
+       ;;racket            ; a DSL for DSLs [+hash-lang +lsp +xp]
+       ;;raku              ; the artist formerly known as perl6
+       ;;rest              ; Emacs as a REST client [+jq]
+       ;;rst               ; ReST in peace
+       ;;(ruby +rails)     ; 1.step {|i| p "Ruby is #{i.even? ? 'love' : 'life'}"} [+chruby +lsp +rails +rbenv +rvm +tree-sitter]
+       ;;(rust +lsp)       ; Fe2O3.unwrap().unwrap().unwrap().unwrap() [+lsp +tree-sitter]
+       ;;scad              ; trust the preview, regret the render [+lsp +tree-sitter]
+       ;;scala             ; java, but good [+lsp +tree-sitter]
+       ;;(scheme +guile)   ; a fully conniving family of lisps [+chez +chibi +chicken +gambit +gauche +guile +kawa +mit +racket]
+       (sh +lsp)           ; she sells {ba,z,fi}sh shells on the C xor [+fish +lsp +powershell]
+       ;;sml               ; [+lsp +tree-sitter]
+       ;;solidity          ; do you need a blockchain? No.
+       ;;swift             ; who asked for emoji variables? [+lsp +tree-sitter]
+       ;;terra             ; Earth and Moon in alignment for performance.
+       ;;web               ; the tubes [+lsp +tree-sitter]
+       ;;yaml              ; JSON, but readable [+lsp +tree-sitter]
+       ;;zig               ; C, but simpler [+lsp +tree-sitter]
+
+       :email
+       (mu4e +org +gmail +mbsync) ; [+gmail +mbsync +offlineimap +org]
+       ;;notmuch           ; [+afew +org]
+       ;;(wanderlust +gmail) ; [+gmail +xface]
+
+       :app
+       calendar            ; watch your missed deadlines in real time
+       emms                ; a media player for music no one's heard of
+       everywhere          ; *leave* Emacs!? You must be joking
+       irc                 ; how neckbeards socialize
+       (rss +org +youtube) ; emacs as an RSS reader [+org +youtube]
+
+       :config
+       literate            ; disguise your config as poor documentation
+       (default +bindings +smartparens +gnupg)) ; [+bindings +gnupg +smartparens]
+#+end_src
+
+* Shell layer
+:PROPERTIES:
+:ID:       literate-shell-layer
+:END:
+
+The reason this file owns more than Emacs. ADR-033's shell half lived only in
+=$HOME=, outside any repository, and silently reverted to stock twice -- the
+second time taking its own backups with it. Tangling it from here puts it under
+version control: a revert shows up as an unstaged diff, and =git checkout=
+restores it.
+
+These files are now *generated*. Editing =~/.bashrc= directly will be
+overwritten on the next tangle; edit the blocks below instead.
+
+** ~/.bashrc
+
+*** Stock Ubuntu bashrc
+Untouched Ubuntu default, kept verbatim so a diff against a fresh install stays meaningful.
+
+#+begin_src sh :tangle ~/.bashrc
+# Generated from ~/.config/doom/config.org -- edit there, not here.
+# Any change made directly to this file is lost on the next tangle.
+# See docs/decisions.org ADR-035 (and ADR-033 for what this layer is).
+
+# ~/.bashrc: executed by bash(1) for non-login shells.
+# see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
+# for examples
+
+# If not running interactively, don't do anything
+case $- in
+    *i*) ;;
+      *) return;;
+esac
+
+# don't put duplicate lines or lines starting with space in the history.
+# See bash(1) for more options
+HISTCONTROL=ignoreboth
+
+# append to the history file, don't overwrite it
+shopt -s histappend
+
+# for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
+HISTSIZE=1000
+HISTFILESIZE=2000
+
+# check the window size after each command and, if necessary,
+# update the values of LINES and COLUMNS.
+shopt -s checkwinsize
+
+# If set, the pattern "**" used in a pathname expansion context will
+# match all files and zero or more directories and subdirectories.
+#shopt -s globstar
+
+# make less more friendly for non-text input files, see lesspipe(1)
+[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+
+# set variable identifying the chroot you work in (used in the prompt below)
+if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
+    debian_chroot=$(cat /etc/debian_chroot)
+fi
+
+# set a fancy prompt (non-color, unless we know we "want" color)
+case "$TERM" in
+    xterm-color|*-256color) color_prompt=yes;;
+esac
+
+# uncomment for a colored prompt, if the terminal has the capability; turned
+# off by default to not distract the user: the focus in a terminal window
+# should be on the output of commands, not on the prompt
+force_color_prompt=yes
+
+if [ -n "$force_color_prompt" ]; then
+    if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
+	# We have color support; assume it's compliant with Ecma-48
+	# (ISO/IEC-6429). (Lack of such support is extremely rare, and such
+	# a case would tend to support setf rather than setaf.)
+	color_prompt=yes
+    else
+	color_prompt=
+    fi
+fi
+
+if [ "$color_prompt" = yes ]; then
+    PS1='${debian_chroot:+($debian_chroot)}\[\033[00;32m\]\u@\h\[\033[00m\]:\[\033[00;33m\]\w\[\033[00m\]\$ '
+else
+    PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
+fi
+unset color_prompt force_color_prompt
+
+# If this is an xterm set the title to user@host:dir
+case "$TERM" in
+xterm*|rxvt*)
+    PS1="\[\e]0;${debian_chroot:+($debian_chroot)}\u@\h: \w\a\]$PS1"
+    ;;
+*)
+    ;;
+esac
+
+# enable color support of ls and also add handy aliases
+if [ -x /usr/bin/dircolors ]; then
+    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+    alias ls='ls --color=auto'
+    #alias dir='dir --color=auto'
+    #alias vdir='vdir --color=auto'
+
+    alias grep='grep --color=auto'
+    alias fgrep='fgrep --color=auto'
+    alias egrep='egrep --color=auto'
+fi
+
+# colored GCC warnings and errors
+#export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
+
+# some more ls aliases
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+
+# Add an "alert" alias for long running commands.  Use like so:
+#   sleep 10; alert
+alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
+
+# Alias definitions.
+# You may want to put all your additions into a separate file like
+# ~/.bash_aliases, instead of adding them here directly.
+# See /usr/share/doc/bash-doc/examples in the bash-doc package.
+
+if [ -f ~/.bash_aliases ]; then
+    . ~/.bash_aliases
+fi
+
+# enable programmable completion features (you don't need to enable
+# this, if it's already enabled in /etc/bash.bashrc and /etc/profile
+# sources /etc/bash.bashrc).
+if ! shopt -oq posix; then
+  if [ -f /usr/share/bash-completion/bash_completion ]; then
+    . /usr/share/bash-completion/bash_completion
+  elif [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+  fi
+fi
+
+# add emacs to my path
+export PATH=$HOME/.config/emacs/bin/:$PATH
+
+# add arm gcc to my path
+export PATH=/opt/gcc-arm-none-eabi-9-2020-q2-update-x86_64-linux/gcc-arm-none-eabi-9-2020-q2-update/bin/:$PATH
+
+# Created by `pipx` on 2026-03-17 02:46:32
+export PATH="$PATH:/home/james/.local/bin"
+#+end_src
+
+*** Language toolchains on PATH
+pyenv, nvm, and the Zig toolchain ghostel's native module is built with.
+
+#+begin_src sh :tangle ~/.bashrc
+export PATH="$HOME/.pyenv/bin:$PATH"
+eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"
+export PATH="/opt/zig-0.15.2:$PATH"
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+#+end_src
+
+*** direnv shell hook
+ADR-032. Emacs gets direnv through :tools direnv / envrc; this is the same thing for interactive shells.
+
+#+begin_src sh :tangle ~/.bashrc
+# direnv shell hook (Doom :tools direnv covers Emacs via envrc; this is for
+# interactive shells). See docs/decisions.org ADR-032 in ~/.config/doom.
+eval "$(direnv hook bash)"
+#+end_src
+
+*** ADR-033 shell layer
+The half that has silently regressed twice. Tangling it from here is what makes a third regression visible.
+
+#+begin_src sh :tangle ~/.bashrc
+# ---- Emacs / ghostel integration -------------------------------------------
+# Without these, `git commit' inside a ghostel buffer falls through to nano,
+# and `git rebase -i' opens a second editor inside the one already running.
+# -nw reuses the current frame for terminal-invoked edits; VISUAL gets a real
+# frame, with plain `emacs' as the fallback when no daemon is up.
+export EDITOR='emacsclient -nw'
+export VISUAL='emacsclient -c -a emacs'
+
+# ---- History ---------------------------------------------------------------
+# Ubuntu ships 1000/2000, which is small enough that useful commands age out
+# within a day. erasedups drops older duplicates of a re-run command; the
+# timestamp makes `history' auditable.
+HISTSIZE=100000
+HISTFILESIZE=200000
+HISTCONTROL=ignoreboth:erasedups
+HISTTIMEFORMAT='%F %T '
+shopt -s cmdhist        # keep a multi-line command as one history entry
+
+# ---- Shell ergonomics ------------------------------------------------------
+shopt -s autocd         # `foo/' means `cd foo/'
+shopt -s cdspell        # fix minor typos in cd targets
+shopt -s dirspell       # and in directory names during completion
+shopt -s globstar       # ** recurses
+shopt -s checkjobs      # warn about running jobs before exit
+
+# ---- PATH de-duplication ---------------------------------------------------
+# .profile and .bashrc both prepend several of the same directories, leaving
+# ~11 duplicates. Dedupe keeping FIRST occurrence, so precedence is unchanged.
+__dedupe_path() {
+    local dir out=
+    while IFS= read -r -d: dir; do
+        [ -n "$dir" ] || continue
+        case ":$out:" in
+            *":$dir:"*) ;;
+            *) out="${out:+$out:}$dir" ;;
+        esac
+    done <<< "$PATH:"
+    PATH="$out"
+}
+__dedupe_path
+unset -f __dedupe_path
+
+# ---- Modern CLI tools ------------------------------------------------------
+# Debian/Ubuntu ship bat's binary as `batcat' -- the `bat' name collides with
+# bacula-console-qt -- so the expected name has to be aliased back.
+alias bat='batcat'
+# `ansi' is the one bat theme that renders through the terminal's own 16-colour
+# palette instead of hardcoded hexes, so syntax highlighting inherits zenburn
+# from ghostel rather than fighting it.
+export BAT_THEME='ansi'
+export MANPAGER="sh -c 'col -bx | batcat -l man -p'"
+
+# eza takes over the list aliases; plain `ls' is deliberately left alone so
+# scripts and muscle memory are unaffected.
+alias ll='eza -al --group-directories-first --git'
+alias la='eza -a'
+alias lt='eza --tree --level=2'
+
+# fzf: Ubuntu packages the integration files but does not source them, so C-r,
+# C-t and M-c do nothing until this runs.
+[ -f /usr/share/doc/fzf/examples/key-bindings.bash ] \
+    && . /usr/share/doc/fzf/examples/key-bindings.bash
+[ -f /usr/share/bash-completion/completions/fzf ] \
+    && . /usr/share/bash-completion/completions/fzf
+# fzf has no palette awareness of its own, so the zenburn hexes are explicit.
+export FZF_DEFAULT_OPTS='--height 40% --layout=reverse --border
+--color=fg:#DCDCDC,bg:#3F3F3F,hl:#CC9393
+--color=fg+:#FFFFEF,bg+:#4F4F4F,hl+:#DCA3A3
+--color=info:#F0DFAF,prompt:#F0DFAF,pointer:#93E0E3
+--color=marker:#93E0E3,spinner:#93E0E3,header:#8CD0D3,border:#5F5F5F'
+# fd is already installed and respects .gitignore, unlike find.
+export FZF_DEFAULT_COMMAND='fd --type f --hidden --exclude .git'
+export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+
+# zoxide: `z' jumps by frecency, `zi' picks interactively through fzf. Must be
+# last -- it wraps `cd', so anything redefining cd afterwards would clobber it.
+eval "$(zoxide init bash)"
+
+# ---- atuin -----------------------------------------------------------------
+# Prebuilt musl binary in ~/.local/bin (not apt, not cargo: apt has no package
+# and atuin 18.19's MSRV is 1.97 against this box's rustc 1.75).
+# Sourced after fzf on purpose -- both want C-r, and atuin should win.
+# --disable-up-arrow keeps Up/Down on readline's history-search-* from
+# ~/.inputrc rather than handing them to atuin's full-screen search.
+# Local-only: no `atuin register'/`login' has been run, so nothing syncs.
+if command -v atuin >/dev/null 2>&1; then
+    eval "$(atuin init bash --disable-up-arrow)"
+fi
+
+# atuin 18.19 binds `?' to `atuin ai inline', which sends the prompt to
+# atuin's remote service. Mid-line the handler inserts a literal `?', but on an
+# empty prompt `?' opens the AI query -- one keystroke from an outbound
+# request, with no setting in `atuin default-config' to turn it off. Restore
+# `?' to a plain character. atuin binds into whichever keymap is active, so
+# vi-insert is the one that matters here (~/.inputrc sets vi mode); emacs is
+# covered too in case that ever changes.
+bind -m vi-insert '"?": self-insert' 2>/dev/null
+bind -m emacs '"?": self-insert' 2>/dev/null
+#+end_src
+
+** ~/.inputrc
+Readline configuration. Emacs runs Evil, so the shell matches it.
+
+#+begin_src conf :tangle ~/.inputrc
+# Generated from ~/.config/doom/config.org -- edit there, not here.
+# Any change made directly to this file is lost on the next tangle.
+# See docs/decisions.org ADR-035 (and ADR-033 for what this layer is).
+
+# Readline configuration. Emacs runs Evil, so the shell matches it.
+$include /etc/inputrc
+
+set editing-mode vi
+set show-mode-in-prompt on
+set vi-ins-mode-string "\1\e[38;2;140;208;211m\2+\1\e[0m\2 "
+set vi-cmd-mode-string "\1\e[38;2;240;223;175m\2:\1\e[0m\2 "
+
+# Up/Down search history for the prefix already typed, instead of walking it.
+"\e[A": history-search-backward
+"\e[B": history-search-forward
+
+set completion-ignore-case on
+set completion-prefix-display-length 3
+set show-all-if-ambiguous on
+set colored-stats on
+set colored-completion-prefix on
+set bell-style none
+#+end_src
+
+** ~/.gitconfig
+=delta= as pager and diff filter, with =zdiff3= conflict style.
+
+#+begin_src conf :tangle ~/.gitconfig
+# Generated from ~/.config/doom/config.org -- edit there, not here.
+# Any change made directly to this file is lost on the next tangle.
+# See docs/decisions.org ADR-035 (and ADR-033 for what this layer is).
+
+[user]
+	name = James Cook
+	email = mrniceguyjames@gmail.com
+[credential]
+	helper = cache
+[core]
+	pager = delta
+[interactive]
+	diffFilter = delta --color-only
+[delta]
+	navigate = true
+	syntax-theme = ansi
+[merge]
+	conflictstyle = zdiff3
+#+end_src

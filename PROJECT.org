@@ -449,3 +449,39 @@ that), same shape as the transmission entry above. Full writeup:
   row rather than a row of its own.
 - [X] Once live-verified, update ADR-034 =:STATUS:= with a =:LOGBOOK:= entry
   — done 2026-08-29, status now =Implemented, live-verified=.
+
+** TODO Literate configuration — config.org tangling Emacs and the shell layer
+:PROPERTIES:
+:EFFORT:   3h
+:END:
+
+Requested 2026-08-29 while scoping a guard against ADR-033's twice-repeated
+shell-layer regression. Off-roadmap, same shape as the transmission and EPUB
+entries. Full writeup: [[id:adr-literate-config][ADR-035]].
+
+- [X] Verify the design's four load-bearing assumptions before writing
+  anything: per-block =:tangle= targets reach outside =$DOOMDIR=; blank-line
+  padding behaviour; a column-0 =*)= in =~/.bashrc= survives a =sh= block; and
+  the whole conversion round-trips. All four checked, see ADR-035's Evidence.
+- [X] Generate =config.org= from the existing sources and verify all six
+  tangle targets come back *byte-identical* in an isolated scratch directory
+  against a fake =$HOME=.
+- [X] Two deliberate additions on top of the verbatim copy: narrow Doom's
+  tangle-on-save hook to =config.org= itself, and put a generated-by banner at
+  the head of each tangled dotfile.
+- [X] Enable =:config literate= in the =init.el= block, tangle live, back up
+  the three dotfiles first (=~/.bashrc.bak-20260829-202429= and siblings, plus
+  a set outside =$HOME=).
+- [X] =doom sync= clean; =doom doctor= clean (78 modules, 231 packages, one
+  standing false warning). =check-parens=, =bash -n= and =git config --list=
+  all pass on the tangled output.
+- [X] Update =AGENTS.md= and =.claude/rules/doom-emacs.md=: edits go to
+  =config.org=, never the tangled files.
+- [ ] Live-verify in the user's own session: restart Emacs and confirm the
+  config loads (especially the =defadvice!=, which has never run); save
+  =config.org= and confirm a retangle; save a =docs/*.org= file and confirm
+  *no* retangle; open a new terminal and confirm the shell layer still behaves.
+- [ ] Once live-verified, update ADR-035 =:STATUS:= with a =:LOGBOOK:= entry.
+- [ ] Later, incremental: promote in-code comments to Org prose section by
+  section, where it earns its keep. Deliberately not done during the migration
+  — it would have made the byte-for-byte check impossible.
