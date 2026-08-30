@@ -809,6 +809,19 @@ Errors for any account not listed in `+mu4e-spam-accounts'."
                    (lambda (url &optional _new-window)
                      (transmission-add url))))
 
+;; --- EPUB reading (docs/decisions.org ADR-034) -----------------------------
+;; nov.el renders EPUB through `shr'. Nothing else is configured here on
+;; purpose: Evil bindings come from evil-collection (`:editor evil
+;; +everywhere' is on, and it ships a `nov' module), the reading position
+;; comes from Doom's global `save-place-mode', and browsing a library of
+;; files is what Dired/dirvish (`SPC o /', `SPC o s') already does.
+(use-package! nov
+  :mode ("\\.epub\\'" . nov-mode)
+  :config
+  ;; `perfect-margin' already owns the text column; nov's own hard fill
+  ;; would wrap a second time inside those margins.
+  (setq nov-text-width t))
+
 ;; App launcher: SPC o L -- raise-or-launch external GUI apps, plus a couple
 ;; of "the Emacs command *is* the app" bindings (calc, proced) that need no
 ;; process launching at all. This is a plain process launcher, not a window-

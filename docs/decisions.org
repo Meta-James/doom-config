@@ -5784,3 +5784,156 @@ See the Candidates table above.
   hexes.
 - The clipboard or a whitelisted Emacs command fires unexpectedly in a ghostel
   buffer — the OSC 52 consequence above, whose symptom would be silent.
+
+* ADR-034: EPUB reading in Emacs via =nov.el=, configured to one setting
+:PROPERTIES:
+:ID:       adr-epub-nov
+:STATUS:   Implemented, live-verified (user opened an EPUB in their own session 2026-08-29 and confirmed it working; individual checks not itemized back one by one)
+:DATE:     2026-08-29
+:END:
+:LOGBOOK:
+- State "Implemented, live-verified" from "Implemented in config; not
+  live-verified" [2026-08-29 Sat] — user opened a real =.epub= in their own
+  interactive session and reported it verified. They confirmed the outcome
+  rather than walking the Validation list item by item, so =nov-mode= firing
+  and readable rendering are established; the finer points that list names
+  (images specifically, =save-place= restore across a reopen, the
+  =evil-collection= bindings individually) are covered only by that overall
+  confirmation. Same itemization caveat as
+  [[id:adr-init-flag-audit][ADR-026]] and its siblings carry.
+:END:
+
+** Context
+Reading EPUBs meant leaving Emacs for an external reader. The config gained a
+=nov= declaration and a =use-package!= block; this ADR is written *after* that
+change, while it was still uncommitted, to close the dangling =ADR-034=
+reference the code comments already carried. The original scoping conversation
+was not recorded, so the Candidates table below is an evaluation made now, not
+a transcript of the choice as it was made.
+
+Doom ships no ebook module. =nov.el= appears in Doom's tree only as an external
+prerequisite named by =:lang org +noter=
+(=sources/doom+/modules/lang/org/README.org:61=, alongside =:tools pdf= and
+DocView) — the module never declares or installs it.
+
+** Decision drivers
+- =std-no-scope-creep=: reading EPUBs, nothing more. No library manager, no
+  annotation layer, no sync.
+- =AGENTS.md= Doom-first: =package!= + =use-package!=, no second package
+  manager.
+- =AGENTS.md= one-tool-per-responsibility: an EPUB renderer is a distinct
+  responsibility with nothing currently covering it.
+- Configure only what the surrounding config *doesn't* already supply — Evil
+  bindings, reading position, and file browsing all have existing owners here.
+
+** Candidates
+| Candidate                             | Fate     | Reason                                                                                                     |
+|---------------------------------------+----------+------------------------------------------------------------------------------------------------------------|
+| =nov.el=                              | Chosen   | Only maintained Emacs EPUB renderer; renders through =shr=, so it inherits the theme and =shr= settings already in play |
+| External reader (foliate, calibre)    | Rejected | Works, but leaves Emacs — the thing this config exists to avoid — and adds a GUI app to the launcher for one file type |
+| =pandoc= convert to Org, read as text | Rejected | Lossy on structure and images, one-way, and turns every book into a file to manage                        |
+| Do nothing                            | Rejected | The gap was the prompt for the change                                                                      |
+
+** Evidence
+Everything below was checked directly, 2026-08-29:
+
+- =nov= 0.5.0 built at
+  =~/.config/emacs/.local/straight/build-31.1/nov/=; its only package
+  dependency, =esxml=, is built alongside it (=Package-Requires: ((esxml
+  "0.3.6") (emacs "25.1"))=). =doom sync= has therefore already run for the
+  =packages.el= change.
+- =nov.el= carries *no* =auto-mode-alist= autoload — grepping both =nov.el= and
+  =nov-autoloads.el= for =auto-mode-alist= returns nothing. The =:mode= keyword
+  in the =use-package!= block is load-bearing, not decoration; without it
+  =nov-mode= never fires on a =.epub=.
+- =nov-text-width='s own docstring (=nov.el:92-100=): =nil= fills to the window
+  width, an integer fills to that many columns, =t= "disable[s] filling
+  completely". =perfect-margin= is active (=config.el:167-171=,
+  =perfect-margin-visible-width= 100), so leaving =nov-text-width= at its =nil=
+  default would hard-fill text a second time inside margins that already set
+  the column. =t= is the setting that lets =perfect-margin= own it alone.
+- Evil bindings come free: =(evil +everywhere)= is on (=init.el:66=),
+  =evil-collection= ships an =evil-collection-nov.el= module, and =nov= is in
+  =evil-collection-mode-list= (=evil-collection.el:325=).
+- Reading position comes free: Doom enables =save-place-mode= globally on
+  =doom-first-input-hook= (=~/.config/emacs/lisp/doom-emacs.el:1724=).
+- Browsing a shelf of files comes free: =SPC o /= (dirvish) and =SPC o s=
+  (=dirvish-side=, =config.el:359=) already do it — see
+  [[id:adr-cosmetic-module-bindings][ADR-031]] for why both exist.
+
+Not checked: no =.epub= has actually been opened. Rendering, images, evil
+navigation, and position restore are all reasoned from source and module
+wiring, not observed.
+
+** Decision
+=packages.el=: =(package! nov)=.
+
+=config.el=: a =use-package! nov= block with =:mode ("\\.epub\\'" .
+nov-mode)= and exactly one =:config= setting, =(setq nov-text-width t)=.
+
+No keybinding, no hook, no =auto-mode= alias beyond the one above, and no
+=nov-*= face or program settings — every other axis already has an owner named
+in Evidence.
+
+** Consequences
+- =.epub= files opened from anywhere in Emacs (dired, =find-file=, an Org link)
+  render in-buffer instead of prompting or opening raw XML.
+- =:lang org +noter= is enabled (=init.el:172=) and named =nov.el= as one of
+  its three supported backends. =org-noter= against an EPUB is now possible
+  where it previously was not. Unrequested and unexercised — noted so the
+  capability isn't rediscovered as a surprise.
+- One more package in the tree (=nov= + =esxml=), both pure elisp, no native
+  module and no external binary — unlike the =vterm=/=ghostel= class of
+  dependency ([[id:adr-terminal-backend-ghostel][ADR-014]]).
+- =docs/inventory.org= needs a =nov= row; it does not have one yet.
+- If EPUB reading turns into a habit, the deferred axes (a library view, font
+  or line-spacing tuning, annotation) become real decisions. They are
+  deliberately not made here.
+
+** Rejected alternatives
+See the Candidates table above.
+
+** Validation
+Done:
+- =doom sync= — implied by =nov= and =esxml= being present in
+  =build-31.1/=; not re-run in this session.
+- =doom doctor= clean, 2026-08-29: 77 modules, 231 packages. One warning, the
+  standing false "development build of Emacs (31.1)" one — the =markdown
+  +tree-sitter= warning earlier entries carry no longer appears. The package
+  count is not attributed here: the 230 an earlier entry recorded predates
+  other changes, so the delta doesn't cleanly isolate this one. What *is*
+  established is that =esxml= arrived with =nov= rather than already being
+  present — both repos were cloned and both build dirs written in the same
+  second (18:33:30-31), and no other installed package declares =esxml= in its
+  =Package-Requires=.
+
+Outstanding, all requiring the user's own interactive session:
+- Open a real =.epub=: it enters =nov-mode= rather than showing raw markup.
+- Text renders at =perfect-margin='s column with no second, narrower fill
+  inside it, and images render.
+- Evil bindings work in the buffer (=j=/=k=, =n=/=p= for chapter movement) —
+  proves the =evil-collection= module loaded.
+- Close and reopen the file: =save-place= restores the reading position.
+
+** Rollback
+Remove =(package! nov)= from =packages.el= and the =use-package! nov= block
+from =config.el=, then =doom sync=. Nothing outside =$DOOMDIR= is touched —
+unlike [[id:adr-torrent-transmission][ADR-030]] and
+[[id:adr-terminal-layer-pass][ADR-033]], this decision leaves no out-of-git
+surface to restore. =save-place='s stored positions for =.epub= files persist
+harmlessly in =doom-state-dir=.
+
+** Revisit when
+- An EPUB renders badly enough to need =nov-*= tuning — most likely
+  =nov-variable-pitch=, =nov-text-width= as an integer after all, or a
+  =shr=-level setting — which would mean the "configure one thing" premise
+  didn't hold.
+- A shelf of EPUBs accumulates and =dirvish= stops being enough, making a
+  library view a real decision rather than a deferred one.
+- =org-noter= gets used against an EPUB, at which point the =+noter= backend
+  interaction needs its own verification and possibly its own entry.
+- =nov.el= goes unmaintained (0.5.0 is the current release) and a fork or
+  successor appears — it is the only maintained option today, which is the
+  whole basis of the Candidates table.
+- Emacs gains, or Doom adopts, a first-party ebook module, which would make
+  this a module flag instead of a package declaration.

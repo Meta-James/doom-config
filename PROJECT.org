@@ -417,3 +417,34 @@ integration, and this isn't that). Full writeup: [[id:adr-torrent-transmission][
   allows it for one's own account) keeps seeding alive after logout. The
   masked unit still appears in =systemctl --failed= until =sudo systemctl
   reset-failed transmission-daemon= or the next reboot.
+
+** DONE EPUB reading in Emacs — nov.el
+CLOSED: [2026-08-29 Sat]
+:PROPERTIES:
+:EFFORT:   30m
+:END:
+
+Off-roadmap (the roadmap's active phase is AI integration, and this isn't
+that), same shape as the transmission entry above. Full writeup:
+[[id:adr-epub-nov][ADR-034]].
+
+- [X] =packages.el=: =(package! nov)=; =config.el=: =use-package! nov= with
+  =:mode ("\\.epub\\'" . nov-mode)= and one setting, =(setq nov-text-width t)=
+  — =perfect-margin= already owns the text column, so nov's own fill would
+  wrap a second time inside those margins.
+- [X] Verified nothing else needs configuring: Evil bindings come from
+  =evil-collection='s =nov= module (=+everywhere= is on), reading position
+  from Doom's global =save-place-mode=, file browsing from dirvish. Sources
+  cited in ADR-034's Evidence.
+- [X] =doom sync= — =nov= 0.5.0 and its =esxml= dependency are both built.
+- [X] =doom doctor= clean after the =packages.el= change (2026-08-29: 77
+  modules, 231 packages; the only warning is the standing false "development
+  build of Emacs (31.1)" one).
+- [X] Live-verify in the user's own session — confirmed 2026-08-29. Reported
+  as working overall rather than itemized check by check.
+- [X] =docs/inventory.org=: =nov= row added 2026-08-29 (=874daf5= / 0.5.0),
+  noting =esxml= =6a37588= / 0.3.8 as the dependency it brought with it — the
+  table tracks =packages.el= declarations, so =esxml= gets a mention in that
+  row rather than a row of its own.
+- [X] Once live-verified, update ADR-034 =:STATUS:= with a =:LOGBOOK:= entry
+  — done 2026-08-29, status now =Implemented, live-verified=.

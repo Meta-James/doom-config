@@ -66,3 +66,7 @@
 ;; transmission-daemon over its RPC API. No Doom module ships a torrent
 ;; client, and this is the only maintained Emacs one.
 (package! transmission)
+
+;; EPUB reading (docs/decisions.org ADR-034): Doom ships no ebook module, and
+;; nov.el is the only maintained Emacs EPUB renderer.
+(package! nov)
