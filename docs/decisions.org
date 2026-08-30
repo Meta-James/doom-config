@@ -2122,10 +2122,31 @@ anticipated.
 * ADR-017: Org Agenda and Capture basics
 :PROPERTIES:
 :ID:       adr-org-agenda-capture-basics
-:STATUS:   Implemented, live-verified (2026-08-23 — captures and the agenda run in the user's own session)
+:STATUS:   Implemented, live-verified (2026-08-23); one stated behaviour corrected 2026-08-30 — see LOGBOOK
 :DATE:     2026-08-18
 :END:
 :LOGBOOK:
+- Correction [2026-08-30 Sun] — *this ADR's description of =org-agenda-files=
+  was wrong from the day it was written, and the live verification below did
+  not catch it.* The setting was =(list org-directory)=, described here and in
+  =config.org= as covering "the whole pre-existing =org-directory= tree". Org
+  expands a *directory* entry non-recursively: it takes that directory's own
+  =.org= files and does not descend. Measured in a headless daemon,
+  =(org-agenda-files)= returned exactly two paths — =~/org/todo.org= and
+  =~/org/doom.org= — out of 68 =.org= files in the tree. Invisible to every
+  agenda view: =work/= (15 files), =personal/= (3), =calendar/= (2), =daily/=,
+  =mtg/=, =test/=.
+
+  Why the 2026-08-23 verification passed anyway: it opened the agenda and ran
+  the capture templates, both of which target =todo.org= — one of the two files
+  that *were* reachable. The test exercised the working half. Worth keeping as
+  a method point: "the feature worked when I tried it" only covers the path
+  tried, and a scope claim needs a scope measurement, not a smoke test.
+
+  Fixed in =config.org= by listing =org-directory= plus its immediate
+  subdirectories; =(org-agenda-files)= now returns 26 files from 10 entries.
+  Depth-1 and evaluated at load, so a new subdirectory needs a reload. See
+  [[id:roadmap-phase-7][Phase 7]].
 - State "Live-verified" from "Implemented"  [2026-08-23 Sun] — user reloaded
   Emacs, ran the capture templates and opened the agenda; both behaved as
   designed. =doom doctor= clean the same day (50 modules, 158 packages).
@@ -3677,10 +3698,30 @@ See Candidates table above.
 * ADR-025: Calendar via Doom =:app calendar= — calfw view plus two-way org-gcal sync for both Google accounts
 :PROPERTIES:
 :ID:       adr-calendar-org-gcal
-:STATUS:   Implemented in config; not live-verified (blocked on the user-side Google Cloud scope change and first authorization)
+:STATUS:   Implemented in config; not live-verified, and the remaining work was re-scoped 2026-08-30 — see LOGBOOK
 :DATE:     2026-08-23
 :END:
 :LOGBOOK:
+- Re-scope [2026-08-30 Sun] — two findings from [[id:roadmap-phase-7][Phase 7]] change what is left
+  here, and both are worse than "blocked on a Google scope change".
+
+  1. *=~/org/calendar/= was unreachable from the agenda.* =org-agenda-files=
+     only ever resolved to two top-level files ([[id:adr-org-agenda-capture-basics][ADR-017]]'s LOGBOOK has the
+     measurement), and org-gcal's own output directory was not among them. This
+     ADR's validation step — "events appear in the agenda" — could not have
+     passed even with a working authorization. Fixed in =config.org=; the
+     validation step is now meaningful for the first time.
+  2. *The =pass= store does not exist.* =mail/oauth2-google-client= is gone
+     rather than merely unreadable, so the first blocker may be *re-create the
+     OAuth client in the Google Cloud console*, not *add a Calendar scope to
+     the existing one*. See [[id:inv-homedir-state-loss][inventory.org]].
+
+  Resolved in exchange: the client-id *field name*, an open question since this
+  ADR was written, is =client_id=. Settled from source rather than guessed —
+  =+pass-get-field= is a =defalias= onto =auth-source-pass-parse-entry=, which
+  treats line 1 as the secret and splits later lines at their first colon into
+  trimmed =key: value= pairs (=auth-source-pass.el:219-233=). =config.org=
+  tries =client_id= / =client-id= / =login= / =user= in order, so any resolves.
 - Implemented [2026-08-23 Sun]: =config.el= now carries the credential block,
   =org-gcal-fetch-file-alist=, the =SPC o c= / =SPC o C= bindings and the
   agenda-open hook; =~/org/calendar/= exists with the two org-gcal-owned
@@ -6125,7 +6166,7 @@ one-directional.
 * ADR-036: Phase 7 module-flag and =:lang= sweep — activate flags on modules already enabled
 :PROPERTIES:
 :ID:       adr-module-flag-sweep
-:STATUS:   Implemented; live verification pending in the user's own session
+:STATUS:   Implemented and committed (8e35356). Config side verified in headless daemons; two items still need the user's own graphical session — see Validation
 :DATE:     2026-08-30
 :END:
 
@@ -6288,7 +6329,7 @@ missing-grammar case explicitly.
 * ADR-037: Adopt a subset of the Emacs 30.x/31.1 built-ins, and record the ones this config should not take
 :PROPERTIES:
 :ID:       adr-emacs-31-builtins
-:STATUS:   Implemented; live verification pending in the user's own session
+:STATUS:   Implemented and committed (8e35356). All seven settings read back live from a headless daemon with a clean startup log; two rendering questions still need a graphical frame — see Validation
 :DATE:     2026-08-30
 :END:
 

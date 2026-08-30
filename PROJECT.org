@@ -715,13 +715,68 @@ configuration; and =gptel-magit='s =M-g= writes a commit message from the staged
 diff with no setup at all.
 
 *** 7.6 Closeout
-- [ ] =doom sync=, =doom doctor= clean.
-- [ ] =docs/inventory.org=: the "none of the 22 has any configuration" line, the
-  =gcc= "unused by this project" line (grammars compile with it now), the
-  gptel-magit/gptel-quick/ob-gptel row, the new module and package rows, and
-  every new binary per =std-binaries= (role, install method, version check,
-  upgrade, rollback).
-- [ ] Set =:STATUS:= on ADR-036 and ADR-037 once live-verified.
+- [X] =doom sync= and =doom doctor= — doctor down to *one* warning, the standing
+  false "development build of Emacs (31.1)" positive.
+- [X] Committed and pushed as =8e35356= (12 files, +1387/-52), =origin/main=.
+- [X] ADR-036 and ADR-037 =:STATUS:= updated — honestly, not optimistically:
+  both say "implemented and committed, config side verified in headless
+  daemons", because the remaining checks genuinely need a graphical frame and
+  claiming otherwise would defeat the point of the field.
+- [X] [[id:adr-org-agenda-capture-basics][ADR-017]] LOGBOOK — records that its =org-agenda-files= description was
+  wrong from the day it was written, *and* why its 2026-08-23 live verification
+  did not catch it: the test opened the agenda and ran the capture templates,
+  both of which target =todo.org=, one of the two files that were reachable. It
+  exercised the working half. A scope claim needs a scope measurement, not a
+  smoke test.
+- [X] [[id:adr-calendar-org-gcal][ADR-025]] LOGBOOK — re-scopes the remaining calendar work, and records
+  the client-id field name as settled from source.
+- [X] =docs/inventory.org= updated. This turned out to be the substantial part
+  of the closeout rather than a formality, because the file's own binary table
+  was materially wrong — and it is the file whose stated job is "verified
+  current state, don't assume, check this first":
+  - =pyright= was listed at =/usr/local/bin/pyright=; it was **not installed at
+    all** (no global npm packages existed), so =:lang python +pyright= had no
+    server and the flycheck LSP-then-ruff chain never ran.
+  - =ruff= was listed at =~/.local/bin/ruff=; also missing entirely, making ~40
+    lines of Python configuration dead code.
+  - =node= was listed as "v18.19.1, apt package, no nvm/fnm/volta". It is
+    v24.19.0 under nvm — wrong on every count, which also invalidates the
+    =npm install -g --prefix ~/.local= workaround the lifecycle table describes.
+  - =black= was listed under =~/.local/bin=; it is apt's =/usr/bin/black=.
+  - The "none of the 22 modules has any configuration" line is now annotated
+    with *why that sentence misleads* — the same finding as 7.4 above: Doom
+    configures most packages at module level, so "no configuration in
+    =config.el=" usually means none was needed.
+  - The =gcc= "unused by this project" line is corrected: it compiles every
+    tree-sitter grammar.
+  - The gptel-magit/gptel-quick/ob-gptel row now says no config is *needed*,
+    not merely that we have none.
+  - Phase 7's module flags, five new =:lang= modules, 19 grammars and ~15 new
+    binaries added, each with its role.
+- [X] New =inv-homedir-state-loss= section — see below; this is the finding that
+  matters most out of the whole closeout.
+
+**** Homedir state has gone missing, and nothing detected it
+Found while auditing the binary table. A significant amount of configuration
+living *only* in =$HOME= is simply gone: =msmtp= and =~/.msmtprc=, =oama= and
+its config and state directories, =~/.mbsyncrc=, the =mu= index, and one of the
+two mail accounts under =~/.mail= (498M survives, but only
+=mrniceguyjames-gmail= and =archive=). That is on top of the =pass= store and
+GPG key already recorded in 7.7. mu4e can neither send nor sync.
+
+What survived: =~/.bashrc=, =~/.inputrc= and =~/.gitconfig= — the three files
+[[id:adr-literate-config][ADR-035]] made tangle targets after that layer silently reverted twice.
+The layers that vanished are exactly the ones still living only in =$HOME=.
+
+- [ ] Decide what guard, if any, the mail configuration gets. ADR-035's answer
+  (tangle it from =config.org=) works for =.msmtprc= and =.mbsyncrc= in
+  principle, but both carry account addresses and reference credentials, so it
+  needs thought rather than a copy of the ADR-035 pattern.
+- [ ] The =pass= store and GPG key *cannot* take that answer — they must not be
+  committed. They need a different guard: an encrypted backup, or a startup
+  check that warns when an expected entry is unreadable. Currently there is
+  neither, and both losses were found by accident.
+- [ ] Restoring the mail layer itself is Phase 2 work, not Phase 7's.
 
 *** 7.7 Rebuild the =pass= credential store
 Found 2026-08-30 while auditing external binaries. =:tools pass +auth= is

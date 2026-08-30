@@ -65,14 +65,41 @@ enabled ones.
   zen +focus
   (indent-guides/minimap/tabs/zen added 2026-08-21, see [[id:adr-ui-rice-pass][ADR-022]];
   smooth-scroll 2026-08-23)
-- =:editor= evil +everywhere, file-templates, fold, format +onsave, lispy,
+
+*Phase 7 flag and module additions, 2026-08-30 ([[id:adr-module-flag-sweep][ADR-036]]):* =:completion vertico
++childframe=; =:checkers syntax +childframe +icons=; =:editor format +lsp=;
+=:lang latex +cdlatex +fold=; =:lang org +present +crypt=; and five language
+modules enabled — =data=, =graphviz=, =rest +jq=, =web +tree-sitter=, =yaml
++tree-sitter=. Packages that came with them: vertico-posframe,
+flycheck-posframe, cdlatex, org-tree-slide, centered-window, org-re-reveal,
+restclient, ob-restclient, web-mode, yaml-mode, graphviz-dot-mode, csv-mode.
+
+Declined in the same sweep, with reasons recorded in ADR-036 so they are not
+re-proposed: =corfu +tng= (rewrites the live-verified TAB precedence contract),
+=org +journal= (Vulpea owns dailies, [[id:adr-org-roam-with-vulpea][ADR-027]]), =lsp +booster= (needs
+=+eglot=), =:lang nix= and =:lang plantuml= (no binary), =python +uv= (no
+binary), and =yaml +lsp= / =web +lsp= (servers were absent at the time; they are
+installed now, so these two are cheap to add).
+
+*Tree-sitter grammars, 2026-08-30:* 19 installed into
+=~/.config/emacs/.local/etc/tree-sitter/= — python, json, bash, markdown,
+markdown-inline, yaml, toml, c, regex, latex, org, html, css, javascript,
+typescript, tsx, jsdoc, plus make and bibtex which build but report unavailable
+(symbol-name mismatch; neither has a major mode in use here). Before this,
+=treesit-language-available-p= returned nil for *every* language while three
+modules carried =+tree-sitter= flags, so every =*-ts-mode= silently fell back.
+- =:editor= evil +everywhere, file-templates, fold, format +onsave *+lsp*, lispy,
   multiple-cursors, rotate-text, snippets, whitespace +guess +trim, word-wrap
 - =:emacs= dired +icons +dirvish, electric, eww, ibuffer +icons, tramp, undo,
   vc
 - =:term= ghostel +everywhere (sole terminal backend since 2026-08-17,
   [[id:adr-terminal-backend-ghostel][ADR-014]]; =vterm= commented out in =init.el=, not deleted, for easy
   rollback)
-- =:checkers= syntax, spell +flyspell +aspell +everywhere, grammar
+- =:checkers= syntax *+childframe +icons*, spell +flyspell +aspell +everywhere,
+  grammar (=syntax= had run with *no flags at all* until 2026-08-30;
+  =languagetool= for the grammar module's langtool half was installed the same
+  day, but langtool itself is still unwired — =writegood-mode= is the working
+  half)
 - =:tools= biblio, collab +tunnel, debugger, direnv, editorconfig, eval
   +overlay, llm, lookup +dictionary +docsets +offline, lsp +peek, magit
   +forge, make, pdf, tmux, tree-sitter, upload (=llm= added 2026-08-23; it owns
@@ -105,8 +132,63 @@ the =:ui=, =:editor=, =:emacs=, =:tools=, =:os= and =:app= additions marked
 above — at the user's per-module choice. Offered and declined: =:tools
 docker=, =:tools ein=, =:tools terraform=, =:tools ansible=, =:term eshell=,
 =:ui deft=. Two prerequisite binaries came with it: =tuntox= (for =collab
-+tunnel=) and =xdotool= (for =:app everywhere=). None of the 22 has any
-configuration in =config.el=; they run at Doom defaults.
++tunnel=) and =xdotool= (for =:app everywhere=). None of the 22 had any
+configuration in =config.el=; they ran at Doom defaults.
+
+*Reread that sentence carefully as of 2026-08-30 ([[id:adr-module-flag-sweep][ADR-036]]).* It is true and it was
+misleading, and the Phase 7 audit initially drew the wrong conclusion from it —
+that a large amount of capability sat unwired. It did not. Doom configures most
+packages at *module* level, so "no configuration in =config.el=" usually means
+none was needed. Verified examples: =gptel-magit= and =ob-gptel= are hooked by
+=:tools llm=; =org-modern=, =org-appear=, =toc-org=, =ox-pandoc= and
+=org-download= (bound at =SPC m a c/p/P=) by =:lang org=; embark, marginalia,
+consult and its extras, wgrep and vertico-posframe by =:completion vertico=;
+yasnippet and dape by their own modules; and Magit/forge have ~35 bindings under
+=SPC g=. Before writing configuration for anything listed as "unconfigured"
+here, grep =~/.config/emacs/sources/doom+/modules/= first. Where a module owns
+it, the deliverable is [[id:docs-cheatsheet][the cheatsheet]], not elisp.
+
+* Homedir state that has gone missing
+:PROPERTIES:
+:ID:       inv-homedir-state-loss
+:END:
+
+Recorded 2026-08-30. Two separate audits that day — external binaries for
+[[id:adr-module-flag-sweep][ADR-036]], then this file's own binary table — found that a
+significant amount of configuration living *only* in =$HOME=, outside any
+repository, is simply gone. Nothing in this project deleted it and nothing
+detected it; both discoveries were accidental, while chasing something else.
+
+*Missing, confirmed by direct check:*
+
+| Thing | Was | Consequence |
+|-------+-----+-------------|
+| =~/.password-store= | The whole credential store ([[id:adr-gptel-rework][ADR-006]], [[id:adr-email-mu4e][ADR-011]], [[id:adr-calendar-org-gcal][ADR-025]]) | =+pass-get-secret= for =api/anthropic= and =api/openai= failed, so gptel's Anthropic and OpenAI backends were broken. Rebuilt from empty on 2026-08-30 — new GPG key, =pass init= done, entries not yet re-entered |
+| =~/.gnupg/private-keys-v1.d/= | The user's GPG secret key | Empty, directory dated 2020-06-06. Also makes =~/.authinfo.gpg= (169 bytes, 2020-11-08) permanently unreadable |
+| =msmtp= + =~/.msmtprc= | SMTP send backend ([[id:adr-email-mu4e][ADR-011]]) | mu4e cannot send mail |
+| =oama= + =~/.config/oama/= + =~/.local/state/oama/= | Gmail XOAUTH2 token manager ([[id:adr-email-mu4e][ADR-011]]) | No token refresh, so mbsync cannot authenticate either |
+| =~/.mbsyncrc= | IMAP sync configuration | The =mbsync= binary survives with nothing to run |
+| =mu= index | =~/.cache/mu=, =~/.local/share/mu= | mu4e has no index |
+| =~/.mail/ualberta*= | One of the two configured accounts | 498M of mail survives under =~/.mail=, but only =mrniceguyjames-gmail= and =archive= |
+
+*Survived:* =~/.bashrc=, =~/.inputrc=, =~/.gitconfig= — which is the whole
+point. Those three are tangled from =config.org= and under version control
+since [[id:adr-literate-config][ADR-035]], written precisely because that layer had already
+silently reverted twice. The layers that vanished are exactly the ones still
+living only in =$HOME=.
+
+That is the pattern worth acting on, and it generalises past this incident:
+=$HOME= state that no repository tracks and no check verifies disappears without
+anyone noticing. ADR-035 solved it for three dotfiles by making them tangle
+targets. Nothing equivalent covers the mail configuration, and nothing can cover
+the =pass= store or the GPG key, which must not be committed — those need a
+different guard (an encrypted backup, or a startup check that warns when an
+expected entry is unreadable), not version control.
+
+*Deliberately not acted on here.* Restoring the mail layer is Phase 2 work and
+re-entering credentials is the user's alone. This section exists so the next
+session starts from measured fact rather than from this file's previously
+confident "yes" rows.
 
 * Explicit packages (=packages.el=)
 :PROPERTIES:
@@ -116,7 +198,7 @@ configuration in =config.el=; they run at Doom defaults.
 | Package        | Recipe                                              | Pinned commit (2026-07-20, post-upgrade) |
 |----------------+------------------------------------------------------+--------------------------------------------|
 | gptel          | declared by =:tools llm=, not =packages.el=          | =ebf0f3d= / header version 0.9.9.5 (module pin, since 2026-08-23) |
-| gptel-magit / gptel-quick / ob-gptel | =:tools llm=                  | module pins; no config of ours            |
+| gptel-magit / gptel-quick / ob-gptel | =:tools llm=                  | Module pins; no config of ours — *and none needed*, corrected 2026-08-30. The module hooks all three itself (=modules/tools/llm/config.el=): =gptel-magit-install= on =magit-mode-hook=, which binds =M-g= in the commit buffer and adds "Generate commit" to the =magit-commit= transient; =ob-gptel-capf= into =completion-at-point-functions= in Org buffers. =gptel-quick= is on =SPC o l e=. All three are live |
 | copilot        | =(:host github :repo "copilot-emacs/copilot.el" :files ("*.el"))= | =277ca35= / tagged release 0.9.0 |
 | perfect-margin | MELPA default                                       | unrelated to AI work, untouched            |
 | claude-code-ide | =(:host github :repo "manzaltu/claude-code-ide.el")= | Installed Phase 6, 2026-07-20; no tagged release upstream yet (pre-1.0) |
@@ -135,11 +217,11 @@ configuration in =config.el=; they run at Doom defaults.
 | rg      | yes     | /usr/bin/rg                                |
 | fd      | yes     | apt =fd-find= =9.0.0-1=, which installs the binary as =/usr/bin/fdfind=. Predates this project. The =~/.local/bin/fd= symlink this row used to describe is gone (see [[id:adr-terminal-layer-pass][ADR-033]]'s LOGBOOK — the whole shell-half regression that took it out); =FZF_DEFAULT_COMMAND= now calls =fdfind= directly, so nothing here depends on that symlink existing any more |
 | git     | yes     | /usr/bin/git                               |
-| node    | yes     | v18.19.1, apt package =nodejs=, no nvm/fnm/volta |
+| node    | yes     | =~/.nvm/versions/node/v24.19.0/bin/node=, =v24.19.0=. *Corrected 2026-08-30* — this row said "v18.19.1, apt package =nodejs=, no nvm/fnm/volta", which is now wrong on every count: node is nvm-managed and three majors newer. npm's global prefix is therefore the nvm tree, not =/usr/local=, so =npm install -g= no longer needs the =--prefix ~/.local= workaround the lifecycle table below still describes |
 | python3 | yes     | pyenv shim                                 |
-| pyright | yes     | /usr/local/bin/pyright                     |
-| ruff    | yes     | ~/.local/bin/ruff                          |
-| black   | yes     | ~/.local/bin/black                         |
+| pyright | yes     | =~/.nvm/versions/node/v24.19.0/bin/pyright=, =1.1.413=. *Corrected 2026-08-30* — this row claimed =/usr/local/bin/pyright=, but pyright was **not installed at all**: there were no global npm packages on the machine. So =:lang python +pyright= had no server, lsp-mode never started for Python, and =my/python-flycheck-chain-lsp-then-ruff= (which requires a live =lsp-mode=) never ran either. Installed during Phase 7 |
+| ruff    | yes     | =/snap/bin/ruff=, =0.16.4=. *Corrected 2026-08-30* — this row claimed =~/.local/bin/ruff=; ruff was missing entirely, making the ruff flycheck checker, the LSP-then-ruff chain and =my/python-ruff-fix-buffer= (~40 lines of =config.org=) dead code. Installed by the user via snap during Phase 7 |
+| black   | yes     | =/usr/bin/black= (apt, not =~/.local/bin= as this row previously said) |
 | poetry  | yes     | ~/.local/bin/poetry                        |
 | pyenv   | yes     | ~/.pyenv/bin/pyenv                         |
 | direnv  | yes     | =/usr/bin/direnv=, =2.32.1-2ubuntu0.24.04.3= (apt) — predates this project; wired into Emacs via =:tools direnv=/envrc and into bash via a =~/.bashrc= hook, [[id:adr-everywhere-direnv][ADR-032]] |
@@ -151,9 +233,20 @@ configuration in =config.el=; they run at Doom defaults.
 | aider   | no      | not installed                              |
 | gh      | no      | not installed                              |
 | mu / mu4e | yes   | =/usr/bin/mu=, =1.10.8= (apt =maildir-utils=/=mu4e=) — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
-| mbsync (isync) | yes | =/usr/bin/mbsync=, isync =1.4.4-5build3= — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
-| msmtp   | yes     | =/usr/bin/msmtp=, =1.8.24= — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
-| oama    | yes     | ~/.local/bin/oama, =0.22.0 - 2025-08-29=, precompiled release binary (no apt package) — Phase 2, [[id:adr-email-mu4e][ADR-011]] |
+| mbsync (isync) | binary yes, config no | =/usr/bin/mbsync= still present, but =~/.mbsyncrc= is **gone as of 2026-08-30** — the binary has nothing to run. See [[id:inv-homedir-state-loss][the homedir-state note]] |
+| msmtp   | *no*    | *Was* =/usr/bin/msmtp= =1.8.24=. **Gone as of 2026-08-30**, along with =~/.msmtprc=. mu4e cannot send. See [[id:inv-homedir-state-loss][the homedir-state note]] |
+| oama    | *no*    | *Was* =~/.local/bin/oama= =0.22.0=. **Gone as of 2026-08-30**, along with =~/.config/oama/= and =~/.local/state/oama/=. The Gmail XOAUTH2 refresh cycle has no token manager, so mbsync cannot authenticate either. See [[id:inv-homedir-state-loss][the homedir-state note]] |
+| pass    | yes     | =/usr/bin/pass= — installed 2026-08-30 (Phase 7). The *store* is separate: it did not exist at all until the same day, see [[id:inv-homedir-state-loss][the homedir-state note]] |
+| pass-otp | yes    | apt =pass-otp= =1.2.0-10=. Installs a pass *extension* at =/usr/lib/password-store/extensions/otp.bash=, **not** a binary — =command -v pass-otp= will always report it missing |
+| xmllint | yes     | =/usr/bin/xmllint= (apt =libxml2-utils=) — XML formatting for =:lang data= (2026-08-30) |
+| tidy    | yes     | =/usr/bin/tidy= — HTML formatting for =:lang web= (2026-08-30) |
+| stylelint / js-beautify / prettier | yes | npm globals in the nvm tree — CSS linting and JS/CSS/HTML/markdown formatting for =:lang web= (2026-08-30) |
+| yaml-language-server / typescript-language-server | yes | npm globals — prerequisites for adding =+lsp= to =:lang yaml= / =:lang web=, which is *not* yet enabled |
+| isort / mypy | yes | pipx — optional Python extras (2026-08-30) |
+| latexmk | yes     | =/usr/bin/latexmk= (apt =latexmk=, **its own package** — =texlive-extra-utils= provides =latexindent= but not this). AUCTeX's default build command; =auctex-cont-latexmk= was installed and unusable without it |
+| latexindent / biber / xelatex | yes | apt =texlive-extra-utils=, =biber=, =texlive-xetex= (2026-08-30) — LaTeX formatting, biblatex bibliographies, unicode documents |
+| epdfinfo | yes    | =~/.config/emacs/.local/straight/build-31.1/pdf-tools/epdfinfo=, built 2026-08-30 via =M-x pdf-tools-install= after installing =libpng-dev zlib1g-dev libpoppler-glib-dev libpoppler-private-dev=. **Had never been built** — the server existed only as =.c= sources, so =:tools pdf=, =org-noter=, =org-pdftools=, =saveplace-pdf-view= and images in =nov= had never worked |
+| emacs-lsp-booster | *no, deliberately* | Not installed and should not be: Doom's own module doctor errors =+booster does nothing without +eglot= (=modules/tools/lsp/doctor.el:14=) and the lsp-mode half of the integration is commented out behind a TODO (=+lsp.el:151-168=). This config is lsp-mode. Revisit only alongside a real eglot migration |
 | mpv     | yes     | =/usr/bin/mpv=, =0.37.0-1ubuntu4= (apt) — Phase 3, [[id:adr-rss-elfeed][ADR-012]] |
 | yt-dlp  | yes     | =/usr/bin/yt-dlp=, =2024.04.09-1= (apt) — Phase 3, [[id:adr-rss-elfeed][ADR-012]] |
 | xdotool | yes     | =/usr/bin/xdotool=, =3.20160805.1= (apt) — predates this project; also the paste/refocus backend for =emacs-everywhere= on X11 ([[id:adr-everywhere-direnv][ADR-032]]). The agent's own =which= check first reported it missing; user confirmed it was installed the whole time — see [[id:adr-app-launcher][ADR-020]]'s LOGBOOK and [[id:tshoot-agent-shell-system-state][troubleshooting.org]] |
@@ -208,7 +301,7 @@ the AI subsystem, not a full machine audit).
 |------------------------------+------------------------------------------+--------------------------------------------------------------------------+----------------------------------+---------------------------------------------------|
 | =claude= (Claude Code CLI)  | Backs claude-code-ide.el's agentic session ([[id:adr-primary-agent][ADR-004]]) | Official native installer (=curl -fsSL https://claude.ai/install.sh \vert bash=); lands in =~/.local/share/claude/versions/<ver>=, symlinked from =~/.local/bin/claude= | Self-updates in place (=claude update=, or automatic) — confirmed two versions present on disk (2.1.215, 2.1.216), so an update already happened mid-project without manual reinstall | Delete =~/.local/share/claude= and the =~/.local/bin/claude= symlink; remove the =claude-code-ide= package declaration from =packages.el= and =doom sync= |
 | =@github/copilot-language-server= (via =node=/=npm=) | LSP-protocol backend for =copilot.el='s suggestions and NES ([[id:adr-copilot-nes][ADR-007]]) | =M-x copilot-install-server= (fully in-Emacs, reproducible — reads source: uses npm when found on =PATH=, else downloads precompiled native binaries directly, no manual shell step either way) | =M-x copilot-install-server= again re-installs current/latest | Delete =copilot-install-dir= (Copilot's own package-managed install dir); remove =copilot= from =packages.el= and =doom sync= |
-| =cmake=, =make=, =gcc= (=build-essential=) | Build toolchain that compiled vterm's native module (=vterm-module.so=) — discovered as a genuine missing prerequisite during Phase 6, see [[id:tshoot-vterm-module][troubleshooting.org]]. Historical: =vterm= itself is disabled since 2026-08-17 ([[id:adr-terminal-backend-ghostel][ADR-014]]), this toolchain now unused by this project (may still back other tools on the machine) | =sudo apt install build-essential cmake= (already present on this machine when checked; not installed by this project) | Standard =apt= upgrade | Standard =apt remove=; unrelated to whether vterm itself stays installed |
+| =cmake=, =make=, =gcc= (=build-essential=) | Build toolchain that compiled vterm's native module (=vterm-module.so=) — discovered as a genuine missing prerequisite during Phase 6, see [[id:tshoot-vterm-module][troubleshooting.org]]. =vterm= itself is disabled since 2026-08-17 ([[id:adr-terminal-backend-ghostel][ADR-014]]), but this toolchain is *no longer unused* — corrected 2026-08-30: =gcc= compiles every tree-sitter grammar. Emacs builds them itself via =treesit-install-language-grammar=, and 19 were installed during [[id:adr-module-flag-sweep][ADR-036]]. Removing the toolchain would break grammar installation for any new language | =sudo apt install build-essential cmake= (already present on this machine when checked; not installed by this project) | Standard =apt= upgrade | Standard =apt remove=; unrelated to whether vterm itself stays installed |
 | =mu=/=mu4e= | mu4e's indexer + the mu4e elisp package itself (mu4e is *not* straight-managed — deliberately, per the module's own source comment, since it's "prone to breaking updates" and bundled with =mu=) — [[id:adr-email-mu4e][ADR-011]] | =sudo apt install maildir-utils mu4e= — done 2026-07-29 (user's own terminal, sudo denied to the agent by auto-mode's classifier) | Standard =apt= upgrade | Standard =apt remove=; also remove =(mu4e ...)= from =init.el='s =:email= block and =doom sync= |
 | =isync= (=mbsync=) | IMAP sync backend for all 3 mail accounts — [[id:adr-email-mu4e][ADR-011]] | =sudo apt install isync= — done 2026-07-29 | Standard =apt= upgrade | Standard =apt remove=; delete =~/.mbsyncrc= |
 | =msmtp= | SMTP send backend, recommended by the mu4e module over raw =smtpmail= for multi-account setups — [[id:adr-email-mu4e][ADR-011]] | =sudo apt install msmtp= — done 2026-07-29 | Standard =apt= upgrade | Standard =apt remove=; delete =~/.msmtprc= |
