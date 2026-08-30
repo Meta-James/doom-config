@@ -364,7 +364,8 @@ on [[file:docs/decisions.org][ADR-026]], ADR-027, ADR-028, and ADR-029 — all f
 "Implemented; not live-verified" to live-verified, with the per-ADR caveat that
 individual features were not itemized back one by one.
 
-** TODO Emacs as a torrent client — transmission.el + user-session daemon
+** DONE Emacs as a torrent client — transmission.el + user-session daemon
+CLOSED: [2026-08-29 Sat]
 :PROPERTIES:
 :EFFORT:   1h
 :END:
