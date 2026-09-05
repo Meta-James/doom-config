@@ -1541,7 +1541,121 @@ fleeting-note capture template (=~/org/fleeting.org=), separate from the
 existing task-flavored "n" template.
 
 #+begin_src emacs-lisp
-;; Literature-notes (citar) workstream -- not yet implemented.
+;; `citar-bibliography' MUST be set at top level, never inside `after!' --
+;; Doom's `:tools biblio' module derives `org-cite-global-bibliography' from
+;; it inside `(after! oc ...)' (see that module's config.el), so a value that
+;; arrives later than the module's own `after! oc' registration is too late
+;; and the global bibliography silently stays nil. Same ordering hazard as
+;; `oauth2-auto-plstore'. This bit the 2026-08-30 citar spike; see
+;; PROJECT.org's notes on that backout. `citar-library-paths' has no such
+;; hazard, but is set alongside it for the same reason -- both name paths
+;; under `org-directory', consistent with ADR-039's host-agnostic-path
+;; convention.
+(setq citar-bibliography (expand-file-name "biblio.bib" org-directory)
+      citar-library-paths (list (expand-file-name "papers/" org-directory)))
+
+;; Hand-wired note-creation backend: `vulpea-create' instead of
+;; `citar-org-roam''s `org-roam-capture-'. Keeps Vulpea the single
+;; note-creation entrypoint (same precedent as the hand-rolled Vulpea
+;; dailies instead of `org-roam-dailies'). Shape follows
+;; `citar-org-roam.el' (`citar-org-roam-notes-config' and its four
+;; functions) as a reference for what citar passes in, but targets Vulpea's
+;; own API: `vulpea-create' (vulpea.el:1519) to make notes,
+;; `vulpea-db-query-by-property'/`-by-property-key' (vulpea-db-query.el:556)
+;; to find them by citekey, and `vulpea-visit' to open them by id.
+(defconst my/citar-vulpea-citekey-property "CITEKEY"
+  "Org property key vulpea literature notes use to record their citekey.
+Set by `my/citar-vulpea--create' on every note it creates; queried by
+`my/citar-vulpea--items' to find a citekey's notes again.")
+
+(defun my/citar-vulpea--items (&optional keys)
+  "Return a hash table mapping each citekey in KEYS to its Vulpea note ids.
+KEYS is a list of citekeys, or nil to cover every citekey that has a note --
+matches the `:items' contract documented at `citar-notes-sources', which
+citar calls with nil to mean \"all\"."
+  (let ((table (make-hash-table :test #'equal))
+        (notes (if keys
+                   (seq-mapcat
+                    (lambda (key)
+                      (vulpea-db-query-by-property
+                       my/citar-vulpea-citekey-property key))
+                    keys)
+                 (vulpea-db-query-by-property-key
+                  my/citar-vulpea-citekey-property))))
+    (dolist (note notes)
+      (when-let* ((key (cdr (assoc my/citar-vulpea-citekey-property
+                                    (vulpea-note-properties note)))))
+        (push (vulpea-note-id note) (gethash key table))))
+    table))
+
+(defun my/citar-vulpea--hasitems ()
+  "Return a predicate: citekey -> non-nil iff it has a Vulpea note.
+Matches the `:hasitems' contract at `citar-notes-sources'."
+  (let ((table (my/citar-vulpea--items)))
+    (lambda (citekey) (and (gethash citekey table) t))))
+
+(defun my/citar-vulpea--open (note-id)
+  "Visit the Vulpea note identified by NOTE-ID.
+Matches the `:open' contract at `citar-notes-sources' -- NOTE-ID is one of
+the ids `my/citar-vulpea--items' put in its hash table, and `vulpea-visit'
+(vulpea.el:1144) accepts an id directly."
+  (vulpea-visit note-id))
+
+(defun my/citar-vulpea--create (citekey entry)
+  "Create (or visit) the Vulpea literature note for CITEKEY/ENTRY.
+Matches the `:create' contract at `citar-notes-sources'. Visits the
+existing note instead of creating a duplicate if one is already on record
+for CITEKEY."
+  (if-let* ((existing (car (gethash citekey (my/citar-vulpea--items (list citekey))))))
+      (vulpea-visit existing)
+    (let ((title (citar-format--entry
+                  "${author editor} - ${title} (${date issued year})" entry)))
+      (vulpea-create
+       title
+       :tags '("literature")
+       :properties (list (cons my/citar-vulpea-citekey-property citekey))))))
+
+(after! citar
+  (citar-register-notes-source
+   'vulpea
+   (list :name "Vulpea"
+         :category 'vulpea-note
+         :items #'my/citar-vulpea--items
+         :hasitems #'my/citar-vulpea--hasitems
+         :open #'my/citar-vulpea--open
+         :create #'my/citar-vulpea--create))
+  (setq citar-notes-source 'vulpea))
+
+;; Doom's `:tools biblio' module wires `citar-org-roam-mode' -- active
+;; because the `org' module's `+roam' flag is on -- via
+;; `(after! (citar org-roam) (citar-org-roam-mode))' in its own config.el.
+;; That mode's setup function does `(setq citar-notes-source 'citar-org-roam)'
+;; the moment org-roam actually loads, which can happen well after citar
+;; loads (org-roam is lazy here; nothing forces it at startup), silently
+;; undoing the `after! citar' block above. Re-assert here, gated on the same
+;; `(citar org-roam)' pair the module uses: module config.el files load
+;; before $DOOMDIR's, so this form is queued after the module's for that same
+;; load event and always runs last, independent of *when* org-roam ends up
+;; loading relative to citar.
+(after! (citar org-roam)
+  (setq citar-notes-source 'vulpea))
+
+;; Fleeting-note capture: near-zero-friction quick capture into its own
+;; ~/org/fleeting.org inbox, separate from the existing "n" template (which
+;; keeps its job: task-adjacent notes into todo.org's Inbox). Different
+;; lifecycles -- a fleeting note gets processed into a permanent note via
+;; this citar/Vulpea pipeline, a task note gets done and archived. Appended
+;; with `add-to-list' rather than editing the `org-capture-templates' setq
+;; in "Org Agenda and Capture basics" directly, so this workstream's diff
+;; stays inside its own anchor heading. Depends on load order: that setq
+;; must run first to seed the base list, which it does -- it appears earlier
+;; in this file, so its `after! org' registers first and fires first.
+(after! org
+  (add-to-list 'org-capture-templates
+               `("f" "Fleeting note" entry
+                 (file ,(expand-file-name "fleeting.org" org-directory))
+                 "* %?\n%U" :empty-lines 1)
+               'append))
 #+end_src
 
 ** org-roam-ui and org-fc
@@ -1906,11 +2020,15 @@ lives in =docs/decisions.org=, and the verified state in =docs/inventory.org=.
 #+end_src
 
 ** Literature notes packages
-Anchor for the citar workstream's package declarations (=citar=,
-=citar-org-roam= only if the hand-wired =vulpea-create= integration proves
-disproportionate -- see the plan).
+Anchor for the citar workstream's package declarations. Deliberately
+*not* =citar-org-roam= -- the hand-wired =vulpea-create= integration in the
+"Literature notes: citar" heading covers note creation instead, keeping
+Vulpea the single note-creation entrypoint. (Doom's =:tools biblio= module
+declares =citar-org-roam= on its own, since the =org= module's =+roam= flag
+is on -- that's the module's default, not something declared here; the
+citar heading's config neutralizes its effect on =citar-notes-source=.)
 #+begin_src emacs-lisp
-;; citar -- not yet declared.
+(package! citar)
 #+end_src
 
 ** org-roam-ui and org-fc packages

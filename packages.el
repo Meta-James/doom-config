@@ -84,7 +84,7 @@
 (package! mpv)
 (package! elfeed-tube-mpv)
 
-;; citar -- not yet declared.
+(package! citar)
 
 ;; org-roam-ui, org-fc -- not yet declared.
 
