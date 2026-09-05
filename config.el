@@ -1353,7 +1353,70 @@ DIRECTION is `previous' or `next'."
 
 ;; GTD extension workstream -- not yet implemented.
 
-;; PARA tag/property scheme workstream -- not yet implemented.
+;; PARA scheme (zettelkasten-integration plan sec.4): a `PARA' org property
+;; -- Project / Area / Resource / Archive -- layered on the existing flat
+;; `org-directory' tree Vulpea already indexes whole. Not a folder taxonomy:
+;; nothing here moves files or forces a re-scan. "Archiving" a note is just
+;; flipping this property to "Archive"; `vulpea-db-autosync-mode''s
+;; file-notify watcher (see the Note management: Vulpea section above) picks
+;; up the save exactly like any other edit, so no explicit resync call is
+;; made below. Property, not a tag, so it can be queried with Vulpea's own
+;; `vulpea-db-query-by-property' (indexed lookup) rather than a tag scan.
+(defconst my/vulpea-para-values '("Project" "Area" "Resource" "Archive")
+  "The four PARA classification values, in Tiago Forte's canonical order.")
+
+(defun my/vulpea-para--goto (note)
+  "Move point in the current buffer to NOTE's entry.
+NOTE must be backed by the current buffer's file. File-level notes
+\(level 0) go to `point-min'; heading-level notes are found by their
+`:ID:' property line -- the same lookup `vulpea-visit' itself does."
+  (goto-char (point-min))
+  (unless (= (vulpea-note-level note) 0)
+    (unless (re-search-forward
+             (format "^[ \t]*:ID:[ \t]+%s[ \t]*$" (regexp-quote (vulpea-note-id note)))
+             nil t)
+      (user-error "Could not find heading with ID: %s" (vulpea-note-id note)))
+    (org-back-to-heading t)))
+
+(defun my/vulpea-para--current-note ()
+  "Return the Vulpea note backing the current buffer's file, or nil."
+  (when-let* ((file (buffer-file-name)))
+    (car (vulpea-db-query-by-file-path file 0))))
+
+(defun my/vulpea-para-set ()
+  "Set the current note's PARA property, saving its file.
+Operates on the note backing the current buffer when there is one;
+otherwise prompts to select any Vulpea note. Value is read via
+`completing-read' over `my/vulpea-para-values'."
+  (interactive)
+  (let* ((note (or (my/vulpea-para--current-note)
+                    (vulpea-select "PARA note" :require-match t)))
+         (value (completing-read (format "PARA (%s): " (vulpea-note-title note))
+                                  my/vulpea-para-values nil t)))
+    (let ((buf (or (get-file-buffer (vulpea-note-path note))
+                   (find-file-noselect (vulpea-note-path note)))))
+      (with-current-buffer buf
+        (save-excursion
+          (my/vulpea-para--goto note)
+          (org-entry-put (point) "PARA" value))
+        (save-buffer)))
+    (message "%s: PARA -> %s" (vulpea-note-title note) value)))
+
+(defun my/vulpea-para-find (value)
+  "Visit a note tagged with PARA value VALUE.
+VALUE is read via `completing-read' over `my/vulpea-para-values'.
+Queries `vulpea-db-query-by-property', Vulpea's own indexed-property
+lookup, so this reads the database rather than grepping files."
+  (interactive (list (completing-read "PARA: " my/vulpea-para-values nil t)))
+  (let ((notes (vulpea-db-query-by-property "PARA" value)))
+    (if notes
+        (vulpea-visit (vulpea-select-from (format "PARA: %s" value) notes :require-match t))
+      (message "No notes with PARA: %s" value))))
+
+(map! :leader
+      (:prefix ("n p" . "para")
+       :desc "Set PARA value"     "s" #'my/vulpea-para-set
+       :desc "Find by PARA value" "f" #'my/vulpea-para-find))
 
 ;; Literature-notes (citar) workstream -- not yet implemented.
 
