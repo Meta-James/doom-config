@@ -1504,13 +1504,78 @@ DIRECTION is `previous' or `next'."
 :ID:       gtd-extensions-anchor
 :END:
 
-Anchor heading for the zettelkasten-integration plan's GTD workstream
-(hand-rolled extension of the existing org-agenda/org-capture setup —
-ADR-017 pattern, no =org-gtd= package). Someday/maybe and projects lists,
-new capture templates. Content lands here; see the plan for scope.
+Hand-rolled extension of the [[id:adr-org-agenda-capture-basics][ADR-017]]
+org-agenda/org-capture setup — no =org-gtd= package, no GTD context tags
+(=@home=/=@work=). Two new dedicated files, =~/org/projects.org= and
+=~/org/someday.org=; three new capture templates; one new review view for
+the someday/maybe list. Deliberately thin, per the zettelkasten-integration
+plan's GTD workstream.
 
 #+begin_src emacs-lisp
-;; GTD extension workstream -- not yet implemented.
+;; GTD extension (zettelkasten-integration plan, workstream 1). Appends to
+;; ADR-017's `org-capture-templates'/`org-agenda-custom-commands' rather than
+;; redefining them, so this block is additive regardless of file order
+;; relative to the "Org Agenda and Capture basics" section above.
+;;
+;; Two new dedicated files -- ~/org/projects.org, ~/org/someday.org -- both
+;; land at the top level of `org-directory'. `org-agenda-files' already
+;; includes `org-directory' itself as a directory entry (see above), and Org
+;; re-expands a directory entry to its current .org files on every agenda
+;; build, not only at the load-time the list itself was computed -- so a new
+;; *file* inside an already-listed directory needs no reload, unlike a new
+;; *subdirectory* (which does, per the comment above). Neither file is
+;; created by this config; org-capture's own `file' target semantics create
+;; it on first use.
+;;
+;; No new "waiting" TODO state: `BLOCKED' already means exactly that ("needs
+;; something [from someone/something] before it can move"), and the existing
+;; "b" custom agenda view (tree-wide `todo "BLOCKED"') already sweeps every
+;; BLOCKED entry regardless of which file it's filed in. Filing waiting-for
+;; items as BLOCKED gets them a review view for free instead of inventing a
+;; parallel keyword and a parallel view for the same concept.
+(after! org
+  (setq org-capture-templates
+        (append
+         org-capture-templates
+         `(("p" "GTD project" entry
+            (file ,(expand-file-name "projects.org" org-directory))
+            ;; `:project:' is a structural/type tag ("this heading is a
+            ;; project"), not a GTD context tag -- it exists only so a
+            ;; project heading stays visually distinct from ordinary TODO
+            ;; subtasks added under it by hand later. TODO keyword reused
+            ;; unchanged from ADR-017's sequence: a project is itself
+            ;; something to work, so it belongs in the same TODO searches as
+            ;; any other task.
+            "* TODO %? :project:\n%U" :empty-lines 1)
+           ("s" "Someday/maybe" entry
+            (file ,(expand-file-name "someday.org" org-directory))
+            ;; Deliberately no TODO keyword. Giving these a keyword would
+            ;; pull them into the tree-wide "TODO" searches ("u"/"s" above)
+            ;; -- the entire point of a someday/maybe list is that it stays
+            ;; inert until a human promotes an entry to a real task by hand
+            ;; (at which point they'd add a keyword themselves).
+            "* %?\n%U" :empty-lines 1)
+           ("w" "Waiting for" entry
+            (file+headline ,(expand-file-name "todo.org" org-directory) "Waiting")
+            ;; `file+headline' creates the "Waiting" headline in todo.org on
+            ;; first use if it isn't already there (stock org-capture
+            ;; behaviour: missing headline -> created at end of file) -- no
+            ;; separate waiting-for.org needed for this.
+            "* BLOCKED %?\n%U" :empty-lines 1))))
+  ;; One new review view: someday/maybe entries carry no TODO keyword (see
+  ;; above), so they're invisible to every todo-keyword-based view including
+  ;; "b"/"u"/"s" -- by design, but that means they also need their own way
+  ;; back into view, or the list becomes write-only. `tags' with a bare
+  ;; "LEVEL=1" match (a property match, not an actual tag) lists every
+  ;; top-level heading in the file regardless of tags/keyword, scoped to
+  ;; someday.org the same way "u"'s Inbox block scopes to todo.org.
+  (setq org-agenda-custom-commands
+        (append
+         org-agenda-custom-commands
+         `(("m" "Someday/maybe — review list"
+            tags "LEVEL=1"
+            ((org-agenda-files (list ,(expand-file-name "someday.org" org-directory)))
+             (org-agenda-overriding-header "Someday / maybe")))))))
 #+end_src
 
 ** PARA scheme
