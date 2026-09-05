@@ -88,4 +88,9 @@
 
 ;; org-roam-ui, org-fc -- not yet declared.
 
-;; org-transclusion, consult-notes -- not yet declared.
+(package! org-transclusion)
+;; consult-notes' own recipe (fetched from MELPA's recipe repo, already
+;; mirrored locally) points at Codeberg, not GitHub -- no explicit `:recipe'
+;; needed here since straight resolves it automatically the same way it does
+;; for the plain `(package! foo)' declarations above.
+(package! consult-notes)

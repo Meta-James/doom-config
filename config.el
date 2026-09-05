@@ -1359,7 +1359,46 @@ DIRECTION is `previous' or `next'."
 
 ;; org-roam-ui + org-fc workstream -- not yet implemented.
 
-;; org-transclusion + consult-notes workstream -- not yet implemented.
+;; org-transclusion: embeds a *live*, read-only copy of another note's
+;; content into the current buffer via a `#+transclude:' keyword line,
+;; instead of copy-pasting it -- the source stays the single writable copy.
+;; This is the mechanism the system-notes generator below depends on
+;; ([[id:system-notes-generator-anchor]]): a personal note transcludes the
+;; generator's disposable output rather than annotating it directly, so a
+;; regenerate can overwrite the generated file wholesale without eating any
+;; hand-written text (see the plan, workstream 6). No global config needed --
+;; it "requires no additional configuration" per its own docs -- and it's a
+;; per-buffer minor mode, toggled rather than hooked into every org buffer so
+;; files that never transclude anything don't pay its refresh cost.
+(use-package! org-transclusion
+  :commands (org-transclusion-mode org-transclusion-add org-transclusion-remove))
+
+;; consult-notes: one Vertico/consult-based note finder spanning every note
+;; source in play, wired per its own docs (mclear-tools/consult-notes).
+;; `consult-notes-file-dir-sources' covers `org-directory' as plain files --
+;; this is also how Vulpea notes surface here, since Vulpea has no consult
+;; integration of its own and a Vulpea note is just an .org file (with an
+;; `ID') somewhere under this tree. `consult-notes-org-roam-mode' adds a
+;; second, richer (title/backlink-aware) source scoped to the `~/org/roam/'
+;; subtree specifically. The two sources overlap on files under
+;; `~/org/roam/' -- expected, not a bug: the org-roam source is strictly more
+;; informative for those files, and consult just shows both.
+(use-package! consult-notes
+  :commands (consult-notes consult-notes-search-in-all-notes)
+  :config
+  (setq consult-notes-file-dir-sources
+        `(("Org notes" ?o ,org-directory)))
+  (consult-notes-org-roam-mode))
+
+;; Both live under the same `SPC n x' ("notes extras") prefix, mirroring how
+;; the Vulpea workstream above got its own `SPC n v' prefix.
+(map! :leader
+      (:prefix ("n x" . "notes extras")
+       :desc "Toggle transclusion mode"     "t" #'org-transclusion-mode
+       :desc "Add transclusion at point"    "a" #'org-transclusion-add
+       :desc "Remove transclusion at point" "r" #'org-transclusion-remove
+       :desc "Find note (consult)"          "f" #'consult-notes
+       :desc "Search all notes (consult)"   "s" #'consult-notes-search-in-all-notes))
 
 (load! "system-notes")
 
