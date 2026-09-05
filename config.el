@@ -1597,7 +1597,47 @@ for CITEKEY."
                  "* %?\n%U" :empty-lines 1)
                'append))
 
-;; org-roam-ui + org-fc workstream -- not yet implemented.
+;; org-roam-ui: graph visualization, reading org-roam's OWN sqlite DB, not
+;; Vulpea's. org-roam-directory is scoped to ~/org/roam/ only (see "org-roam
+;; alongside Vulpea" above) -- so org-roam-ui graphs that one subtree and
+;; nothing else. Notes anywhere else under org-directory are absent from the
+;; graph entirely, not merely unlinked within it; that is a deliberate,
+;; known limitation (zettelkasten-integration-plan.md S6), not a bug to fix
+;; here. It is also why later workstreams that want a note graphed place it
+;; under ~/org/roam/ on purpose.
+(use-package! org-roam-ui
+  :after org-roam
+  :config
+  (setq org-roam-ui-sync-theme t
+        org-roam-ui-follow t
+        org-roam-ui-update-on-save t
+        ;; Upstream's own suggested config defaults this to t (auto-open a
+        ;; browser tab). Pinned nil here so enabling the package doesn't
+        ;; also mean a browser tab on every Emacs start; launch explicitly
+        ;; instead (`org-roam-ui-mode', or `org-roam-ui-open' once running).
+        org-roam-ui-open-on-start nil))
+
+;; org-fc: spaced repetition. Natively tag-based discovery
+;; (`org-fc-flashcard-tag' defaults to "fc") -- no discovery wrapper needed;
+;; an earlier draft of the integration plan assumed one was required and
+;; that assumption was wrong (spike in zettelkasten-integration-plan.md S6,
+;; S13). `org-fc-directories' already defaults to its own ("~/org/"),
+;; identical to `org-directory' (config.org:105); set explicitly below
+;; anyway so this doesn't silently ride on an upstream default matching by
+;; coincidence.
+;;
+;; Cards are NOT created by hand-adding the "fc" tag. The tag alone isn't a
+;; valid card -- it's missing the FC_TYPE/FC_CREATED properties and
+;; REVIEW_DATA drawer that scheduling depends on. Run
+;; `org-fc-type-normal-init' or `org-fc-type-cloze-init' on a heading (or
+;; the hydra, `org-fc-hydra/body'), which writes all of that together.
+(use-package! org-fc
+  :commands (org-fc-review org-fc-hydra/body)
+  :config
+  (setq org-fc-directories '("~/org/")))
+
+(map! :leader
+      :desc "Flashcard review (org-fc)" "n R" #'org-fc-review)
 
 ;; org-transclusion: embeds a *live*, read-only copy of another note's
 ;; content into the current buffer via a `#+transclude:' keyword line,
