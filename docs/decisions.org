@@ -3702,6 +3702,18 @@ See Candidates table above.
 :DATE:     2026-08-23
 :END:
 :LOGBOOK:
+- Correction [2026-09-04 Fri] — the second 2026-08-30 finding below was wrong
+  about what it implied, and the calendar blocker is back to roughly its
+  original size. The store was missing from *this desktop only*; the OAuth
+  client itself was never lost, so re-creating it in the Google Cloud console is
+  not on the table. A store was rebuilt locally on 2026-08-30 and holds the
+  entry, with two defects that are James's to fix: it is named
+  =mail/oaut2-google-client= (a typo =pass mv= corrects) and it carries no
+  =client_id= line (a =pass edit= adds one). A USB transfer of the laptop's own
+  store is also pending and may resolve both. So what remains here is: fix or
+  supersede those two defects, then the original Google-side work — add the
+  Calendar scope to the existing client and re-authorize both accounts. See
+  =docs/ai/providers.org='s store-status section and PROJECT.org §7.7.
 - Re-scope [2026-08-30 Sun] — two findings from [[id:roadmap-phase-7][Phase 7]] change what is left
   here, and both are worse than "blocked on a Google scope change".
 
@@ -3715,6 +3727,8 @@ See Candidates table above.
      rather than merely unreadable, so the first blocker may be *re-create the
      OAuth client in the Google Cloud console*, not *add a Calendar scope to
      the existing one*. See [[id:inv-homedir-state-loss][inventory.org]].
+     *Superseded by the 2026-09-04 entry above* — the store was absent from this
+     host only, and the OAuth client was never lost.
 
   Resolved in exchange: the client-id *field name*, an open question since this
   ADR was written, is =client_id=. Settled from source rather than guessed —

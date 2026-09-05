@@ -896,16 +896,24 @@ same exposure either way.
 *** 7.7 Rebuild the =pass= credential store
 Found 2026-08-30 while auditing external binaries. =:tools pass +auth= is
 enabled and =docs/ai/providers.org= records =api/anthropic= and =api/openai= as
-"Live — verified", but nothing backing that survives: no =pass= binary, no
-=~/.password-store=, =PASSWORD_STORE_DIR= unset, and
-=~/.gnupg/private-keys-v1.d/= empty (directory dated 2020-06-06). No backup of a
-store exists anywhere under =/home/james=. So =config.org:740= and =:746= call
-=+pass-get-secret= against nothing, and gptel's Anthropic and OpenAI backends
-are broken — masked in daily use because claude-code-ide authenticates through
-the Claude CLI's own login and never touches =pass=.
+"Live — verified", but nothing backing that survived *on this desktop*: no
+=pass= binary, no =~/.password-store=, =PASSWORD_STORE_DIR= unset, and
+=~/.gnupg/private-keys-v1.d/= empty (directory dated 2020-06-06). So
+=config.org='s =+pass-get-secret= calls resolved against nothing, and gptel's
+Anthropic and OpenAI backends were broken — masked in daily use because
+claude-code-ide authenticates through the Claude CLI's own login and never
+touches =pass=.
 
-This is a rebuild from empty, not a recovery. The API keys have to come from the
-provider dashboards again; there is nothing to decrypt.
+Read that as host scope, not loss: the laptop's store was intact the whole time
+(see the transfer subsection below). What happened here on 2026-08-30 was a
+rebuild from empty — a new key, =pass init=, and each secret re-entered from its
+provider's dashboard.
+
+*Done 2026-08-30, with two defects.* All three entries were inserted, so the
+store exists and is encrypted to the desktop key alone. But the Google entry was
+named =mail/oaut2-google-client= (typo) and holds only its secret line, no
+=client_id=. Both are fixed by hand below; the pending USB transfer may make
+that moot by replacing the store outright.
 
 Steps 2–6 are the user's own — a passphrase and three secret values, none of
 which may pass through an agent or appear in any command output.
@@ -923,11 +931,17 @@ which may pass through an agent or appear in any command output.
   design, so recording it here is fine.
 - [X] =pass init 4F6F02436717EE9B823369EAE2F99AE2D3BDF9E1= — done 2026-08-30.
   =~/.password-store/.gpg-id= holds the fingerprint.
-- [ ] =pass insert api/anthropic= — read by =config.org:740=. Prompts without
-  echoing and never enters shell history.
-- [ ] =pass insert api/openai= — read by =config.org:746=.
-- [ ] =pass insert -m mail/oauth2-google-client= — multiline. Line 1 is the
+- [X] =pass insert api/anthropic= — done 2026-08-30. Prompts without echoing and
+  never enters shell history. *Unverified:* the entry is two lines and shorter
+  than an Anthropic key normally runs, which is the shape of a paste that
+  wrapped. Confirming it means one request reporting *HTTP status only*, never
+  the value, and it needs James's say-so first — it puts a live key on the wire.
+- [X] =pass insert api/openai= — done 2026-08-30, same two-line shape and the
+  same unverified question.
+- [X] =pass insert -m mail/oauth2-google-client= — multiline. Line 1 is the
   client *secret*; line 2 is =client_id: <id>.apps.googleusercontent.com=.
+  Inserted 2026-08-30, but *both halves came out wrong* — see the two fixes
+  below.
 
   The field name [[id:roadmap-phase-5][Phase 5]] recorded as unconfirmed is now
   settled *from source*, 2026-08-30. Doom's =+pass-get-field=
@@ -939,13 +953,28 @@ which may pass through an agent or appear in any command output.
   =assoc=, so keys are plain strings and the space after the colon is optional.
   =config.org:1320= already tries =client_id=, =client-id=, =login=, =user= in
   order, so any of the four resolves and the first match wins. Use =client_id=.
-- [ ] =pass ls= to confirm the structure. Structure only — never print a value.
-- [ ] Correct =docs/ai/providers.org=: the =api/anthropic= and =api/openai= rows
+- [X] =pass ls= to confirm the structure. Structure only — never print a value.
+  Run 2026-08-30 and again 2026-09-04: =api/anthropic=, =api/openai=,
+  =mail/oaut2-google-client=.
+- [ ] *Defect 1 — entry-name typo.* =pass mv mail/oaut2-google-client
+  mail/oauth2-google-client=. =config.org= asks for the =oauth2= spelling at its
+  three =+pass-get-field= call sites and in =my/pass-check-store='s expected
+  list, so today the startup guard warns and org-gcal never finds a client. A
+  rename decrypts and prints nothing. Skip if the USB transfer lands first — the
+  transferred store already uses the right name.
+- [ ] *Defect 2 — no =client_id= line.* =pass edit mail/oauth2-google-client=
+  and add =client_id: <id>.apps.googleusercontent.com= as line 2. The entry is
+  currently one line, the secret only, and =+pass-get-field= reads a client id
+  from the later lines. Same "skip if transferred" caveat.
+- [X] Correct =docs/ai/providers.org=: the =api/anthropic= and =api/openai= rows
   claim "Live — resolves to a 108/164-char string, verified". True when written,
   false now. Rewrite as a dated historical note plus a "rebuilt 2026-08-30" row.
-- [ ] Re-verify gptel against both backends once the entries exist.
+  Done 2026-09-04 — the rows now read "Entry present, unverified" and the
+  store-status section carries the host-scope correction, the rebuild, both
+  defects and the pending transfer.
+- [ ] Re-verify gptel against both backends once the entries resolve.
 
-**** Transfer the credentials from the laptop by USB — not yet done
+**** Transfer the credentials from the laptop by USB — planned, laptop half still to run
 Found 2026-08-30: the =pass= store, the GPG key and the whole mail stack were
 never on this desktop (=PsychedPC=). They live on the laptop, which is where the
 2026-07/08 Phase 3 credential work actually happened. Evidence on this machine:
@@ -953,6 +982,13 @@ all 6775 files under =~/.mail/= are dated 2020, and =~/.bash_history= has zero
 invocations of =oama=, =pass=, =msmtp= or =gpg=. So this is a *transfer*, not a
 rebuild — the OAuth client and both API keys already exist and no Google Cloud
 console visit is needed.
+
+Confirmed 2026-09-04: James intends to run the laptop half. It has not run yet,
+and the desktop store was rebuilt from empty in the meantime, so the desktop
+steps below now merge into a *populated* store rather than an empty one — see
+the backup step added there. The transferred store is the authority: it carries
+the entry names and fields Phase 3 actually used, which is why it is expected to
+resolve both defects recorded above.
 
 Chosen route: encrypted archive on a USB stick. Deliberately not a raw copy of
 =~/.password-store= onto the stick — USB media is usually FAT32, which carries no
@@ -980,14 +1016,21 @@ as the transport. Nothing new needs writing.
 - [ ] =gpg --import "$scratch/secret-key.asc"=, then set ownertrust on the
   imported key (=gpg --edit-key <fp>=, =trust=, =5=) so =pass= will encrypt to it
   without complaint.
-- [ ] Replace the empty local store: =rm -rf ~/.password-store= and
-  =cp -a "$scratch/password-store" ~/.password-store=.
+- [ ] Back up the *local* store first — it is no longer empty. =pass-backup=
+  writes the desktop's own archive to =/data/backups/pass/=; keep it until the
+  transferred entries are confirmed working, in case a locally-entered API key
+  turns out to be newer than the laptop's copy.
+- [ ] Replace the local store: =rm -rf ~/.password-store= and
+  =cp -a "$scratch/password-store" ~/.password-store=. This discards the
+  2026-08-30 rebuild, typo and all, which is the point.
 - [ ] Re-encrypt to *both* keys so either machine's key opens either store:
   =pass init <laptop-fp> 4F6F02436717EE9B823369EAE2F99AE2D3BDF9E1=. The desktop
   key made on 2026-08-30 stays useful instead of being orphaned, and a future
   laptop-side =pass init= with the same pair keeps them symmetric.
 - [ ] =pass ls= — structure only, never print a value. Expect =api/anthropic=,
-  =api/openai=, =mail/oauth2-google-client=.
+  =api/openai=, =mail/oauth2-google-client= — the =oauth2= spelling, and with a
+  =client_id= line. If either defect survives the transfer, apply the two fixes
+  above to the transferred store.
 - [ ] Restart Emacs. =my/pass-check-store= should fall silent, and org-gcal
   should reload its client instead of warning.
 - [ ] Shred the scratch directory (=rm -rf=; it held an exported secret key).
@@ -996,19 +1039,22 @@ as the transport. Nothing new needs writing.
   single-passphrase artifact on removable media — label it and treat it as such.
 
 ***** Then the follow-ups already scoped above
-- [ ] =docs/ai/providers.org= rows still say the store no longer exists.
+- [X] =docs/ai/providers.org= rows still say the store no longer exists —
+  corrected 2026-09-04.
 - [ ] Re-verify gptel against both backends.
-- [ ] Re-scope ADR-025's remaining calendar work — with the client credentials
-  in hand, the Google-side question narrows to whether the Calendar scope and
-  API were ever enabled on that project.
+- [X] Re-scope ADR-025's remaining calendar work — done 2026-09-04 as a LOGBOOK
+  correction on that ADR. With the client credentials never actually lost, the
+  Google-side question narrows back to whether the Calendar scope and API were
+  ever enabled on that project.
 
 **** Knock-on effects
-- [ ] [[id:roadmap-phase-5][Phase 5]]'s remaining blocker may have grown. It is
-  scoped as "add the Calendar scope and re-authorize both accounts", which
-  assumed the OAuth client credentials still existed. If
-  =mail/oauth2-google-client= is genuinely gone rather than hidden, that becomes
-  re-creating the client in the Google Cloud console first. Re-scope ADR-025's
-  remaining work once the store is rebuilt and the truth is known.
+- [X] [[id:roadmap-phase-5][Phase 5]]'s remaining blocker did *not* grow —
+  settled 2026-09-04. The worry was that a genuinely lost
+  =mail/oauth2-google-client= would mean re-creating the OAuth client in the
+  Google Cloud console. It was only ever missing from this host, and the entry
+  now exists here too, so the blocker is back to its original size: fix the two
+  store defects (or let the transfer supersede them), then add the Calendar
+  scope and re-authorize both accounts. ADR-025's LOGBOOK records the same.
 - [X] =~/.authinfo.gpg= (169 bytes, dated 2020-11-08) — investigated 2026-08-30.
   The earlier claim that it was encrypted to the lost key was wrong:
   =gpg --list-packets= reports a single symkey-enc packet ("encrypted with 1
