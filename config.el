@@ -12,6 +12,27 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
                            (file-truename +literate-config-file)))
     (+literate-tangle-h)))
 
+(defadvice! +my/block-worktree-tangle-a (orig-fn &rest args)
+  "Refuse to tangle a `config.org' that isn't the primary checkout's.
+
+`+my/literate-tangle-only-config-a' above only covers tangle-on-*save*
+\(Doom's `after-save-hook' path\). It does nothing for the interactive
+`C-c C-v t' / `org-babel-tangle' path, which is a separate code path
+entirely. Without this second guard, manually tangling a git worktree's
+`config.org' would still write the real `~/.bashrc', `~/.inputrc',
+`~/.gitconfig' and `~/.local/bin/pass-backup' from a half-finished branch,
+because $HOME is shared across every worktree while the checkout is not.
+Defense-in-depth for the zettelkasten-integration work's worktree plan --
+ordinary tangling of the primary checkout is unaffected."
+  :around #'org-babel-tangle
+  (if (and buffer-file-name
+           (string= (file-name-nondirectory buffer-file-name) "config.org")
+           (not (file-equal-p (file-truename buffer-file-name)
+                              (file-truename +literate-config-file))))
+      (user-error "Refusing to tangle %s: not the primary checkout's config.org"
+                  buffer-file-name)
+    (apply orig-fn args)))
+
 ;;; $DOOMDIR/config.el -*- lexical-binding: t; -*-
 
 ;; Place your private configuration here! Remember, you do not need to run 'doom
@@ -1329,6 +1350,18 @@ DIRECTION is `previous' or `next'."
        :desc "Daily: pick date" "J" #'my/vulpea-daily-date
        :desc "Daily: previous"  "p" #'my/vulpea-daily-previous
        :desc "Daily: next"      "n" #'my/vulpea-daily-next))
+
+;; GTD extension workstream -- not yet implemented.
+
+;; PARA tag/property scheme workstream -- not yet implemented.
+
+;; Literature-notes (citar) workstream -- not yet implemented.
+
+;; org-roam-ui + org-fc workstream -- not yet implemented.
+
+;; org-transclusion + consult-notes workstream -- not yet implemented.
+
+(load! "system-notes")
 
 ;; Calendar: calfw view + two-way org-gcal sync (docs/decisions.org ADR-025).
 ;; The `:app calendar' module already ships calfw's evil keymap, its popup rule

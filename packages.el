@@ -83,3 +83,9 @@
 ;; IPC socket, which is how follow-along knows the playback position.
 (package! mpv)
 (package! elfeed-tube-mpv)
+
+;; citar -- not yet declared.
+
+;; org-roam-ui, org-fc -- not yet declared.
+
+;; org-transclusion, consult-notes -- not yet declared.

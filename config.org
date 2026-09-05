@@ -39,6 +39,27 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
              (file-equal-p (buffer-file-name (buffer-base-buffer))
                            (file-truename +literate-config-file)))
     (+literate-tangle-h)))
+
+(defadvice! +my/block-worktree-tangle-a (orig-fn &rest args)
+  "Refuse to tangle a `config.org' that isn't the primary checkout's.
+
+`+my/literate-tangle-only-config-a' above only covers tangle-on-*save*
+\(Doom's `after-save-hook' path\). It does nothing for the interactive
+`C-c C-v t' / `org-babel-tangle' path, which is a separate code path
+entirely. Without this second guard, manually tangling a git worktree's
+`config.org' would still write the real `~/.bashrc', `~/.inputrc',
+`~/.gitconfig' and `~/.local/bin/pass-backup' from a half-finished branch,
+because $HOME is shared across every worktree while the checkout is not.
+Defense-in-depth for the zettelkasten-integration work's worktree plan --
+ordinary tangling of the primary checkout is unaffected."
+  :around #'org-babel-tangle
+  (if (and buffer-file-name
+           (string= (file-name-nondirectory buffer-file-name) "config.org")
+           (not (file-equal-p (file-truename buffer-file-name)
+                              (file-truename +literate-config-file))))
+      (user-error "Refusing to tangle %s: not the primary checkout's config.org"
+                  buffer-file-name)
+    (apply orig-fn args)))
 #+end_src
 
 ** Preamble, environment, and identity
@@ -1478,6 +1499,95 @@ DIRECTION is `previous' or `next'."
        :desc "Daily: next"      "n" #'my/vulpea-daily-next))
 #+end_src
 
+** GTD extensions
+:PROPERTIES:
+:ID:       gtd-extensions-anchor
+:END:
+
+Anchor heading for the zettelkasten-integration plan's GTD workstream
+(hand-rolled extension of the existing org-agenda/org-capture setup —
+ADR-017 pattern, no =org-gtd= package). Someday/maybe and projects lists,
+new capture templates. Content lands here; see the plan for scope.
+
+#+begin_src emacs-lisp
+;; GTD extension workstream -- not yet implemented.
+#+end_src
+
+** PARA scheme
+:PROPERTIES:
+:ID:       para-scheme-anchor
+:END:
+
+Anchor heading for the PARA workstream: a tag/property scheme
+(=PARA: Project/Area/Resource/Archive=) layered on the existing flat
+=org-directory= tree, not a folder taxonomy -- keeps everything inside
+Vulpea's single indexed tree.
+
+#+begin_src emacs-lisp
+;; PARA tag/property scheme workstream -- not yet implemented.
+#+end_src
+
+** Literature notes: citar
+:PROPERTIES:
+:ID:       literature-notes-citar-anchor
+:END:
+
+Anchor heading for the citar workstream. Citekey completion and PDF/bib
+management, with note-creation hand-wired to =vulpea-create= via
+=citar-register-notes-source= (not =citar-org-roam='s default), keeping
+Vulpea as the single note-creation entrypoint. Bibliography at
+=~/org/biblio.bib=, PDFs at =~/org/papers/=. Also carries the new
+fleeting-note capture template (=~/org/fleeting.org=), separate from the
+existing task-flavored "n" template.
+
+#+begin_src emacs-lisp
+;; Literature-notes (citar) workstream -- not yet implemented.
+#+end_src
+
+** org-roam-ui and org-fc
+:PROPERTIES:
+:ID:       roam-ui-org-fc-anchor
+:END:
+
+Anchor heading for graph visualization (org-roam-ui, accepted with its
+known alpha/volunteer-maintenance risk) and spaced repetition (org-fc,
+tag-based via =org-fc-flashcard-tag=, cards created with
+=org-fc-type-*-init=). System-replication notes for this workstream live
+under =~/org/roam/system/= specifically so org-roam-ui can graph them.
+
+#+begin_src emacs-lisp
+;; org-roam-ui + org-fc workstream -- not yet implemented.
+#+end_src
+
+** Notes extras: org-transclusion and consult-notes
+:PROPERTIES:
+:ID:       notes-extras-anchor
+:END:
+
+Anchor heading for =org-transclusion= and =consult-notes=. Note:
+=org-transclusion= is a *prerequisite* of the system-replication-notes
+generator below (personal notes transclude generated content rather than
+annotating it directly), so this workstream lands before that one.
+
+#+begin_src emacs-lisp
+;; org-transclusion + consult-notes workstream -- not yet implemented.
+#+end_src
+
+** System-replication notes generator
+:PROPERTIES:
+:ID:       system-notes-generator-anchor
+:END:
+
+Anchor heading for the self-documenting system-replication note generator
+(packages, keybindings, incidents -> Vulpea-indexed notes under
+=~/org/roam/system/=). Generator logic lives in its own file, loaded below,
+to keep it out of this file's tangle churn and out of every other
+workstream's diff.
+
+#+begin_src emacs-lisp
+(load! "system-notes")
+#+end_src
+
 ** Calendar: calfw and org-gcal
 #+begin_src emacs-lisp
 ;; Calendar: calfw view + two-way org-gcal sync (docs/decisions.org ADR-025).
@@ -1793,6 +1903,26 @@ lives in =docs/decisions.org=, and the verified state in =docs/inventory.org=.
 ;; IPC socket, which is how follow-along knows the playback position.
 (package! mpv)
 (package! elfeed-tube-mpv)
+#+end_src
+
+** Literature notes packages
+Anchor for the citar workstream's package declarations (=citar=,
+=citar-org-roam= only if the hand-wired =vulpea-create= integration proves
+disproportionate -- see the plan).
+#+begin_src emacs-lisp
+;; citar -- not yet declared.
+#+end_src
+
+** org-roam-ui and org-fc packages
+Anchor for =org-roam-ui= and =org-fc=.
+#+begin_src emacs-lisp
+;; org-roam-ui, org-fc -- not yet declared.
+#+end_src
+
+** Notes extras packages
+Anchor for =org-transclusion= and =consult-notes=.
+#+begin_src emacs-lisp
+;; org-transclusion, consult-notes -- not yet declared.
 #+end_src
 
 * Module activation
