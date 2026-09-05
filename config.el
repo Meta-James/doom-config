@@ -1363,6 +1363,16 @@ DIRECTION is `previous' or `next'."
 
 (load! "system-notes")
 
+;; Interactive trigger only -- never wired into `doom sync' or any hook (per
+;; the plan's explicit non-goal). Lives under the existing "n v" (vulpea)
+;; prefix rather than opening a new bare "n" slot, since these are Vulpea-
+;; indexed notes and that prefix is already this repo's home for Vulpea
+;; commands (see the Vulpea backlinks buffer section above for the rest of
+;; that prefix's bindings: f/b/i/s/d/B/j/J/p/n -- "g" is unused).
+(map! :leader
+      (:prefix ("n v" . "vulpea")
+       :desc "Generate system notes" "g" #'my/system-notes-generate))
+
 ;; Calendar: calfw view + two-way org-gcal sync (docs/decisions.org ADR-025).
 ;; The `:app calendar' module already ships calfw's evil keymap, its popup rule
 ;; and the `=calendar' command, so only credentials, the calendar-to-file
