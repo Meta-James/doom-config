@@ -86,6 +86,28 @@
 
 ;; citar -- not yet declared.
 
-;; org-roam-ui, org-fc -- not yet declared.
+;; org-roam-ui -- not on MELPA as of writing. Recipe confirmed via its own
+;; GitHub README (WebSearch/WebFetch; no local straight checkout existed to
+;; verify against directly). :files must include "out" -- the prebuilt
+;; static web-UI assets shipped in the repo -- or the package installs with
+;; nothing for its server to serve.
+(package! org-roam-ui
+  :recipe (:host github :repo "org-roam/org-roam-ui" :files ("*.el" "out")))
+
+;; org-fc -- not on MELPA/ELPA (confirmed via its own install docs at
+;; leonrische.me/fc/installation.html; no local straight checkout existed to
+;; verify against -- only an el-get recipe file for the GitHub mirror was
+;; found locally, at
+;; ~/.config/emacs/.local/straight/repos/el-get/recipes/org-fc.rcp). The
+;; canonical repo per org-fc's own docs is sourcehut, not the l3kn/org-fc
+;; GitHub mirror; used directly below via a generic git recipe rather than
+;; guessing at straight's sourcehut host-keyword support. :files must
+;; include "awk" -- org-fc shells out to an awk script bundled in the repo
+;; for fast tag-based card scanning, and straight's :defaults file set
+;; excludes non-elisp files like it; "demo.org" is upstream's own
+;; recipe example, harmless to carry along.
+(package! org-fc
+  :recipe (:type git :repo "https://git.sr.ht/~l3kn/org-fc"
+           :files (:defaults "awk" "demo.org")))
 
 ;; org-transclusion, consult-notes -- not yet declared.
