@@ -990,52 +990,44 @@ the backup step added there. The transferred store is the authority: it carries
 the entry names and fields Phase 3 actually used, which is why it is expected to
 resolve both defects recorded above.
 
-Chosen route: encrypted archive on a USB stick. Deliberately not a raw copy of
-=~/.password-store= onto the stick — USB media is usually FAT32, which carries no
-permission bits, so a plain copy would leave the store world-readable on any
-machine that mounts it. The archive
-[[id:adr-credential-state-guard][ADR-038]]'s =pass-backup= already produces is
-passphrase-encrypted and therefore safe to sit on removable media, so it doubles
-as the transport. Nothing new needs writing.
+Route: whatever the carrier, the store must not sit on the stick as a raw copy.
+USB media is usually FAT32, which carries no permission bits, so a plain copy
+leaves the store world-readable on any machine that mounts it. Two ways out, and
+the guide below documents both: [[id:adr-credential-state-guard][ADR-038]]'s
+=pass-backup= archive, which is passphrase-encrypted and therefore safe on a
+bare stick, or a LUKS container holding an ordinary copy. The archive route
+needs nothing written; the LUKS route reformats the stick, and keeps the store
+browsable rather than sealed.
 
-***** On the laptop
-- [ ] Confirm the repo is synced and =~/.local/bin/pass-backup= exists there. It
-  tangles from =config.org= on any host that runs =doom sync=, so it should
-  already be present; if not, pull and sync first.
-- [ ] Mount the stick and note its path (=lsblk=, or look under =/media/james/=).
-- [ ] =PASS_BACKUP_DIR=/media/james/<stick> pass-backup= — writes one
-  =pass-<date>.tar.gpg= holding the store plus the exported secret key. Two
-  passphrase prompts: the key's, then a new one for the archive. Use an archive
-  passphrase you will still have when you reach the desktop.
-- [ ] =sync= and unmount cleanly before pulling the stick.
+***** Procedure
+The step-by-step lives in [[file:docs/pass-usb-transfer.md][docs/pass-usb-transfer.md]] — written on the
+laptop 2026-09-04, reconciled with this section the same day so there is one
+record rather than two. It covers both carriers (a LUKS-formatted stick with a
+plain copy, or the =pass-backup= archive, which needs no LUKS because it is
+already passphrase-encrypted), the import, the replace, the re-encrypt and the
+verification. Track progress here, follow the commands there.
 
-***** On this desktop
-- [ ] Mount, then unpack into a scratch directory —
-  =gpg --decrypt /media/james/<stick>/pass-<date>.tar.gpg | tar -C "$scratch" -xf -=.
-  The script prints this recipe itself on the way out.
-- [ ] =gpg --import "$scratch/secret-key.asc"=, then set ownertrust on the
-  imported key (=gpg --edit-key <fp>=, =trust=, =5=) so =pass= will encrypt to it
-  without complaint.
-- [ ] Back up the *local* store first — it is no longer empty. =pass-backup=
-  writes the desktop's own archive to =/data/backups/pass/=; keep it until the
-  transferred entries are confirmed working, in case a locally-entered API key
-  turns out to be newer than the laptop's copy.
-- [ ] Replace the local store: =rm -rf ~/.password-store= and
-  =cp -a "$scratch/password-store" ~/.password-store=. This discards the
-  2026-08-30 rebuild, typo and all, which is the point.
-- [ ] Re-encrypt to *both* keys so either machine's key opens either store:
-  =pass init <laptop-fp> 4F6F02436717EE9B823369EAE2F99AE2D3BDF9E1=. The desktop
-  key made on 2026-08-30 stays useful instead of being orphaned, and a future
-  laptop-side =pass init= with the same pair keeps them symmetric.
-- [ ] =pass ls= — structure only, never print a value. Expect =api/anthropic=,
-  =api/openai=, =mail/oauth2-google-client= — the =oauth2= spelling, and with a
-  =client_id= line. If either defect survives the transfer, apply the two fixes
-  above to the transferred store.
-- [ ] Restart Emacs. =my/pass-check-store= should fall silent, and org-gcal
-  should reload its client instead of warning.
-- [ ] Shred the scratch directory (=rm -rf=; it held an exported secret key).
-- [ ] Decide the stick's fate: wipe it, or keep the archive as the off-machine
-  backup [[id:adr-credential-state-guard][ADR-038]] wants. If kept, it is a
+- [ ] *Laptop:* confirm the repo is synced and =~/.local/bin/pass-backup= exists
+  (it tangles from =config.org= on any host that runs =doom sync=), then write
+  the archive or the LUKS copy to the stick. Use an archive passphrase you will
+  still have when you reach the desktop.
+- [ ] *Desktop:* import the laptop key and set ownertrust, back up the local
+  store first (=pass-backup= to =/data/backups/pass/= — it is no longer empty,
+  and a key entered here 2026-08-30 could be newer than the laptop's), then
+  *replace* rather than merge. A merge leaves =mail/oaut2-google-client= sitting
+  beside the correct entry.
+- [ ] *Desktop:* =pass init <laptop-fp> 4F6F02436717EE9B823369EAE2F99AE2D3BDF9E1=
+  so both machines' keys open the store. Without it the arriving =.gpg-id= names
+  the laptop key alone and every later =pass insert= here is unreadable here.
+- [ ] *Desktop:* verify — =pass ls= for structure, one decrypt discarding its
+  output. Expect =api/anthropic=, =api/openai=, =mail/oauth2-google-client= with
+  the =oauth2= spelling and a =client_id= line. If either defect survives the
+  transfer, apply the two fixes above to the transferred store.
+- [ ] *Desktop:* restart Emacs — =my/pass-check-store= should fall silent and
+  org-gcal should reload its client instead of warning.
+- [ ] Shred the exported secret key off the stick and the scratch directory, then
+  decide the stick's fate: wipe it, or keep the archive as the off-machine backup
+  [[id:adr-credential-state-guard][ADR-038]] wants. If kept, it is a
   single-passphrase artifact on removable media — label it and treat it as such.
 
 ***** Then the follow-ups already scoped above
