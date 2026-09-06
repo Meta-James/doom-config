@@ -36,10 +36,14 @@
 ;;   - `package-alist' is NOT used. Doom sets `package-enable-at-startup' to
 ;;     nil (`~/.config/emacs/lisp/doom.el') specifically so package.el's own
 ;;     bookkeeping never runs; `package-alist' is empty/unreliable here.
-;;   - `straight--build-cache' (a hash table keyed by package name, loaded
-;;     eagerly at Doom startup via `straight--load-build-cache') is the real,
-;;     live "what's actually built and present" registry -- verified against
+;;   - `straight--build-cache' (a hash table keyed by package name) is the
+;;     real "what's actually built and present" registry -- verified against
 ;;     `~/.config/emacs/.local/straight/repos/straight.el/straight.el'.
+;;     CORRECTED after an actual run: `straight' is NOT a loaded feature in
+;;     an ordinary interactive session by default (packages load via Doom's
+;;     precomputed autoloads, not by calling straight's own functions at
+;;     runtime) -- `my/system-notes--live-package-names' explicitly
+;;     `require's it first rather than assuming it's already loaded.
 ;;   - `doom-package-list' (`~/.config/emacs/lisp/doom-packages.el') is
 ;;     Doom's own API for "what packages does this set of enabled modules
 ;;     declare", read from every enabled module's own packages.el (not just
@@ -368,14 +372,26 @@ plan §13, no pilot subsetting needed here)."
 (defun my/system-notes--live-package-names ()
   "Return the sorted list of package names (strings) straight has actually
 built and has live in this session -- see the Package-list source decision
-commentary at the top of this file for why this, not `package-alist'."
+commentary at the top of this file for why this, not `package-alist'.
+
+`straight' is NOT a loaded feature in an ordinary interactive Doom session
+by default -- it's used at `doom sync'/build time, and running Emacs loads
+packages via Doom's precomputed autoloads/load-path instead of by calling
+straight's own functions. `require' it explicitly here rather than assuming
+`straight--build-cache' is already bound (an assumption this function
+originally made and which a real isolated-daemon test run disproved)."
+  (require 'straight nil t)
   (unless (boundp 'straight--build-cache)
     (user-error "system-notes: straight--build-cache not bound -- is straight.el loaded?"))
-  (sort (mapcar #'symbol-name
-                (hash-table-keys
-                 (if (hash-table-p straight--build-cache)
-                     straight--build-cache
-                   (make-hash-table))))
+  ;; Keys are already strings (confirmed by an actual isolated-daemon run --
+  ;; the original `(mapcar #'symbol-name ...)' here assumed symbol keys and
+  ;; errored with "Wrong type argument: symbolp" on the first real key it
+  ;; hit). No conversion needed; `hash-table-keys' already returns what we
+  ;; want.
+  (sort (hash-table-keys
+         (if (hash-table-p straight--build-cache)
+             straight--build-cache
+           (make-hash-table)))
         #'string<))
 
 (defun my/system-notes--module-title (module-key)
@@ -435,9 +451,16 @@ exists (it may be pointed at a different Doom config later)."
 (defun my/system-notes--package-summary (name)
   "Return package NAME's `lm-summary' header one-liner, or nil.
 Read-only header scraping (`lm-summary' regex-scans the file's first line,
-never `load's it) -- safe to call for every package during generation."
+never `load's it) -- safe to call for every package during generation.
+
+`locate-library' alone is not enough here: this config's `load-suffixes'
+is `(\".so\" \".elc\" \".el\")' (compiled-first, for load speed), so a bare
+`(locate-library name)' returns the .elc almost every time, and `lm-summary'
+finds no header comment to scan in bytecode -- an actual pilot run against
+this config, before this fix, returned nil for every single package for
+exactly that reason. Force the .el source explicitly instead."
   (require 'lisp-mnt)
-  (when-let* ((file (locate-library name)))
+  (when-let* ((file (locate-file (concat name ".el") load-path)))
     (ignore-errors (lm-summary file))))
 
 (defun my/system-notes--config-org-rationale (name &optional repo-root)

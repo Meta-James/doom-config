@@ -2259,20 +2259,24 @@ Anchor for =org-roam-ui= and =org-fc=.
 (package! org-roam-ui
   :recipe (:host github :repo "org-roam/org-roam-ui" :files ("*.el" "out")))
 
-;; org-fc -- not on MELPA/ELPA (confirmed via its own install docs at
-;; leonrische.me/fc/installation.html; no local straight checkout existed to
-;; verify against -- only an el-get recipe file for the GitHub mirror was
-;; found locally, at
-;; ~/.config/emacs/.local/straight/repos/el-get/recipes/org-fc.rcp). The
-;; canonical repo per org-fc's own docs is sourcehut, not the l3kn/org-fc
-;; GitHub mirror; used directly below via a generic git recipe rather than
-;; guessing at straight's sourcehut host-keyword support. :files must
-;; include "awk" -- org-fc shells out to an awk script bundled in the repo
-;; for fast tag-based card scanning, and straight's :defaults file set
-;; excludes non-elisp files like it; "demo.org" is upstream's own
-;; recipe example, harmless to carry along.
+;; org-fc -- not on MELPA/ELPA. First attempt used a generic `:type git'
+;; recipe pointing at org-fc's canonical sourcehut repo (its own docs' stated
+;; preference over the GitHub mirror) and failed `doom sync' outright:
+;; "Malformed protocol detected: (:host github :repo
+;; \"https://git.sr.ht/~l3kn/org-fc\")" -- straight already has a recipe for
+;; the name "org-fc" via the el-get mirror
+;; (~/.config/emacs/.local/straight/repos/el-get/recipes/org-fc.rcp, `:type
+;; github :pkgname "l3kn/org-fc"'), and merged that default's `:host github'
+;; with this recipe's sourcehut `:repo' URL into an inconsistent recipe
+;; rather than using either cleanly. Fixed by fully specifying a GitHub-mirror
+;; recipe instead -- same repo el-get already resolves to, just spelled out
+;; in straight's own format so there's nothing left for it to merge against.
+;; :files must include "awk" -- org-fc shells out to an awk script bundled in
+;; the repo for fast tag-based card scanning, and straight's :defaults file
+;; set excludes non-elisp files like it; "demo.org" is upstream's own recipe
+;; example, harmless to carry along.
 (package! org-fc
-  :recipe (:type git :repo "https://git.sr.ht/~l3kn/org-fc"
+  :recipe (:host github :repo "l3kn/org-fc"
            :files (:defaults "awk" "demo.org")))
 #+end_src
 
