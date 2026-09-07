@@ -1,0 +1,29 @@
+/* Generated from ~/.config/doom/config.org -- edit there, not here.
+   Any change made directly to this file is lost on the next tangle.
+   Installed into the active Firefox profile by ~/.local/bin/firefox-chrome-install.
+   See docs/decisions.org ADR-043. */
+
+@namespace url("http://www.w3.org/1999/xhtml");
+
+/* Zenburn background on the blank pages, so a new tab does not flash white.
+   #3F3F3F is zenburn-bg, the same value as `doom-theme' and the terminal.
+   Shape from content/newtab_background_color.css (MPL-2.0). */
+@-moz-document url("about:home"),url("about:blank"),url("about:newtab"),url("about:privatebrowsing"){
+  body{ background-color: #3F3F3F !important; }
+}
+@-moz-document url("about:privatebrowsing"){
+  .search-handoff-button{ background-color: rgba(255,255,255,0.06) !important; }
+  .fake-textbox{ color: #989890 !important }
+}
+
+/* ------------------------------------------------------------------------ *
+ * Opt-in shelf -- nothing below is active.
+ * ------------------------------------------------------------------------ */
+
+/* Thin zenburn scrollbars everywhere. Applied globally, including to sites
+   that set their own -- that is the trade.
+   Shape from content/css_scrollbar_width_color.css (MPL-2.0). */
+/*
+:root{ scrollbar-color: #6F6F6F #3F3F3F }
+*{ scrollbar-width: thin }
+*/

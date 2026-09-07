@@ -242,7 +242,11 @@ wrong diagnosis within a single session. The header above now names the host.
 | claude-code-ide | =(:host github :repo "manzaltu/claude-code-ide.el")= | Installed Phase 6, 2026-07-20; no tagged release upstream yet (pre-1.0) |
 | vulpea         | MELPA default                                       | =2ea4a8b= (2026-08-17), installed 2026-08-18; see [[id:adr-vulpea-note-management][ADR-019]] (retroactive) |
 | transmission   | MELPA default                                       | installed 2026-08-23; front-end for a local =transmission-daemon=, see [[id:adr-torrent-transmission][ADR-030]] |
-| nov            | MELPA default                                       | =874daf5= (2025-12-12) / header version 0.5.0, installed 2026-08-29; EPUB reader, see [[id:adr-epub-nov][ADR-034]]. Pulls in =esxml= =6a37588= (2026-03-29) / 0.3.8 as its only dependency — nothing else installed here declares =esxml=, so it arrived with =nov= |
+| nov            | MELPA default                                       | =874daf5= (2025-12-12) / header version 0.5.0, installed 2026-08-29; EPUB reader, see [[id:adr-epub-nov][ADR-034]], [[id:adr-nov-typography][ADR-040]] (book typography) and [[id:adr-nov-reading-affordances][ADR-041]] (headings, progress, TOC sidebar). Pulls in =esxml= =6a37588= (2026-03-29) / 0.3.8 as its only dependency — nothing else installed here declares =esxml=, so it arrived with =nov= |
+| shrface        | MELPA default                                       | =6dad833= (2026-08-10), installed 2026-09-05; org-style headings, outline folding and imenu over =shr= buffers (nov, eww, mu4e), see [[id:adr-nov-reading-affordances][ADR-041]]. Pulls in =language-detection= =54a6ecf= (2016-11-23) |
+| justify-kp     | =(:host github :repo "Fuco1/justify-kp")=           | =33a186e= (2023-03-17), installed 2026-09-05; unmaintained. Knuth-Plass justification for nov, opt-in per buffer on =J=, off by default — no hyphenation dictionary is in play |
+| calibredb      | MELPA default                                       | =4fefffd= (2026-08-20), installed 2026-09-05; =SPC o E=. Drives the =calibredb= CLI, which arrived with calibre the same day (=/usr/bin/calibredb=). No calibre library exists yet, so it opens on an empty =~/Calibre Library= |
+| visual-fill-column | MELPA default                                   | Already in the tree as a =writeroom-mode= (=:ui zen=) dependency; declared in =packages.el= 2026-09-04 so =nov='s text column doesn't rest on another package's dependency list, see [[id:adr-nov-typography][ADR-040]] |
 | ~~exwm~~       | removed 2026-07-20, see [[id:adr-remove-exwm][ADR-002]]         | —                                          |
 
 * External binaries
@@ -263,6 +267,8 @@ wrong diagnosis within a single session. The header above now names the host.
 | poetry  | yes     | ~/.local/bin/poetry                        |
 | pyenv   | yes     | ~/.pyenv/bin/pyenv                         |
 | direnv  | yes     | =/usr/bin/direnv=, =2.32.1-2ubuntu0.24.04.3= (apt) — predates this project; wired into Emacs via =:tools direnv=/envrc and into bash via a =~/.bashrc= hook, [[id:adr-everywhere-direnv][ADR-032]] |
+| calibredb | yes   | =/usr/bin/calibredb= (apt =calibre=), installed 2026-09-05 for =calibredb.el=, [[id:adr-nov-reading-affordances][ADR-041]] |
+| magick  | yes     | =/opt/imagemagick7/bin/magick=, ImageMagick =7.1.2-31 Q16-HDRI=, built from source 2026-09-05. Deliberately *not* in =/usr/local=: the distro's ImageMagick 6.9.12 (=/usr/bin/convert=) keeps PATH precedence and its current behaviour. Exists so Emacs can be reconfigured =--with-imagemagick=, which needs =MagickWand >= 7= (=configure.ac:3710=) and Ubuntu 24.04 ships only 6.9. Emacs is *not yet* built against it. Library path registered via =/etc/ld.so.conf.d/imagemagick7.conf=; a build against it needs =PKG_CONFIG_PATH=/opt/imagemagick7/lib/pkgconfig= |
 | pass    | yes     | /usr/bin/pass                              |
 | gpg     | yes     | /usr/bin/gpg, one secret key (created 2026-02-05) |
 | claude  | yes     | ~/.local/bin/claude, CLI version 2.1.216 (updated from 2.1.215 mid-project) |
@@ -399,6 +405,66 @@ Google was explicitly skipped, see [[id:adr-gptel-rework][ADR-006]]. See [[id:ai
 credential architecture, and [[id:adr-email-mu4e][ADR-011]] for the mail-specific
 =pass=/=oama= split.
 
+* Firefox layer
+:PROPERTIES:
+:ID:       inv-firefox
+:END:
+
+Verified 2026-09-06. Tangled from =config.org='s =* Firefox layer=; see
+[[id:adr-firefox-chrome-layer][ADR-043]].
+
+| Field                  | Value                                                                                     |
+|------------------------+-----------------------------------------------------------------------------------------------|
+| Package flavour        | *snap*, =firefox 154.0.1-1= rev 8803. apt has only the transitional =firefox 1:1snap1-0ubuntu5= |
+| Live profile root      | =~/snap/firefox/common/.mozilla/firefox=                                                      |
+| Live profile           | =s5v1taq3.default-release=                                                                    |
+| Stale profile root     | =~/.mozilla/firefox= — pre-snap, last written 2021. Contains its own copies of both profiles and of =chrome/userChrome.css=. Nothing reads it |
+| =Default=1= trap       | =~/.mozilla/firefox/profiles.ini= marks =pdc35998.default= (abandoned 2021) as =Default=1=, while its =[Install4F96D1932A9F858E]= section names =s5v1taq3.default-release=. The install section is the one to believe |
+| Legacy-stylesheets pref | =toolkit.legacyUserProfileCustomizations.stylesheets=true= already in the live profile's =prefs.js=. No =user.js= existed there before this layer |
+| Tabs / sidebar         | Revamped sidebar on (=sidebar.revamp=true=, =sidebar.visibility="hide-on-close"=) but *horizontal* tabs — =sidebar.verticalTabs= is unset, which is what makes =oneline_toolbar.css= and =icon_only_tabs.css= apply rather than no-op. Tree Style Tab is *not* installed; it survives only as a stale entry in =browser.uiCustomization.state= |
+| Active theme           | =firefox-compact-dark@mozilla.org= (built-in Dark). Required: the =--lwt-*= variables the zenburn block sets only apply under a non-default theme |
+| Snap confinement       | =/var/lib/snapd/apparmor/profiles/snap.firefox.firefox= grants =owner @{HOME}/[^s.]** rwklix=, excluding every toplevel dot-directory. So Firefox cannot read =~/.config/doom= — the reason this layer copies instead of symlinking |
+
+Tangled files and where they go:
+
+| Tangled                               | Installed to                            |
+|---------------------------------------+---------------------------------------------|
+| =$DOOMDIR/firefox/user.js=            | =<profile>/user.js=                         |
+| =$DOOMDIR/firefox/userChrome.css=     | =<profile>/chrome/userChrome.css=           |
+| =$DOOMDIR/firefox/userContent.css=    | =<profile>/chrome/userContent.css=          |
+| =~/.local/bin/firefox-chrome-install= | — (the installer itself; mode 700)          |
+
+Active customisation, as of 2026-09-06:
+
+- *One combined toolbar* — tabs and nav-bar share a single row, upstream
+  =oneline_toolbar.css= carried verbatim, with the tab strip on the *right* of
+  the address bar (=userchrome.navbar-tabs-oneliner.tabs-on-right.enabled=, set
+  in the tangled =user.js=). Grid split is 7fr navigation / 3fr tabs.
+- *Favicon-only tabs* — upstream =icon_only_tabs.css=, verbatim.
+- *Zenburn chrome* — about thirty =--lwt-*= assignments, hexes taken from
+  =doom-zenburn-theme.el=, the same palette as =doom-theme= and the shell
+  layer's =FZF_DEFAULT_OPTS=. Depends on Firefox's built-in *Dark* theme, which
+  is already active (=extensions.activeThemeID= =firefox-compact-dark@mozilla.org=).
+- =userContent.css= paints the blank pages =#3F3F3F= so a new tab does not flash
+  white. Its one other entry is commented out.
+
+*Replaced*: =#nav-bar= at the bottom of the window
+(=navbar_below_content.css=), run here since 2021. Incompatible with the
+combined bar — it works by =position: fixed=, which leaves the
+=#navigator-toolbox= grid. The =vars.css= that used to sit beside
+=userChrome.css= holds Tree Style Tab variables and is =@import=-ed by nothing.
+Nothing in the new layer references it, but it is still physically present in
+the profile: the installer never deletes what it did not write, so removing it
+is a manual =rm=. =firefox-chrome-install --prune= lists it.
+
+*Installed against the live profile* on 2026-09-06:
+=firefox-chrome-install= resolved
+=~/snap/firefox/common/.mozilla/firefox/s5v1taq3.default-release=, installed all
+three files, and backed the 2021 =userChrome.css= up as
+=userChrome.css.bak-2026-09-06=. =--check= now exits 0 with all three in sync.
+*Not yet seen rendered* — Firefox has not been restarted since, so the
+appearance is unverified.
+
 * Known environment issues
 :PROPERTIES:
 :ID:       inv-env-issues
@@ -455,6 +521,10 @@ fresh Ubuntu-like machine with Doom Emacs already bootstrapped against this
    an interactive shell (systemd, a display manager) still gets the right
    =PATH= — see the "Known environment issues" entry above.
 8. =doom doctor=, confirm clean.
+9. =firefox-chrome-install= (a tangled script, so it exists after step 1), then
+   restart Firefox. Resolves that machine's profile itself; =--check= first if
+   you want to see which one it picked before it writes
+   ([[id:adr-firefox-chrome-layer][ADR-043]]).
 
 Known gaps in this checklist, honestly: it's reasoned from what this project
 actually did on this one machine, not verified against a second one. Order

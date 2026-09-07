@@ -284,6 +284,12 @@ there -- so saving a 6000-line ADR file would spawn a full retangle."
 (setq doom-font (font-spec :family "JetBrains Mono" :size 13)
       doom-variable-pitch-font (font-spec :family "JetBrains Mono" :size 13))
 
+;; Smooth, sub-line scrolling. Global rather than a `nov-mode' hook because
+;; `pixel-scroll-precision-mode' has no buffer-local form -- it is one global
+;; minor mode or nothing. Prose is what makes the difference visible; code
+;; buffers are unharmed by it.
+(pixel-scroll-precision-mode 1)
+
 ;; Transparency: native Emacs 29+ alpha-background compositing -- no external
 ;; compositor needed (confirmed: this build is Cairo-enabled). Unfocused
 ;; frames fade further so the active window visually pops.
@@ -967,18 +973,268 @@ Errors for any account not listed in `+mu4e-spam-accounts'."
                    (lambda (url &optional _new-window)
                      (transmission-add url))))
 
-;; --- EPUB reading (docs/decisions.org ADR-034) -----------------------------
-;; nov.el renders EPUB through `shr'. Nothing else is configured here on
-;; purpose: Evil bindings come from evil-collection (`:editor evil
-;; +everywhere' is on, and it ships a `nov' module), the reading position
-;; comes from Doom's global `save-place-mode', and browsing a library of
-;; files is what Dired/dirvish (`SPC o /', `SPC o s') already does.
+;; --- EPUB reading (docs/decisions.org ADR-034, ADR-040, ADR-041) -----------
+;; nov.el renders EPUB through `shr'. Evil bindings come from evil-collection
+;; (`:editor evil +everywhere' is on, and it ships a `nov' module), the
+;; reading position comes from Doom's global `save-place-mode', and browsing a
+;; library of files is what Dired/dirvish (`SPC o /', `SPC o s') already does.
+;;
+;; What *is* configured here is book typography (ADR-040) plus the reading
+;; affordances of ADR-041. ADR-034 assumed `perfect-margin' set nov's text
+;; column; it does not -- `nov-mode' ships in `perfect-margin-ignore-modes' by
+;; default, so the column had no owner and `nov-text-width' t left paragraphs
+;; unwrapped across the whole frame.
 (use-package! nov
   :mode ("\\.epub\\'" . nov-mode)
   :config
-  ;; `perfect-margin' already owns the text column; nov's own hard fill
-  ;; would wrap a second time inside those margins.
-  (setq nov-text-width t))
+  ;; No hard fill: `visual-fill-column' wraps and centres instead, so the
+  ;; column reflows on a window resize rather than baking newlines into the
+  ;; buffer.
+  (setq nov-text-width t)
+
+;;; Typography
+
+  (defcustom +nov-serif-fonts '("Literata" "Charis SIL" "Noto Serif")
+    "Body faces for `nov-mode', best first; the first installed one wins.
+Literata was drawn for Google Play Books. Charis SIL is Bitstream Charter
+redrawn with real OpenType data -- the plain \"Bitstream Charter\" installed
+here is a Type1 from `texlive-fonts-recommended' that `font-info' reports as
+`(opentype nil)', i.e. no kerning, which is why it is not in this list. Noto
+Serif is the always-present fallback."
+    :type '(repeat string)
+    :group 'nov)
+
+  (defcustom +nov-serif-height 1.15
+    "Scaling factor for the `nov-mode' body face."
+    :type 'number
+    :group 'nov)
+
+  (defcustom +nov-measure 66
+    "Target characters per line for `nov-mode'.
+Bringhurst's ideal for a single column; Butterick gives 45-90 as the range."
+    :type 'integer
+    :group 'nov)
+
+  (defun +nov-serif-family ()
+    "Return the first installed family in `+nov-serif-fonts'."
+    (let ((installed (font-family-list)))
+      (or (seq-find (lambda (family) (member family installed)) +nov-serif-fonts)
+          (face-attribute 'variable-pitch :family))))
+
+  (defun +nov-measure-columns (family height)
+    "Columns of the default face that hold `+nov-measure' chars of FAMILY at HEIGHT.
+`visual-fill-column-width' counts columns of the *default* (monospace) face,
+and the body face is proportional, so the two numbers differ. Measuring beats
+hardcoding: the answer moves with `doom-font', with the chosen serif, and with
+`text-scale-adjust'."
+    (let* ((alphabet "abcdefghijklmnopqrstuvwxyz")
+           (sample (substring (apply #'concat (make-list 4 alphabet))
+                              0 +nov-measure)))
+      (max 40 (round (/ (float (string-pixel-width
+                                (propertize sample 'face
+                                            (list :family family :height height))))
+                        (frame-char-width))))))
+
+  (defun +nov-typography-h ()
+    "Set book typography for the current `nov-mode' buffer."
+    (let ((family (+nov-serif-family)))
+      (setq-local visual-fill-column-width (+nov-measure-columns family +nov-serif-height)
+                  visual-fill-column-center-text t
+                  ;; Butterick: 120-145% of the point size. 1.3 is mid-range.
+                  line-spacing 0.3
+                  ;; A full-width cover plate pushes the first page off screen;
+                  ;; nov honours this in `nov-insert-image'.
+                  shr-max-image-proportion 0.6)
+      ;; A text face rather than the UI font -- `doom-variable-pitch-font' is
+      ;; JetBrains Mono here, i.e. monospace (ADR-022), so `nov-variable-pitch'
+      ;; was switching from one monospace face to the same one. `shr-text'
+      ;; inherits `variable-pitch', so remapping the one covers body text.
+      (face-remap-add-relative 'variable-pitch :family family :height +nov-serif-height)
+      ;; Headings do *not* inherit `variable-pitch': shrface's faces inherit
+      ;; `org-level-N', which inherit `outline-N', which leave the family
+      ;; unspecified and so fall back to the monospace default. Give them the
+      ;; body face and a classic display scale.
+      (cl-loop for (face . scale) in '((shrface-h1-face . 1.6)
+                                       (shrface-h2-face . 1.4)
+                                       (shrface-h3-face . 1.25)
+                                       (shrface-h4-face . 1.15)
+                                       (shrface-h5-face . 1.05)
+                                       (shrface-h6-face . 1.0)
+                                       (shr-h1 . 1.6) (shr-h2 . 1.4)
+                                       (shr-h3 . 1.25) (shr-h4 . 1.15)
+                                       (shr-h5 . 1.05) (shr-h6 . 1.0))
+               when (facep face)
+               do (face-remap-add-relative face :family family
+                                           :height (* +nov-serif-height scale)))
+      ;; Doom's `global-hl-line-modes' includes `special-mode', which nov-mode
+      ;; derives from -- a highlight band across a page of prose.
+      (hl-line-mode -1)))
+
+;;; Reading progress in the header line
+
+  (defun +nov-progress ()
+    "Chapter and position readout for the `nov-mode' header line."
+    (format "  %d/%d  %d%%"
+            (1+ nov-documents-index)
+            (length nov-documents)
+            (/ (* 100 (point)) (max 1 (point-max)))))
+
+  (defun +nov-header-line-progress-h ()
+    "Append `+nov-progress' to the header line nov just built.
+`nov-render-title' escapes % in `nov-header-line-format', so a progress spec
+cannot go in that string; it has to be appended after the render. The
+string test is what keeps this from nesting on every chapter."
+    (when (stringp header-line-format)
+      (setq header-line-format (list header-line-format
+                                     '(:eval (+nov-progress))))))
+
+  (add-hook 'nov-post-html-render-hook #'+nov-header-line-progress-h)
+
+;;; Table of contents in a side window
+
+  (defun +nov--toc-entries ()
+    "Return ((LABEL . INDEX) ...) for the current book's table of contents.
+Indices are resolved here, against the TOC document's own directory, because
+`nov-visit-relative-file' resolves against whichever chapter is on screen."
+    (let* ((toc-index (nov-find-document (lambda (doc) (eq (car doc) nov-toc-id))))
+           (toc-path (and toc-index (cdr (aref nov-documents toc-index))))
+           (directory (and toc-path (file-name-directory toc-path)))
+           (html (cond ((null toc-path) nil)
+                       ((version< nov-epub-version "3.0") (nov-ncx-to-html toc-path))
+                       (t (nov-slurp toc-path))))
+           (dom (and html (with-temp-buffer
+                            (insert html)
+                            (libxml-parse-html-region (point-min) (point-max))))))
+      (delq nil
+            (mapcar
+             (lambda (anchor)
+               (let* ((href (dom-attr anchor 'href))
+                      (label (string-trim (dom-texts anchor)))
+                      (file (and href (car (split-string href "#"))))
+                      (path (and file (not (string-empty-p file))
+                                 (file-truename (nov-make-path directory file))))
+                      (index (and path (nov-find-document
+                                        (lambda (doc)
+                                          (equal path (file-truename (cdr doc))))))))
+                 (when (and index (not (string-empty-p label)))
+                   (cons label index))))
+             (dom-by-tag dom 'a)))))
+
+  (defun +nov/toc-sidebar ()
+    "Show this book's table of contents in a side window.
+Unlike `nov-goto-toc' (`t'), which renders the TOC over the book in the same
+buffer, this leaves the page where it is and jumps from the side window."
+    (interactive)
+    (let* ((source (current-buffer))
+           (entries (+nov--toc-entries))
+           (buffer (get-buffer-create (format "*nov TOC: %s*" (buffer-name source)))))
+      (unless entries (user-error "Couldn't parse a table of contents"))
+      (with-current-buffer buffer
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (dolist (entry entries)
+            (insert-text-button
+             (car entry)
+             'action (let ((index (cdr entry)))
+                       (lambda (_button)
+                         (let ((window (get-buffer-window source)))
+                           (with-selected-window (or window (selected-window))
+                             (switch-to-buffer source)
+                             (nov-goto-document index)))))
+             'follow-link t)
+            (insert "\n"))
+          (goto-char (point-min)))
+        (special-mode)
+        (setq-local cursor-type 'box))
+      (select-window
+       (display-buffer-in-side-window buffer '((side . left) (window-width . 0.22))))))
+  ;; ponytail: chapter granularity only -- a TOC entry pointing at an anchor
+  ;; inside a chapter lands at the chapter's top. Resolve `shr-target-id' the
+  ;; way `nov-visit-relative-file' does if that starts mattering.
+
+;;; Knuth-Plass justification (opt-in)
+
+  (defvar-local +nov-justify nil
+    "Non-nil to justify this buffer's text with `justify-kp'.")
+
+  (defun +nov-justify-h ()
+    "Justify the rendered page when `+nov-justify' is on.
+Adapted from nov.el's README. Justification without hyphenation rivers, which
+is why this is per-buffer and off by default."
+    (when (and +nov-justify (get-buffer-window))
+      (require 'justify-kp)
+      (let ((max-width (pj-line-width))
+            buffer-read-only)
+        (save-excursion
+          (goto-char (point-min))
+          (while (not (eobp))
+            (unless (looking-at "^[[:space:]]*$")
+              (goto-char (line-end-position))
+              (when (> (shr-pixel-column) max-width)
+                (goto-char (line-beginning-position))
+                (pj-justify)))
+            (forward-line 1))))))
+
+  (add-hook 'nov-post-html-render-hook #'+nov-justify-h)
+
+  (defun +nov/toggle-justification ()
+    "Toggle Knuth-Plass justification in this book.
+A re-render is required either way: justification inserts real line breaks,
+so turning it off means throwing the page away and building it again."
+    (interactive)
+    (setq +nov-justify (not +nov-justify))
+    (nov-render-document)
+    (message "Justification %s" (if +nov-justify "on" "off")))
+
+  (add-hook! 'nov-mode-hook
+             #'visual-line-mode
+             #'visual-fill-column-mode
+             #'+nov-typography-h)
+
+  (map! :map nov-mode-map
+        :n "T" #'+nov/toc-sidebar
+        :n "J" #'+nov/toggle-justification))
+
+;; Org-style headings, outline folding and imenu over `shr' buffers -- nov
+;; here, and eww/mu4e for free. `shrface-mode' calls `shrface-basic' and
+;; `shrface-trial' itself, so neither is called here.
+(use-package! shrface
+  :hook (nov-mode . shrface-mode)
+  :config
+  (setq shrface-href-versatile t
+        ;; Non-nil would disable outline-minor-mode and imenu along with the
+        ;; bullets -- i.e. everything this package is here for.
+        shrface-toggle-bullets nil)
+  (defun +nov-restore-svg-renderer-h ()
+    "Put nov's SVG handler back after `shrface-basic' overwrites it.
+`shrface-basic' rebuilds `nov-shr-rendering-functions' from img and title
+only, which silently drops `nov-render-svg' and with it every SVG image in an
+EPUB."
+    (when (boundp 'nov-shr-rendering-functions)
+      (add-to-list 'nov-shr-rendering-functions '(svg . nov-render-svg))))
+  (add-hook 'shrface-mode-hook #'+nov-restore-svg-renderer-h)
+
+  (defun +nov-shrface-imenu-h ()
+    "Give imenu back to shrface after `nov-imenu-setup' claims it.
+nov's own index is the book's TOC, which `+nov/toc-sidebar' (`T') and
+`nov-goto-toc' (`t') already cover twice over; shrface's is the headline tree
+*inside* the chapter, which nothing else provides."
+    (when (bound-and-true-p shrface-mode)
+      (setq imenu-create-index-function #'shrface-imenu-get-tree)))
+  ;; Appended: `nov-imenu-setup' is on `nov-mode-hook' from nov.el's own
+  ;; top level, so it runs after anything added here and would win otherwise.
+  (add-hook 'nov-mode-hook #'+nov-shrface-imenu-h 'append))
+
+;; Calibre library browser. Needs the `calibredb' CLI (ships with calibre);
+;; without it the commands load but every query fails.
+(use-package! calibredb
+  :commands (calibredb calibredb-find-file calibredb-consult-read)
+  :config
+  (setq calibredb-root-dir "~/Calibre Library"
+        calibredb-db (expand-file-name "metadata.db" calibredb-root-dir)
+        calibredb-library-alist '(("~/Calibre Library"))))
+
+(map! :leader :desc "Ebook library (calibredb)" "o E" #'calibredb)
 
 ;; App launcher: SPC o L -- raise-or-launch external GUI apps, plus a couple
 ;; of "the Emacs command *is* the app" bindings (calc, proced) that need no

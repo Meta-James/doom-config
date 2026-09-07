@@ -73,6 +73,17 @@
 ;; EPUB reading (docs/decisions.org ADR-034): Doom ships no ebook module, and
 ;; nov.el is the only maintained Emacs EPUB renderer.
 (package! nov)
+;; Already in the tree as a `writeroom-mode' (`:ui zen') dependency; declared
+;; so nov's text column doesn't rest on another package's dependency list.
+(package! visual-fill-column)
+;; Org-style headings, outline folding and imenu over any `shr' buffer -- nov,
+;; eww, mu4e. See docs/decisions.org ADR-041.
+(package! shrface)
+;; Knuth-Plass justification for nov. Off by default: no hyphenation dictionary
+;; is in play, so justified text rivers. `+nov/toggle-justification' turns it on.
+(package! justify-kp :recipe (:host github :repo "Fuco1/justify-kp"))
+;; Calibre library browser. Needs the `calibredb' CLI, which ships with calibre.
+(package! calibredb)
 
 ;; elfeed-tube's mpv half. `:app rss +youtube' declares elfeed-tube only, but
 ;; its config.el binds `C-c C-f' and `C-c C-w' to `elfeed-tube-mpv-follow-mode'

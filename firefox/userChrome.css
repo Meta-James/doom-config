@@ -1,0 +1,292 @@
+/* Generated from ~/.config/doom/config.org -- edit there, not here.
+   Any change made directly to this file is lost on the next tangle.
+   Installed into the active Firefox profile by ~/.local/bin/firefox-chrome-install.
+   See docs/decisions.org ADR-043. */
+
+/* ======================================================================== *
+ * 1. Tabs and main toolbar on one row. Upstream, verbatim.
+ *    Side is chosen by userchrome.navbar-tabs-oneliner.tabs-on-right.enabled,
+ *    which firefox/user.js sets to true.
+ * ======================================================================== */
+
+/* Source file https://github.com/MrOtherGuy/firefox-csshacks/tree/master/chrome/oneline_toolbar.css made available under Mozilla Public License v. 2.0
+See the above repository for updates as well as full license text. */
+
+/**
+ * Shows tabs and main toolbar side-by-side.
+ * By default, tabs are on left side, you can change that by setting pref
+ * "userchrome.navbar-tabs-oneliner.tabs-on-right.enabled" to true
+ * Requires Fx 133+
+ */
+
+:root{
+  --uc-oneline-toolbar-split: 6fr 4fr /* Meaning, left side takes 60%, right side 40% */
+}
+
+@media -moz-pref("userchrome.force-window-controls-on-left.enabled"){
+  .titlebar-buttonbox-container{
+    order: -1 !important;
+    > .titlebar-buttonbox{
+      flex-direction: row-reverse;
+    }
+  }
+}
+@media not -moz-pref("sidebar.verticalTabs"){
+  :root:not([chromehidden~="toolbar"]) #navigator-toolbox{
+    display: grid;
+    grid-template-columns: 6fr 4fr;
+  }
+  #toolbar-menubar,
+  #PersonalToolbar,
+  .global-notificationbox,
+  #notifications-toolbar,
+  #tab-notification-deck{
+    grid-column: 1/3;
+  }
+  :root[sizemode="fullscreen"] #toolbar-menubar{
+    min-height: 0 !important;
+  }
+  #nav-bar{
+    border-top: none !important;
+  }
+  #TabsToolbar, #nav-bar{
+    grid-row: 2/3;
+  }
+  /* Rules to show them conditionally are further down */
+  #main-window#main-window[sizemode="fullscreen"] .titlebar-spacer,
+  #nav-bar > :is(.titlebar-buttonbox-container,.titlebar-spacer),
+  #TabsToolbar > :is(.titlebar-buttonbox-container,.titlebar-spacer){
+    display: none !important;
+  }
+  @media -moz-pref("userchrome.navbar-tabs-oneliner.tabs-on-right.enabled"){
+    #nav-bar, #toolbar-menubar{ order: -1; }
+  }
+  /* Tabs on right */
+  @media -moz-pref("userchrome.navbar-tabs-oneliner.tabs-on-right.enabled"){
+    /* CASE 1 of 4 */
+    @media -moz-pref("userchrome.force-window-controls-on-left.enabled"),
+      (-moz-gtk-csd-reversed-placement),
+      (-moz-platform: macos){
+        :root[sizemode="fullscreen"] #nav-bar > .titlebar-buttonbox-container{
+          display: flex !important;
+        }
+        :root[customtitlebar] :where(#toolbar-menubar:is([autohide=""],[autohide="true"])){
+          + #TabsToolbar{
+            :root[sizemode="normal"] & {
+              > .titlebar-spacer[type="post-tabs"]{
+                display: flex !important;
+              }
+            }
+          }
+          ~ #nav-bar > :is(.titlebar-buttonbox-container,.titlebar-spacer[type="pre-tabs"]){
+            display: flex !important;
+          }
+        }
+    }
+    /* CASE 2 of 4 */
+    @media not (-moz-pref("userchrome.force-window-controls-on-left.enabled")
+      or (-moz-gtk-csd-reversed-placement)
+      or (-moz-platform: macos)){
+        :root[sizemode="fullscreen"] #TabsToolbar > .titlebar-buttonbox-container{
+          display: flex !important;
+        }
+        :root[customtitlebar] :where(#toolbar-menubar:is([autohide=""],[autohide="true"])){
+          + #TabsToolbar > :is(.titlebar-buttonbox-container,.titlebar-spacer[type="post-tabs"]){
+            display: flex !important;
+          }
+          :root[sizemode="normal"] & {
+            ~ #nav-bar > .titlebar-spacer[type="pre-tabs"]{
+              display: flex !important;
+            }
+          }
+        }
+    }
+  }
+  /* Tabs on left */
+  @media not -moz-pref("userchrome.navbar-tabs-oneliner.tabs-on-right.enabled"){
+    /* CASE 3 of 4 */
+    @media -moz-pref("userchrome.force-window-controls-on-left.enabled"),
+      (-moz-gtk-csd-reversed-placement),
+      (-moz-platform: macos){
+        :root[sizemode="fullscreen"] #TabsToolbar > .titlebar-buttonbox-container{
+          display: flex !important;
+        }
+        :root[customtitlebar] :where(#toolbar-menubar:is([autohide=""],[autohide="true"])){
+          + #TabsToolbar > :is(.titlebar-buttonbox-container,.titlebar-spacer[type="pre-tabs"]){
+            display: flex !important;
+          }
+          :root[sizemode="normal"] & {
+            ~ #nav-bar > .titlebar-spacer[type="post-tabs"]{
+              display: flex !important;
+            }
+          }
+        }
+    }
+    /* CASE 4 of 4 */
+    @media not (-moz-pref("userchrome.force-window-controls-on-left.enabled")
+      or (-moz-gtk-csd-reversed-placement)
+      or (-moz-platform: macos)){
+        :root[sizemode="fullscreen"] #nav-bar > .titlebar-buttonbox-container{
+          display: flex !important;
+        }
+        :root[customtitlebar] :where(#toolbar-menubar:is([autohide=""],[autohide="true"])){
+          :root[sizemode="normal"] & {
+            + #TabsToolbar > .titlebar-spacer[type="pre-tabs"]{
+              display: flex !important;
+            }
+          }
+          ~ #nav-bar > :is(.titlebar-buttonbox-container,.titlebar-spacer[type="post-tabs"]){
+            display: flex !important;
+          }
+        }
+    }
+  }
+}
+/* ======================================================================== *
+ * 2. Tabs show a favicon and nothing else. Upstream, verbatim.
+ * ======================================================================== */
+
+/* Source file https://github.com/MrOtherGuy/firefox-csshacks/tree/master/chrome/icon_only_tabs.css made available under Mozilla Public License v. 2.0
+See the above repository for updates as well as full license text. */
+
+@media not -moz-pref("sidebar.verticalTabs"){
+  .tab-content > :not(.tab-icon-stack){
+    display: none;
+  }
+  .tab-icon-image:not([src]){
+    display: block !important;
+  }
+  .tab-icon-stack > *{ margin-inline: 0 !important; }
+  .tabbrowser-tab{
+    flex-grow: 0 !important;
+  }
+
+  .tabbrowser-tab[fadein]{
+    min-width: calc(16px + 2 * 10px + 4px) !important;
+    :root[uidensity="compact"] & {
+      min-width: calc(16px + 2 * var(--tab-inline-padding,0px) + 4px) !important;
+    }
+    [collapsed] > &:not([selected]){
+      min-width: 0 !important;
+    }
+  }
+  :root:not([uidensity="compact"]) .tab-content{ padding-inline: 10px !important; }
+
+  .tab-audio-button{
+    --button-size-icon-small: 16px !important;
+    --button-min-height-small: var(--button-size-icon-small) !important;
+    --button-background-color-ghost: var(--toolbox-background-color-inactive,var(--toolbox-bgcolor-inactive));
+    --button-border-radius: var(--border-radius-circle) !important;
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin-inline: 0 !important;
+  }
+}
+/* ======================================================================== *
+ * 3. Layout adjustments. Appended rather than edited into the two blocks
+ *    above, so refreshing either of them stays a diff.
+ * ======================================================================== */
+
+@media not -moz-pref("sidebar.verticalTabs"){
+
+  /* Upstream declares --uc-oneline-toolbar-split and then hardcodes 6fr 4fr in
+     the grid without using it. Wire the variable up, so the split is one edit.
+     With tabs on the right, `order: -1` on #nav-bar puts it in column 1 --
+     grid auto-placement follows order-modified document order -- so the first
+     value is the navigation side and the second is the tabs side.
+
+     7fr 3fr rather than upstream's 6fr 4fr because these tabs are favicons:
+     ~40px each, so 30% of a 1920px window still holds about fourteen of them,
+     and the address bar keeps the rest. */
+  :root{ --uc-oneline-toolbar-split: 7fr 3fr; }
+
+  :root:not([chromehidden~="toolbar"]) #navigator-toolbox{
+    grid-template-columns: var(--uc-oneline-toolbar-split);
+  }
+
+  /* Keep the tab strip against the right edge of its column rather than
+     letting a handful of icon tabs float in the middle of it. */
+  #TabsToolbar > .toolbar-items{ justify-content: flex-end; }
+}
+
+/* ======================================================================== *
+ * 4. Zenburn.
+ *
+ * The palette is doom-zenburn's, taken from doom-zenburn-theme.el rather than
+ * eyeballed, so Firefox, Emacs (`doom-theme') and the terminal (ghostel, and
+ * the explicit FZF_DEFAULT_OPTS hexes in the shell layer) are all the same
+ * colours. Names in the comments are zenburn's own.
+ *
+ * These are `--lwt-*' (lightweight-theme) variables, which apply only while a
+ * non-default theme is active. Firefox's built-in *Dark* theme
+ * (firefox-compact-dark@mozilla.org) is the one in use here and is enough. On
+ * "System theme - auto" some of them are ignored, which is why the system-theme
+ * fallbacks (--toolbar-bgcolor, --tab-selected-bgcolor) are set as well.
+ *
+ * Structure follows upstream's chrome/color_variable_template.css.
+ * ======================================================================== */
+
+:root{
+  /* zenburn palette, straight from doom-zenburn-theme.el. `+' is not a legal
+     character in a CSS identifier, so zenburn's bg+1 becomes --zb-bg-plus1;
+     spelling it out keeps it distinguishable from bg-1 at a glance. */
+  --zb-bg-minus1:  #2B2B2B; /* zenburn-bg-1  */
+  --zb-bg-minus05: #383838; /* zenburn-bg-05 */
+  --zb-bg:         #3F3F3F; /* zenburn-bg    */
+  --zb-bg-plus1:   #4F4F4F; /* zenburn-bg+1  */
+  --zb-bg-plus2:   #5F5F5F; /* zenburn-bg+2  */
+  --zb-bg-plus3:   #6F6F6F; /* zenburn-bg+3  */
+  --zb-fg:         #DCDCDC; /* zenburn-fg    */
+  --zb-fg-plus1:   #FFFFEF; /* zenburn-fg+1  */
+  --zb-yellow:     #F0DFAF; /* zenburn-yellow */
+  --zb-blue:       #8CD0D3; /* zenburn-blue   */
+
+  /* Popup panels: the hamburger menu, the downloads panel, extension popups */
+  --arrowpanel-background: var(--zb-bg) !important;
+  --arrowpanel-border-color: var(--zb-bg-plus2) !important;
+  --arrowpanel-color: var(--zb-fg) !important;
+  --arrowpanel-dimmed: rgba(0,0,0,0.24) !important;
+
+  /* Window and toolbar background. The toolbox sits a shade below the toolbar
+     so the combined bar reads as one surface against the window frame. */
+  --lwt-accent-color: var(--zb-bg-minus1) !important;
+  --lwt-accent-color-inactive: var(--zb-bg-minus05) !important;
+  --toolbar-bgcolor: var(--zb-bg) !important;
+
+  /* Tabs. --tab-selected-bgcolor is the system-theme path,
+     --lwt-selected-tab-background-color the lightweight-theme one. */
+  --tab-selected-bgcolor: var(--zb-bg-plus1) !important;
+  --lwt-selected-tab-background-color: var(--zb-bg-plus1) !important;
+  --lwt-text-color: var(--zb-fg) !important;
+
+  /* Toolbar buttons */
+  --toolbarbutton-icon-fill: var(--zb-fg) !important;
+  --lwt-toolbarbutton-hover-background: var(--zb-bg-plus2) !important;
+  --lwt-toolbarbutton-active-background: var(--zb-bg-plus3) !important;
+
+  /* Address bar. Focus border is zenburn blue -- the same accent the
+     mode-line uses in Emacs -- so focus is obvious without being loud. */
+  --toolbar-field-background-color: var(--zb-bg-minus05) !important;
+  --toolbar-field-focus-background-color: var(--zb-bg-plus1) !important;
+  --toolbar-field-color: var(--zb-fg) !important;
+  --toolbar-field-focus-color: var(--zb-fg-plus1) !important;
+  --toolbar-field-border-color: var(--zb-bg-plus2) !important;
+  --toolbar-field-focus-border-color: var(--zb-blue) !important;
+  --urlbar-popup-url-color: var(--zb-blue) !important;
+
+  /* Sidebar. This profile runs the revamped sidebar (sidebar.revamp), so it
+     is on screen often enough to be worth matching. */
+  --lwt-sidebar-background-color: var(--zb-bg-minus05) !important;
+  --lwt-sidebar-text-color: var(--zb-fg) !important;
+}
+
+/* Divider between the toolbars, and the fallback border around a selected tab */
+#navigator-toolbox{ --lwt-tabs-border-color: var(--zb-bg-plus2) !important; }
+
+/* The line above the active tab. Zenburn yellow: this is the one deliberately
+   bright thing in the chrome, and it marks the tab you are on. */
+#tabbrowser-tabs{ --lwt-tab-line-color: var(--zb-yellow) !important; }
+
+/* The sidebar header area reads this one rather than the --lwt- variable */
+#sidebar-box{ --sidebar-background-color: var(--zb-bg-minus05) !important; }
