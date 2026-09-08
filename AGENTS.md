@@ -9,11 +9,15 @@ A Doom Emacs `$DOOMDIR`, and since ADR-035 a **literate** one: `config.org` is
 the single source of truth, and `init.el` (module activation), `packages.el`
 (package declarations) and `config.el` (configuration) are all *tangled output*.
 So are `~/.bashrc`, `~/.inputrc` and `~/.gitconfig` — the ADR-033 shell layer
-lives here too, which is what stops it silently reverting.
+lives here too, which is what stops it silently reverting. Since ADR-043 the
+Firefox chrome layer does the same: `firefox/user.js`,
+`firefox/userChrome.css`, `firefox/userContent.css` and
+`~/.local/bin/firefox-chrome-install`.
 
 **Edit `config.org`, never the tangled files.** A change written directly to
-`config.el` (or `init.el`, `packages.el`, any of those three dotfiles, or
-`~/.local/bin/pass-backup`) is overwritten by the next tangle, which happens on
+`config.el` (or `init.el`, `packages.el`, any of those three dotfiles, anything
+under `firefox/`, or the `~/.local/bin/` scripts `pass-backup`,
+`emacs-rebuild`, `firefox-chrome-install`) is overwritten by the next tangle, which happens on
 every `doom sync` and on every save of `config.org`. Edits to the `init.el` block take effect one sync late —
 Doom loads `init.el` before it tangles.
 

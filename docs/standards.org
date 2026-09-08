@@ -149,8 +149,13 @@ and one repository shared between them. See
 
 - Everything tangled from =config.org= is expected *identical* on every host:
   =init.el=, =packages.el=, =config.el=, =~/.bashrc=, =~/.inputrc=,
-  =~/.gitconfig=, =~/.local/bin/pass-backup=. No =system-name= branching, no
-  per-host config file, no per-host branch.
+  =~/.gitconfig=, =~/.local/bin/pass-backup=, =~/.local/bin/emacs-rebuild=,
+  =~/.local/bin/firefox-chrome-install= and =firefox/{user.js,userChrome.css,userContent.css}=. No
+  =system-name= branching, no per-host config file, no per-host branch.
+- Where a tangled file's *destination* is host-dependent — the Firefox profile
+  path, [[id:adr-firefox-chrome-layer][ADR-043]] — the file itself stays identical and a tangled resolver
+  script finds the path at run time. The host-specificity lives in the
+  resolver, never in the content.
 - A value that must vary by host takes an *environment-variable override with a
   working default* (the shape =PASS_BACKUP_DIR= has). A hardcoded absolute path
   that cannot be overridden is guarded so its absence on another host is a

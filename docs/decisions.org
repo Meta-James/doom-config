@@ -5907,6 +5907,11 @@ Everything below was checked directly, 2026-08-29:
   =perfect-margin-visible-width= 100), so leaving =nov-text-width= at its =nil=
   default would hard-fill text a second time inside margins that already set
   the column. =t= is the setting that lets =perfect-margin= own it alone.
+  *Wrong, corrected 2026-09-04 by [[id:adr-nov-typography][ADR-040]]:*
+  =perfect-margin= ships =nov-mode= in its own =perfect-margin-ignore-modes=
+  default (=perfect-margin.el:149-152=), so it never set nov's column at all.
+  =nov-text-width= =t= plus no owner meant unfilled paragraphs wrapping at the
+  frame edge, mid-word.
 - Evil bindings come free: =(evil +everywhere)= is on (=init.el:66=),
   =evil-collection= ships an =evil-collection-nov.el= module, and =nov= is in
   =evil-collection-mode-list= (=evil-collection.el:325=).
@@ -6823,3 +6828,890 @@ adds one =[ -d ]= test.
   whether phases need per-host completion rather than a single DONE.
 - The two =pass= stores are observed to have drifted after the USB transfer,
   which would make store synchronisation a real problem rather than a named gap.
+
+* ADR-040: Book typography for =nov.el= — a measured column, a text face, and looser leading
+:PROPERTIES:
+:ID:       adr-nov-typography
+:STATUS:   Implemented and live-verified in the running daemon (buffer state read back from a real =.epub=); the visual judgement is still the user's
+:DATE:     2026-09-04
+:END:
+
+** Context
+[[id:adr-epub-nov][ADR-034]] installed =nov.el= and deliberately configured exactly one thing,
+=(setq nov-text-width t)=, on the stated grounds that =perfect-margin= already
+owned the text column. Its "Revisit when" list named the trigger for this
+entry first: "An EPUB renders badly enough to need =nov-*= tuning ... which
+would mean the 'configure one thing' premise didn't hold."
+
+The premise did not hold, and for a reason ADR-034 could have checked but
+didn't: =perfect-margin= ships =nov-mode= inside its own
+=perfect-margin-ignore-modes= default. So the column had *no* owner. With
+=nov-text-width= at =t= nov replaces =shr-fill-line= with a no-op, and
+=nov-mode= (a =special-mode= derivative) does not enable =visual-line-mode=,
+so paragraphs arrived as single long lines that wrapped at the frame edge —
+full width, and broken mid-word rather than at spaces.
+
+Three further defaults worked against readability once that was seen:
+=doom-variable-pitch-font= is JetBrains Mono ([[id:adr-rice-pass][ADR-022]]),
+i.e. =nov-variable-pitch= switches from one monospace face to the same
+monospace face; =line-spacing= is nil, giving the code-editing leading; and
+Doom's =global-hl-line-modes= includes =special-mode=, so a highlight band
+tracked point across the page.
+
+** Decision drivers
+- Typographic recommendations should come from named sources with numbers, not
+  from taste. Butterick's /Practical Typography/ and Bringhurst's /Elements of
+  Typographic Style/ are the standard references and they agree on the ranges.
+- Reuse what is installed. No new package should be downloaded for this.
+- Keep the change inside =nov-mode= buffers. =perfect-margin= is global and
+  serves every other buffer at 100 columns; that is not the number a book
+  wants, and changing it globally would be a different, much larger decision.
+
+** Candidates
+| Candidate                                                     | Fate     | Reason                                                                                                   |
+|---------------------------------------------------------------+----------+----------------------------------------------------------------------------------------------------------|
+| =visual-line-mode= + =visual-fill-column= at a measured width | Chosen   | Soft-wraps at word boundaries, centres the column, and reflows on a window resize; already installed as a =writeroom-mode= dependency |
+| =nov-text-width= as an integer (hard fill)                    | Rejected | Bakes newlines into the buffer, so the column is wrong after any resize, and leaves the text left-aligned in the window rather than centred |
+| Remove =nov-mode= from =perfect-margin-ignore-modes=          | Rejected | Gives 100 monospace columns, which in a proportional face is roughly 130 characters — half again over the top of the recommended range — and still leaves the mid-word wrapping, since nothing enables =visual-line-mode= |
+| =olivetti=                                                    | Rejected | Same responsibility as =perfect-margin= and =visual-fill-column=, and would be a new package for it — [[id:adr-cosmetic-module-bindings][ADR-021]]'s one-tool-per-responsibility rule |
+| =justify-kp= (Knuth–Plass justified text)                     | Rejected | Justification without hyphenation produces rivers; Emacs has no hyphenation dictionary in play, and the package is an unmaintained GitHub-only dependency |
+| =nov-xwidget= (render through WebKit)                         | Rejected | Real CSS, but it replaces the Emacs buffer with a browser widget — losing Evil motions, =save-place=, isearch and the theme, which is the whole reason to read in Emacs |
+| Do nothing                                                    | Rejected | The rendering defect above is the prompt for the change                                                  |
+
+** Evidence
+Everything below was measured on this machine, 2026-09-04, in the running
+daemon unless noted:
+
+- =perfect-margin.el:149-152=: =perfect-margin-ignore-modes= defaults to
+  ='(exwm-mode doc-view-mode nov-mode)=. ADR-034's Evidence claim is therefore
+  false, and that entry has been annotated rather than silently left standing.
+- =perfect-margin--init-window-margins= (=perfect-margin.el:235-258=) reads
+  =perfect-margin-visible-width= without making the window's buffer current, so
+  a buffer-local override of that variable would not have worked either.
+- Line length: Butterick gives "45–90 characters per line" and Bringhurst's
+  much-quoted figure is 66 as the ideal for a single-column page.
+- Line spacing: Butterick gives "120–145% of the point size". =line-spacing=
+  =0.3= is a fraction of the line height, i.e. 130%, mid-range.
+- The column number is measured, not guessed. =visual-fill-column-width=
+  counts columns of the *default* face; the body face is proportional, so the
+  two differ. A 66-character lowercase string, rendered via
+  =string-pixel-width=, measures 545px in Noto Serif at =:height 1.15= against
+  a =frame-char-width= of 8 — so 68 columns is 66 characters of body text, and
+  the whole recommended range 45–90 stays reachable by =text-scale-adjust=.
+- Face choice: the installed "Bitstream Charter" (the better book face, and on
+  Butterick's free-font list) resolves to a Type1 =.pfb= from
+  =texlive-fonts-recommended=, and =(font-info "Bitstream Charter-13")=
+  reports =(opentype nil)= — no kerning. Noto Serif is an installed TrueType
+  face with OpenType data, so it kerns; it wins on rendering, not on design.
+- =shr-text= (Emacs 29+, present in this 31.1 build) inherits =variable-pitch=,
+  so one =face-remap-add-relative= on =variable-pitch= covers body text and
+  headings both.
+- =visual-fill-column= is already built at
+  =~/.config/emacs/.local/straight/build-31.1/visual-fill-column/= as a
+  =writeroom-mode= dependency (=:ui zen +focus=, =init.el:63=). It is now
+  declared in =packages.el= as well — this installs nothing new, it only stops
+  a load-bearing package from being a transitive dependency of a module that
+  could later be dropped.
+- =global-hl-line-modes= reads ='(prog-mode text-mode conf-mode special-mode
+  org-agenda-mode dired-mode)=; =nov-mode= derives from =special-mode=.
+
+** Decision
+=packages.el=: add =(package! visual-fill-column)=.
+
+=config.el=: keep =(setq nov-text-width t)=, and add a =+nov-typography-h=
+function plus a three-function =nov-mode-hook= — =visual-line-mode=,
+=visual-fill-column-mode=, =+nov-typography-h=. The function sets, buffer-locally:
+
+- =visual-fill-column-width= 68 and =visual-fill-column-center-text= t
+- =line-spacing= 0.3
+- a =face-remap-add-relative= of =variable-pitch= to Noto Serif at =:height 1.15=
+- =(hl-line-mode -1)=
+
+Nothing global changes. =perfect-margin= keeps every other buffer.
+
+** Consequences
+- EPUB text is a centred, word-wrapped column of about 66 proportional
+  characters in a serif face, at 130% leading, with no cursor-line band.
+- The column reflows on window resize and on =text-scale-adjust=, because
+  nothing is hard-filled.
+- =visual-fill-column= is now a declared package rather than an implicit
+  dependency, so dropping =:ui zen= would no longer silently break nov.
+- One more hook function in =nov-mode=, which is the "no hook" claim in
+  ADR-034's Decision retired. That claim is superseded here, not elsewhere.
+- The width is a measured constant tied to two variables that can move — the
+  =doom-font= size and the body face. If either changes, 68 is wrong and the
+  =string-pixel-width= measurement in Evidence is the way to recompute it.
+  *Superseded 2026-09-05 by [[id:adr-nov-reading-affordances][ADR-041]]:* the
+  measurement now runs in the hook (=+nov-measure-columns=), so the constant is
+  gone and the number follows the font. The 68 recorded here is what that
+  function returns for Noto Serif at =:height 1.15= on this display.
+
+** Rejected alternatives
+See the Candidates table above.
+
+** Validation
+Done, 2026-09-04:
+- =doom sync= clean, 7.1s; =doom doctor= reports only the standing false
+  "development build of Emacs (31.1)" warning.
+- Live read-back from a real book (=The Cambridge Companion to Hegel.epub=,
+  opened with =find-file-noselect= in the running daemon, buffer killed
+  after): =major-mode= =nov-mode=, =visual-line-mode= t, =visual-fill-column-mode=
+  t, =visual-fill-column-width= 68, =line-spacing= 0.3, =hl-line-mode= nil, and
+  =face-remapping-alist= carrying =(variable-pitch (:family "Noto Serif"
+  :height 1.15) variable-pitch)=.
+
+Outstanding, requiring the user's own graphical session:
+- The visual judgement itself — whether 68 columns and 130% leading read well
+  at this screen and this distance. The numbers are defensible; the taste is
+  not measurable from a daemon.
+- Images inside a book still sit inside the new column (=epdfinfo= is built
+  now, so this is testable in a way it was not on 2026-08-29).
+
+** Rollback
+Delete =+nov-typography-h= and the =add-hook!= form from the =use-package!
+nov= block in =config.org=, and =(package! visual-fill-column)= from the
+=packages.el= block, then =doom sync=. That restores ADR-034's state exactly,
+including its rendering defect.
+
+** Revisit when
+- =doom-font='s size or =doom-variable-pitch-font= changes — 68 is derived
+  from both and stops being 66 characters.
+- A properly hinted OpenType book face is installed (Charter as TTF, Literata,
+  Source Serif) — at which point the face choice here is decided on rendering
+  grounds that no longer apply.
+- Emacs gains hyphenation, which is the precondition that would move
+  justification out of the Rejected column.
+- =perfect-margin= drops =nov-mode= from its ignore list, which would put two
+  packages on the same margins.
+- Reading annotations become real (=org-noter= against an EPUB), which touches
+  the same buffer and gets its own entry.
+
+* ADR-041: nov.el reading affordances — headings, progress, a TOC sidebar, and three deferred axes taken up
+:PROPERTIES:
+:ID:       adr-nov-reading-affordances
+:STATUS:   Implemented; config side verified in the running daemon against three real EPUBs. Two items wait on the user: the font install (=~/nov-install.sh=) and the visual judgement. One item is blocked on the Emacs build — see Consequences
+:DATE:     2026-09-05
+:END:
+
+** Context
+[[id:adr-nov-typography][ADR-040]] fixed the rendering defect and set the
+measure, the leading and the body face. It left the rest of the reading
+experience at nov.el defaults. This entry takes up the axes ADR-034 deferred
+("a library view, font or line-spacing tuning, annotation") plus the ones a
+survey of how people actually configure nov.el turned up, and decides each
+one rather than leaving them as a standing menu.
+
+The user asked for the whole set bar one — the "kill the chrome" option
+(hiding the cursor and modeline in nov buffers) was explicitly declined, so
+nov buffers keep their modeline and cursor.
+
+** Decision drivers
+- Decide each axis, don't re-offer it. A menu that survives the conversation
+  is a decision not made.
+- Reuse before installing, and prefer a package already in the tree
+  ([[id:adr-cosmetic-module-bindings][ADR-021]]).
+- Where a suggestion turns out to be impossible or a bad idea on this machine,
+  record *why* here rather than dropping it silently.
+
+** Candidates
+Each row is one axis, decided independently:
+
+| Axis                        | Decision                                                     | Reason                                                                                                |
+|-----------------------------+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------------|
+| Heading structure           | =shrface=, hooked to =nov-mode=                              | Org-style heading faces, =outline-minor-mode= folding and a headline imenu over any =shr= buffer — nov here, eww and mu4e for free |
+| Heading size and face       | =face-remap= of =shrface-h1..h6= and =shr-h1..h6=            | They inherit =org-level-N= → =outline-N=, which leave the family unspecified, so headings fell back to the monospace default |
+| Reading progress            | =:eval= appended to nov's header line                        | =nov-render-title= escapes =%= in =nov-header-line-format=, so a progress spec cannot live in that string |
+| Cover/image size            | =shr-max-image-proportion= 0.6                               | The 0.9 default lets a cover plate push the first page of text off screen                             |
+| Scrolling                   | =pixel-scroll-precision-mode= globally                       | It has no buffer-local form; prose is where sub-line scrolling shows, code buffers are unharmed        |
+| Table of contents           | =+nov/toc-sidebar= on =T=, parsed from the TOC document      | =nov-goto-toc= (=t=) renders the TOC *over* the book in the same buffer; this leaves the page alone     |
+| Chapter-level imenu         | Given to shrface                                             | nov's own imenu is the book TOC, which =t= and =T= now cover twice; shrface's is the in-chapter headline tree, which nothing else gives |
+| Annotation                  | Nothing to do                                                | =org-noter-supported-modes= already contains =nov-mode= and =org-noter-nov= is loaded; =SPC n e= works against an EPUB today |
+| Library view                | =calibredb= on =SPC o E=                                     | Needs the =calibredb= CLI from calibre, which is not installed — the config is inert until it is       |
+| Body font                   | =Charis SIL= preferred, =Literata= ahead of it if ever installed | Charis SIL is Bitstream Charter redrawn with real OpenType data; needs an apt install, hence the script |
+| Justification               | =justify-kp=, opt-in per buffer on =J=                       | Requested with the recommendation against it standing; off by default because there is no hyphenation  |
+| WebKit rendering            | *Blocked*, not installed                                     | This Emacs has no xwidget support — see Evidence                                                       |
+
+** Evidence
+Measured on this machine, 2026-09-05:
+
+- =nov-xwidget= cannot work here. =system-configuration-features= has no
+  =XWIDGETS= entry, =(featurep 'xwidget-internal)= is nil and =(fboundp
+  'make-xwidget)= is nil. It would need Emacs 31.1 rebuilt with
+  =--with-xwidgets= — a rebuild of the Emacs 31.1 installed 2026-08-26, not a
+  package install. Not done, not proposed here.
+- =shrface-basic= (=shrface.el:1114-1117=) rebuilds
+  =nov-shr-rendering-functions= from =img= and =title= only, dropping nov's
+  =svg= handler and with it every SVG image in an EPUB. Restored on
+  =shrface-mode-hook=.
+- =shrface-toggle-bullets= non-nil disables =outline-minor-mode= and the imenu
+  index along with the bullets (=shrface.el:1095-1098=), i.e. everything the
+  package is here for. Left nil.
+- =nov-imenu-setup= is added to =nov-mode-hook= at nov.el's top level
+  (=nov.el:1082=), so it runs after anything added from =config.el= and wins
+  the =imenu-create-index-function=. The shrface index is restored with an
+  appended hook.
+- =nov-imenu-create-index= (=nov.el:1063-1078=) parses the TOC document —
+  i.e. it is the same data =+nov/toc-sidebar= and =nov-goto-toc= present.
+- =nov-visit-relative-file= (=nov.el:777-788=) resolves a TOC href against the
+  *currently displayed* chapter's directory, which is why =+nov--toc-entries=
+  resolves indices itself, against the TOC document's own directory.
+- =org-noter-supported-modes= reads =(doc-view-mode pdf-view-mode nov-mode
+  djvu-read-mode)= and =(featurep 'org-noter-nov)= is t. No configuration was
+  needed for the annotation axis.
+- Fonts: =fonts-sil-charis= is available in apt at 6.200 and not installed.
+  Literata is in neither apt nor this machine; it stays first in
+  =+nov-serif-fonts= so it wins automatically if it is ever installed.
+- No =calibredb= binary and no calibre library on this machine
+  (=find ~ -name metadata.db= is empty), so =calibredb-root-dir= points at
+  calibre's default =~/Calibre Library= and waits.
+
+** Decision
+=packages.el=: =(package! shrface)=, =(package! calibredb)=, =(package!
+justify-kp :recipe (:host github :repo "Fuco1/justify-kp"))=.
+
+=config.el=:
+- The measure is now *computed*, not hardcoded. =+nov-measure-columns= renders
+  a 66-character sample with =string-pixel-width= in the chosen body face and
+  divides by =frame-char-width=, so the column follows the font and the
+  =doom-font= size instead of going stale. This retires ADR-040's constant.
+- =+nov-serif-fonts= is a preference list — Literata, Charis SIL, Noto Serif —
+  and =+nov-serif-family= takes the first one installed.
+- =+nov-typography-h= additionally remaps the twelve heading faces and sets
+  =shr-max-image-proportion=.
+- =+nov-header-line-progress-h= on =nov-post-html-render-hook= appends
+  =(:eval (+nov-progress))=, giving "chapter n/N, p% through the chapter".
+- =+nov/toc-sidebar= (=T=) and =+nov/toggle-justification= (=J=), bound in
+  =nov-mode-map= for Evil normal state.
+- =use-package! shrface= hooked to =nov-mode=, with the SVG and imenu repairs
+  above.
+- =use-package! calibredb= on =SPC o E=.
+- =(pixel-scroll-precision-mode 1)= in the rice section, deliberately global.
+
+=~/nov-install.sh=: a throwaway script for the one thing an agent must not do
+by itself — =sudo apt-get install fonts-sil-charis=, and calibre behind a
+prompt. To be deleted once run.
+
+** Consequences
+- Headings in an EPUB read as headings: serif, scaled 1.6 down to 1.0, foldable
+  with =za=/=zc=, and indexed by =SPC s i= within the chapter.
+- The header line carries position, which nov did not previously expose at all.
+- =T= gives a persistent chapter list without losing the page; =t= still does
+  the in-buffer TOC, and =l= still goes back.
+- =shrface= also changes =eww= and =mu4e= rendering, since it is a =shr=-level
+  package. That is a wanted side effect, but it is a side effect: those two
+  were not being read for as part of this decision.
+- The imenu trade is real. Book-wide TOC jumping via =SPC s i= is gone,
+  replaced by =t=/=T=; in-chapter headline jumping is gained.
+- =justify-kp= is 2023-vintage and unmaintained (=33a186e=, 2023-03-17). It is
+  loaded only when =J= is first pressed, so an unused breakage stays invisible
+  until then.
+- =calibredb= and its =SPC o E= binding were inert until calibre was installed.
+  It was installed the same day (2026-09-05); what remains missing is a calibre
+  library for it to point at.
+- WebKit rendering stays impossible without an Emacs rebuild. Recorded rather
+  than quietly dropped, because it was asked for.
+- The cursor and modeline stay in nov buffers, by the user's explicit choice.
+
+** Rejected alternatives
+- =olivetti= for the column — same responsibility as =perfect-margin= and
+  =visual-fill-column=, and a third package for it.
+- Hard-filling with an integer =nov-text-width= — rejected in ADR-040 and
+  still rejected; it fights =justify-kp= as well.
+- A second nov buffer for the TOC sidebar (re-running =nov-mode= on the same
+  file) — a second unzip, a second work directory, and links that navigate the
+  sidebar instead of the book. Parsing the TOC document directly is smaller
+  and correct.
+- =shrface-toggle-bullets= t for a cleaner page — it takes folding and imenu
+  with it.
+
+** Validation
+Done, 2026-09-05, in the running daemon with the new build directories added
+to =load-path= (the daemon predates the sync, so a restart is still owed):
+- =doom sync= clean; =doom doctor= reports only the standing false
+  "development build of Emacs (31.1)" warning.
+- =The State and Revolution.epub= opened and read back: =shrface-mode= t,
+  =outline-minor-mode= t, =visual-line-mode= t, =visual-fill-column-mode= t,
+  =visual-fill-column-width= 68, =line-spacing= 0.3,
+  =shr-max-image-proportion= 0.6, =hl-line-mode= nil, thirteen face remaps
+  (=variable-pitch= plus =shrface-h1..h6= and =shr-h1..h6=),
+  =header-line-format= = ("The State and Revolution: ch002.xhtml" (:eval
+  (+nov-progress))), =imenu-create-index-function= =shrface-imenu-get-tree=,
+  and =(+nov-progress)= returning "  4/10  22%".
+- =The Cambridge Companion to Descartes.epub=: =+nov--toc-entries= returns 24
+  entries with correct labels and resolved document indices ("Cover page" → 1,
+  "Title page" → 4, "Copyright page" → 5), and =(svg . nov-render-svg)= is back
+  in =nov-shr-rendering-functions=.
+- =(require 'justify-kp)= succeeds and =pj-justify= is bound;
+  =where-is-internal= puts =calibredb= on =SPC o E=;
+  =pixel-scroll-precision-mode= is on.
+
+Done 2026-09-05, after the script ran:
+- =fonts-sil-charis= and calibre are both installed. =+nov-serif-family=
+  returns "Charis SIL" and =+nov-measure-columns= returns *62* columns for it
+  against 68 for Noto Serif — the measurement moved on its own, with no config
+  edit, which is the behaviour the dynamic measure was for.
+- =calibredb= is at =/usr/bin/calibredb=, so =SPC o E= is no longer inert. Still
+  unexercised: there is no calibre *library* yet, only the CLI.
+
+Outstanding:
+- The visual judgement, and clicking a TOC sidebar entry in a real graphical
+  frame. Button actions were verified by construction, not by clicking.
+- =J= (justification) has never been rendered on screen. Its interaction with
+  =visual-fill-column='s margins is reasoned, not observed.
+- =SPC o E= has not been exercised — calibre is installed now, but no library
+  has been created for it to open.
+
+** Rollback
+Per axis, since each is independent. Wholesale: drop =shrface=, =calibredb=
+and =justify-kp= from =packages.el=, delete the =use-package! shrface= and
+=use-package! calibredb= blocks, the =map!= for =SPC o E=, the
+=pixel-scroll-precision-mode= call, and everything in the =nov= block below
+=+nov-typography-h='s =hl-line-mode= line, then =doom sync=. That returns to
+ADR-040's state, which is self-contained and still correct.
+
+** Revisit when
+- Emacs is next rebuilt — =--with-xwidgets= would move =nov-xwidget= out of
+  the blocked column, at which point it competes with this whole entry rather
+  than complementing it.
+- calibre is installed, which is when =calibredb='s configuration stops being
+  theoretical and its keybinding gets used.
+- Literata is installed — it is already first in =+nov-serif-fonts=, so this
+  needs no code change, but the measured column will move and the ADR-040
+  numbers stop describing what is on screen.
+- =justify-kp= breaks against a newer Emacs. It is unmaintained; the fix is to
+  stop using =J=, not to fork it.
+- =shrface='s effect on =eww= or =mu4e= turns out to be unwanted, which would
+  mean scoping =shrface-mode= to =nov-mode= buffers only rather than enabling
+  it as a =shr=-wide package.
+- A book is read end to end and something in this list turns out to be wrong
+  in practice — the whole entry is reasoned from source plus daemon read-back,
+  with no sustained reading behind it.
+
+* ADR-042: Emacs build flags — add xwidgets and ImageMagick, and move the procedure into the repository
+:PROPERTIES:
+:ID:       adr-emacs-rebuild-flags
+:STATUS:   Decided; script written and tangled, prerequisites installed. The rebuild itself has *not* been run — see Validation
+:DATE:     2026-09-05
+:END:
+
+** Context
+[[id:adr-nov-reading-affordances][ADR-041]] found that =nov-xwidget= could not
+be installed because this Emacs has no xwidget support, and recorded it as
+blocked rather than dropping it. That prompted the wider question: the 31.1
+build enabled six things on its configure line and took everything else from
+whatever =-dev= packages happened to be installed. Nobody had audited what was
+being left on the table.
+
+A second problem surfaced while scoping it. The procedure for the 2026-08-26
+build lives in =~/src/emacs-build/01-prereqs.sh= and =02-install.sh= — outside
+any repository, on one machine. That is precisely the shape of the =~/.bashrc=
+layer that reverted to stock twice and that
+[[id:adr-literate-config][ADR-035]] exists to prevent. The laptop cannot run a
+procedure it does not have.
+
+** Decision drivers
+- Maximise Emacs functionality, which was the request in as many words.
+- Decide every remaining flag, including the ones being rejected, so the audit
+  does not have to be redone at the next rebuild.
+- Whatever is decided has to be reproducible on the laptop and on any future
+  machine, from the repository rather than from reconstruction
+  ([[id:adr-multi-host-posture][ADR-039]]).
+- Do not break the distro's own toolchain to feed Emacs.
+
+** Candidates
+Every =--with-*= this source offers that is not already enabled:
+
+| Flag                                  | Fate      | Reason                                                                                                        |
+|---------------------------------------+-----------+-----------------------------------------------------------------------------------------------------------------|
+| =--with-xwidgets=                     | Chosen    | The blocked item from ADR-041. Needs WebKitGTK ≥ 2.12, GTK3 and cairo (=configure.ac:4453-4507=); all three are satisfiable here |
+| =--with-imagemagick=                  | Chosen    | Requires =MagickWand >= 7= (=configure.ac:3710=); reachable only via a source build, see the ImageMagick sub-decision below |
+| =--with-libotf=, =--with-m17n-flt=    | Rejected  | The pre-HarfBuzz shaping path. =HARFBUZZ= is already in the feature list and takes precedence; nothing is gained on Latin/Cyrillic |
+| =--with-pgtk=                         | Rejected, for now | Mutually exclusive with X11, and =XDG_SESSION_TYPE= is =x11=. On an X session PGTK loses XIM and X-specific handling for nothing. It becomes correct the day this machine moves to Wayland |
+| =--with-cairo-xcb=                    | Rejected  | Upstream-experimental XCB surfaces. No new functionality, real crash surface                                  |
+| =--enable-link-time-optimization=     | Rejected  | Build-time optimisation only, no features, and it interacts badly with AOT native compilation                 |
+| =--with-selinux=                      | Rejected  | =libselinux1-dev= is installed but Ubuntu runs AppArmor. Inert                                                 |
+| =--with-kerberos=, =--with-pop=, =--with-hesiod= | Rejected | =movemail= POP retrieval, already superseded by the =--with-mailutils= already on the line          |
+| =--with-wide-int=, =--with-small-ja-dic=, =--with-gconf=, =--with-gameuser= | Rejected | 64-bit host; wrong language; GSettings supersedes GConf; no shared game scores |
+| =--with-ns=, =--with-w32=, =--with-be-app=, =--with-android= | N/A | Wrong platform                                                                           |
+| MPS / incremental GC                  | *Not offered* | See Evidence — it is not in this release at all                                                          |
+
+ImageMagick sub-decision — *where* IM7 goes:
+
+| Candidate                        | Fate     | Reason                                                                                          |
+|----------------------------------+----------+---------------------------------------------------------------------------------------------------|
+| Build IM7 into =/opt/imagemagick7= | Chosen   | The distro's ImageMagick 6.9.12 keeps PATH precedence and its current behaviour; the only file outside =/opt= is one =ld.so.conf.d= entry |
+| Build IM7 into =/usr/local=      | Rejected | Shadows =convert=, =identify= and =mogrify= for every other tool on the machine, silently changing their behaviour |
+| A third-party PPA                | Rejected | Adds an apt trust root for one library                                                          |
+| Do without ImageMagick           | Rejected | It was asked for; and unlike the other rejected flags it is genuinely reachable                 |
+
+** Evidence
+Checked on this machine, 2026-09-05:
+
+- =./configure --help= in =emacs-31.1/= offers no =--with-mps= or
+  =--with-igc=, there is no =src/igc.c=, and =configure.ac= mentions neither.
+  The MPS-based incremental collector is not in 31.1; it lives on the
+  =scratch/igc= branch and would be a *separate* Emacs built from git, not a
+  flag on this one. Nothing to decide, so nothing was decided.
+- The 31.1 build's actual line, from =system-configuration-options=:
+  =--prefix=/usr/local --with-native-compilation=aot --with-tree-sitter
+  --with-x-toolkit=gtk3 --with-cairo --with-mailutils=. Everything else in the
+  feature list was auto-detected.
+- =libwebkit2gtk-4.1-dev= 2.52.6 is available and now installed; the runtime
+  =libwebkit2gtk-4.1-0= was already present, so this was a small install.
+- ImageMagick: Ubuntu 24.04 has only 6.9.12 in the archive. IM =7.1.2-31
+  Q16-HDRI= was built from source into =/opt/imagemagick7=, and
+  =PKG_CONFIG_PATH=/opt/imagemagick7/lib/pkgconfig pkg-config --modversion
+  MagickWand= returns =7.1.2=. =/usr/bin/convert= still reports 6.9.12, i.e.
+  the distro install is untouched.
+- *There is no fallback Emacs on this machine.* =snap list= has no emacs,
+  =/snap/bin/emacs= does not exist, and apt =emacs= is not installed.
+  =/usr/local/bin/emacs-31.1= is the only one. The rollback plan recorded with
+  the 31.1 build ("snap 30.2 remains installed") is no longer true.
+- The eln cache is =31.1-c0f18eb7=; that suffix is a hash of the build
+  configuration, so changing the configure line invalidates every =.eln= —
+  Emacs's own during =make=, and Doom's on the next sync.
+- The 31.1 tarball's signature verifies against key
+  =9B917007AE030E36E4FC248B695B7AE4BF066240= (Sean Whitton, the 31.x release
+  manager), and that key is already in the local keyring.
+- Host facts the script has to stop hardcoding: GCC is 13, so
+  =libgccjit-13-dev= is right *here* and wrong anywhere else.
+
+** Decision
+New configure line, adding two flags to the six already there:
+
+: PKG_CONFIG_PATH=/opt/imagemagick7/lib/pkgconfig ./configure \
+:   --prefix=/usr/local --with-native-compilation=aot --with-tree-sitter \
+:   --with-x-toolkit=gtk3 --with-cairo --with-mailutils \
+:   --with-xwidgets --with-imagemagick
+
+The procedure moves into =config.org= and tangles to
+=~/.local/bin/emacs-rebuild= at mode 700, joining =pass-backup= in the shell
+layer. =docs/standards.org='s list of files expected identical on every host
+gains it.
+
+The script is host-agnostic by the ADR-039 rule — environment-variable
+overrides with working defaults (=EMACS_VERSION=, =EMACS_BUILD_ROOT=, =JOBS=,
+=IMAGEMAGICK_PREFIX=), and everything else probed rather than assumed:
+
+- =libgccjit= is derived from =gcc -dumpversion=, not hardcoded to 13.
+- WebKitGTK 4.1 is probed with a 4.0 fallback, matching configure's own order.
+- ImageMagick is *optional*: no =/opt/imagemagick7= means the build proceeds
+  with =--without-imagemagick= and says so, rather than failing.
+- The tarball's GPG signature is verified before anything is built, and a
+  missing signing key stops the run with the command to fetch it. There is no
+  skip flag.
+- The existing =/usr/local/bin/emacs-$VERSION= is copied to =.bak= before
+  =make install=. Since the same source version reinstalls byte-identical
+  Lisp, that one file is the whole rollback — which matters more than usual
+  given there is no other Emacs on the machine.
+- =make distclean= runs first, because the entire point of the script is to
+  change the configure flags and a tree holding objects from the previous set
+  is how a binary ends up not matching its own configure line.
+- The build is verified by grepping =system-configuration-features= for
+  =XWIDGETS= (and =IMAGEMAGICK= when requested) and failing loudly if absent,
+  rather than trusting that configure did what was asked.
+
+** Consequences
+- Emacs gains =xwidget-webkit-browse-url= and the =nov-xwidget= option, plus
+  ImageMagick's format coverage — HEIC/AVIF, JPEG 2000, camera RAW, PSD,
+  DICOM. Note that ImageMagick is *not* a rendering upgrade: cairo has handled
+  scaling and rotation since Emacs 27. It is format breadth, nothing more.
+- The rebuild costs roughly an hour: AOT native compilation of Emacs's own
+  Lisp during =make=, then =doom sync --rebuild= for 234 packages, because the
+  eln hash changes.
+- Every machine wanting these flags needs IM7 built there too, or it silently
+  gets =--without-imagemagick=. The laptop therefore has a prerequisite this
+  ADR does not remove — deliberately, since the alternative was letting a
+  missing =/opt= directory fail a build.
+- The old =~/src/emacs-build/*.sh= scripts are now superseded but not deleted;
+  the source tree they sit next to is still what the new script builds from.
+- =/opt/imagemagick7= is a second, unmanaged ImageMagick on the system. It is
+  not on =PATH= and no apt package knows about it, so it will not be upgraded
+  by =apt upgrade= and is on nobody's security-update path. That is the price
+  of IM7 on a distro that ships IM6.
+
+** Rejected alternatives
+See both Candidates tables.
+
+** Validation
+Done, 2026-09-05:
+- Flag audit above, read out of this source tree's own =configure --help= and
+  =configure.ac= rather than from memory of what Emacs supports.
+- =libwebkit2gtk-4.1-dev= installed; =pkg-config --modversion webkit2gtk-4.1=
+  returns 2.52.6.
+- ImageMagick 7.1.2-31 built and installed to =/opt/imagemagick7=; MagickWand
+  reports 7.1.2 through =PKG_CONFIG_PATH=; =/usr/bin/convert= still 6.9.12.
+- =emacs-rebuild= tangles to mode =-rwx------=, passes =bash -n=, and its
+  three probes were dry-run in isolation: =gcc_major=13=,
+  =webkit=libwebkit2gtk-4.1-dev=, =magick=--with-imagemagick=, with
+  =libgccjit-13-dev= confirmed installable under that name.
+- Two =set -e= traps were found and fixed before the script was considered
+  done: =[ test ] && command= at the top level of a =set -e= script exits when
+  the test is false, which would have killed the run on any machine that is
+  *not* root and on any machine that *does* have ImageMagick. Both are now
+  =if= blocks.
+
+Rebuild run and installed, 2026-09-05:
+- =configure= reported "Does Emacs support Xwidgets? yes", and =src/config.h=
+  carries =HAVE_XWIDGETS=, =HAVE_IMAGEMAGICK= and =HAVE_IMAGEMAGICK7=.
+- =make -j12= exited 0. The built binary reports =XWIDGETS= and =IMAGEMAGICK=
+  in =system-configuration-features=, with =(fboundp 'make-xwidget)= t and
+  =(image-type-available-p 'imagemagick)= t.
+- Installed to =/usr/local= (26.5 MB, "build 2 ... of 2026-09-05"), with the
+  previous binary preserved at =/usr/local/bin/emacs-31.1.bak= (25.7 MB).
+- The =sudo= half was run by the user from a terminal; the configure and
+  =make= halves need no root and were run by the agent.
+
+*The running Emacs was deliberately not disturbed*, and measurably was not:
+five days into its uptime it still reports "of 2026-08-25" with
+=(fboundp 'make-xwidget)= nil. The mechanism is worth recording, because it is
+what makes an in-place Emacs upgrade safe for a live session:
+
+- GNU =install= unlinks the destination before writing, so the running process
+  keeps the inode it is executing. No =ETXTBSY=, no crash.
+- =comp-native-version-dir= is a hash of the build configuration. The old
+  binary reports =31.1-c0f18eb7= and the new one =31.1-ea051f05=, and only the
+  former exists under =.local/cache/eln/= — so the live session's native code
+  is not merely intact, it is in a directory the new build will never write to.
+- straight's =build-31.1/= is keyed on the Emacs *version*, not the build hash,
+  so its =.elc= files remain valid for both binaries.
+
+Not done:
+- =doom sync --rebuild= has *not* been run, on purpose. It rewrites
+  =straight/build-31.1/= underneath the live session, which is the one step in
+  this whole sequence that could disturb it. It is also optional: the =.elc=
+  files stay valid, and the new binary simply finds no =.eln= for its hash and
+  native-compiles lazily. The right moment is immediately after the first
+  restart into the new binary.
+- No machine other than this one has been touched. The laptop's distribution
+  version is unknown, so the 4.1/4.0 WebKit fallback is reasoned, not
+  exercised.
+- Whether =nov-xwidget= gets wired after the rebuild is undecided and belongs
+  in its own entry — ADR-041 rejected it on the grounds that it loses Evil,
+  =save-place=, isearch and the theme, and building the capability does not
+  overturn that.
+
+** Rollback
+Per layer. The build: =sudo mv /usr/local/bin/emacs-31.1.bak
+/usr/local/bin/emacs-31.1=, which the script prints on completion. *That backup
+is the only Emacs to fall back to* — the snap 30.2 named as the rollback for the
+2026-08-26 build has since been removed — so it stays until the new build has
+been used in anger: xwidgets rendering, ImageMagick formats loading, and a
+normal day's editing without a crash. Only then =sudo rm
+/usr/local/bin/emacs-31.1.bak=. Leaving it forever is 26 MB of harmless
+insurance; deleting it early is being left with no editor. ImageMagick:
+=sudo rm -rf /opt/imagemagick7 /etc/ld.so.conf.d/imagemagick7.conf && sudo
+ldconfig=, then rebuild without it. The script itself: delete the
+=~/.local/bin/emacs-rebuild= section from =config.org=, re-tangle, =rm= the
+file, and drop it from =standards.org='s list.
+
+** Revisit when
+- The next Emacs major release — at which point MPS/igc is the thing to check
+  for, and the release signer changes, which is the one hardcoded value in the
+  script that cannot be probed.
+- This machine moves to Wayland, which is when =--with-pgtk= stops being a
+  downgrade and starts competing with =--with-x-toolkit=gtk3=.
+- Ubuntu ships an ImageMagick 7 package, which would let =/opt/imagemagick7=
+  and its unmanaged-second-copy problem be deleted.
+- The laptop is rebuilt, which is the first real test of the host-agnostic
+  claims — the GCC major, the WebKit fallback, and the missing-IM7 path all
+  have their first exercise there.
+- xwidgets turns out to destabilise the daemon. It is a WebKit process inside
+  the editor; if it takes Emacs down, dropping the flag is one line here.
+
+* ADR-043: Firefox chrome layer — tangle the three profile files, copy them in with a resolver, and replace the bottom toolbar with a combined zenburn bar
+:PROPERTIES:
+:ID:       adr-firefox-chrome-layer
+:STATUS:   Decided; tangled, upstream fidelity and the resolver both verified against this machine. =firefox-chrome-install= has *not* been run against the live profile — see Validation
+:DATE:     2026-09-06
+:END:
+
+** Context
+Firefox's UI customisation has been running on this machine since 2021 —
+=#nav-bar= moved to the bottom of the window — and it has never been in a
+repository. It lives as =userChrome.css= inside a profile directory, alongside a
+=vars.css=, and there are two copies of both: one under =~/.mozilla/firefox= from
+before Ubuntu moved Firefox to a snap, one under
+=~/snap/firefox/common/.mozilla/firefox=. Neither is version-controlled.
+
+This is the same shape as the =~/.bashrc= layer that reverted to stock twice
+([[id:adr-literate-config][ADR-035]]) and the Emacs build procedure that lived
+in =~/src/emacs-build= ([[id:adr-emacs-rebuild-flags][ADR-042]]): a
+configuration artefact outside any repository, on one machine, that the laptop
+cannot get by pulling.
+
+What makes Firefox harder than either of those is that its target *path is not
+knowable in advance*. =~/.bashrc= is =~/.bashrc= on every machine. A Firefox
+profile is =<root>/<random8>.<name>=, where the root depends on how Firefox was
+packaged and the random component is generated at first run.
+
+Inspection of this machine also turned up two defects in what is there now:
+
+- The =userChrome.css= in the profile is the 2021 release of upstream's
+  =navbar_below_content.css=, and has since rotted. Firefox renamed
+  =--toolbarbutton-outer-padding= to =--toolbarbutton-padding-outer=, so the
+  toolbar-height calculation had been silently resolving to =0px=; upstream also
+  moved =#nav-bar= off =display: flex= (which breaks extension menus) and added
+  panel-sizing and Linux notification-popup fixes.
+- =vars.css= is dead. It holds Tree Style Tab sidebar variables, TST is no
+  longer an installed extension, and nothing =@import=-s the file — no
+  stylesheet has read it in years.
+
+Once the layer existed, the customisation it carries was changed as well, which
+is why this ADR decides two things rather than one. The request was a *single*
+combined toolbar — favicon-only tabs beside the address bar, carrying the
+downloads, passwords and hamburger buttons — and, separately, that Firefox be
+painted in the same zenburn palette as Emacs and the terminal.
+
+** Decision drivers
+- Get the customisation into the repository, for the same reason as ADR-035 and
+  ADR-042: a laptop or a rebuilt desktop should get it from =git pull=, not from
+  someone reconstructing it ([[id:adr-multi-host-posture][ADR-039]]).
+- The mechanism must survive the profile path being different on the next
+  machine, and must survive Firefox being packaged differently (snap here,
+  possibly native or flatpak elsewhere).
+- Finding the right path must be a command, not an investigation. The failure
+  mode of getting it wrong is *silence* — Firefox starts, looks unchanged, and
+  nothing anywhere reports an error.
+- Do not adopt a maintenance burden disproportionate to the benefit. Firefox
+  chrome CSS targets internal markup with no stability guarantee. Prefer
+  carrying an upstream file verbatim, so the next breakage is a diff.
+- The browser should match =doom-theme= and the terminal. That palette already
+  exists in this repository twice over; a third copy should be the *same*
+  numbers, from the same source.
+
+** Candidates
+
+*** Where the files live, and how they reach the profile
+
+| Candidate                                             | Fate     | Reason                                                                                                     |
+|-------------------------------------------------------+----------+--------------------------------------------------------------------------------------------------------------|
+| Tangle to =$DOOMDIR/firefox/=, *copy* into the profile with a resolver script | Chosen   | Version-controlled, host-agnostic, and works under snap confinement. Costs one command after an edit          |
+| Tangle to =$DOOMDIR/firefox/=, *symlink* into the profile | Rejected | Breaks under the snap. See Evidence — AppArmor denies the snap every top-level dot-directory in =$HOME=, silently |
+| Tangle straight to an absolute profile path           | Rejected | Hardcodes =s5v1taq3.default-release= into the file that is supposed to be host-agnostic. Wrong on the laptop by construction |
+| =git clone= the repository *as* the profile's =chrome/= directory | Rejected | Upstream's own suggestion, and reasonable for upstream. Here it would mean a second checkout of unrelated content inside a profile Firefox rewrites |
+| Leave it out of the repository                        | Rejected | This is the status quo that lost the shell layer twice                                                        |
+
+*** What the chrome should look like
+
+| Candidate                                     | Fate     | Reason                                                                                              |
+|-----------------------------------------------+----------+---------------------------------------------------------------------------------------------------------|
+| Combined bar at the *top*, from =oneline_toolbar.css= + =icon_only_tabs.css= verbatim | Chosen   | Two maintained upstream files, carried unmodified, with local changes appended after them. A Firefox upgrade that breaks it is a diff against upstream |
+| Combined bar at the *bottom*                  | Rejected | Possible, but only hand-written: =#main-window > body= becomes a two-column grid with the toolbars in its last row. That is a custom style with no upstream to diff against, which is the maintenance burden this ADR is trying not to take on |
+| Keep =navbar_below_content.css= *and* combine | Impossible | Not a preference. It works by =position: fixed= on =#nav-bar=, and a fixed-position element is not in the =#navigator-toolbox= grid the combined bar places both toolbars in |
+| =combined_tabs_and_main_toolbars.css=         | Rejected | The other upstream route to one bar. It hides all unselected tabs behind =alltabs-button=, so the favicon strip that was asked for would not exist |
+
+*** How the zenburn palette gets into Firefox
+
+| Candidate                              | Fate     | Reason                                                                                          |
+|----------------------------------------+----------+-----------------------------------------------------------------------------------------------------|
+| =--lwt-*= variables in =userChrome.css= | Chosen   | Tangleable, diffable, ~30 assignments, and the hexes come from =doom-zenburn-theme.el= itself. Shape from upstream's =color_variable_template.css= |
+| The Firefox Color extension (already installed) | Rejected | Does the same job through a UI and stores the result in extension storage — not a file. Not tangleable, not diffable, gone with the profile |
+| A packaged theme add-on (=.xpi=)       | Rejected | Would have to be built, signed and installed out-of-band. A theme add-on is also *only* colours, so the layer would still exist for everything else |
+| A full third-party theme (Cascade, ShyFox, MinimalisticFox, SimplerentFox) | Rejected | Several hundred lines against unstable internal markup, breaking on upgrades. Same reasoning as the one-tool-per-responsibility rule in [[id:adr-corfu-migration][ADR-021]] — take the tweak, not the framework |
+| =userChrome.js= via =fx-autoconfig=    | Rejected, for now | Arbitrary JavaScript at chrome privilege, needing files in the Firefox *installation* directory, which the snap makes read-only. Revisit only if something genuinely cannot be done in CSS |
+
+** Evidence
+Checked on this machine, 2026-09-06:
+
+- Firefox is the *snap*, 154.0.1: =dpkg= has only the transitional
+  =firefox 1:1snap1-0ubuntu5= pointing at it, and =snap list= shows revision 8803.
+- Both profile roots exist. =~/.mozilla/firefox= (native, last written 2021) and
+  =~/snap/firefox/common/.mozilla/firefox= (live) each contain a
+  =pdc35998.default= and an =s5v1taq3.default-release=.
+- *The two notions of "default profile" disagree here.*
+  =~/.mozilla/firefox/profiles.ini= gives =[Profile1] Path=pdc35998.default=
+  =Default=1=, while its =[Install4F96D1932A9F858E]= section gives
+  =Default=s5v1taq3.default-release=. A resolver that trusts =Default=1= — the
+  reading most snippets on the subject suggest — installs into a profile
+  abandoned in 2021. Hence the resolver prefers the =[Install...]= section.
+- The snap's AppArmor profile,
+  =/var/lib/snapd/apparmor/profiles/snap.firefox.firefox=, implements the =home=
+  interface as =owner @{HOME}/[^s.]** rwklix= plus the =s[^n]…= variants,
+  under the comment "Allow read/write access to all files in @{HOME}, except
+  snap application data in @{HOME}/snap and toplevel hidden directories in
+  @{HOME}". =~/.config= is a toplevel hidden directory and appears in no other
+  rule, so a symlink from the profile into =~/.config/doom= is unreadable to
+  Firefox. Firefox reports nothing; the stylesheet simply never applies.
+- =toolkit.legacyUserProfileCustomizations.stylesheets= is already =true= in the
+  snap profile's =prefs.js=, and there is no =user.js= in that profile at all.
+  Required since Firefox 69, which stopped loading these files unconditionally.
+- The profile's =userChrome.css= is 961 bytes and matches upstream's 2021
+  =navbar_below_content.css=, not the current one; =vars.css= is 576 bytes of
+  Tree Style Tab variables and is not =@import=-ed by anything.
+- Tree Style Tab is absent from the active extension list. It survives only as a
+  stale entry in =browser.uiCustomization.state=.
+- This profile already runs Firefox's *native* vertical tabs and revamped
+  sidebar: =sidebar.revamp=true=, =sidebar.visibility="hide-on-close"=. That is
+  shipped UI since Firefox 136 and needs no CSS, which is why the TST-era
+  workarounds are not being carried forward.
+- Upstream's collection uses =@media -moz-pref("sidebar.verticalTabs")= in
+  current files, i.e. it tracks the native vertical-tabs world rather than the
+  extension one. =sidebar.verticalTabs= is *not set* in this profile, so tabs
+  are horizontal and both files this ADR adopts are live rather than no-ops.
+- =#navigator-toolbox= is the contested element. =oneline_toolbar.css= sets
+  =display: grid= with =grid-template-columns: 6fr 4fr= and puts =#TabsToolbar=
+  and =#nav-bar= in =grid-row: 2/3=; =navbar_below_content.css= sets
+  =position: fixed; bottom: 0= on =#nav-bar=; =toolbars_below_content_v2.css=
+  sets =display: contents= on the toolbox. No two of the three compose.
+- =oneline_toolbar.css= declares =--uc-oneline-toolbar-split= and then hardcodes
+  =6fr 4fr= without using it. The variable is wired up in the local block rather
+  than fixed in place, so the upstream copy stays byte-identical.
+- Firefox's built-in *Dark* theme is already the active one:
+  =extensions.activeThemeID= is =firefox-compact-dark@mozilla.org=. Upstream's
+  =color_variable_template.css= notes the =--lwt-*= variables need a non-default
+  theme, so this prerequisite is already met and no theme switch is needed.
+- The zenburn hexes come from
+  =~/.config/emacs/.local/straight/build-31.1/doom-themes/doom-zenburn-theme.el=
+  — =bg #3F3F3F=, =bg-1 #2B2B2B=, =bg+1 #4F4F4F=, =bg+2 #5F5F5F=,
+  =fg #DCDCDC=, =fg+1 #FFFFEF=, =yellow #F0DFAF=, =blue #8CD0D3=. The shell
+  layer's =FZF_DEFAULT_OPTS= already hardcodes the same values, so this is the
+  third consumer of one palette rather than a fourth palette.
+- =+= is not a legal character in a CSS identifier, so zenburn's =bg+1= cannot
+  be spelled =--zb-bg+1=; the local block uses =--zb-bg-plus1=. Written the
+  obvious way the declarations would have been silently dropped.
+
+** Decision
+A fourth tangle target family in =config.org=, under a new =* Firefox layer=
+heading:
+
+| Tangled file                        | Goes to                     | Contents                                                       |
+|-------------------------------------+-----------------------------+--------------------------------------------------------------------|
+| =firefox/user.js=                   | =<profile>/user.js=         | =toolkit.legacyUserProfileCustomizations.stylesheets= and nothing else |
+| =firefox/userChrome.css=            | =<profile>/chrome/=         | Bottom toolbar, refreshed to current upstream, plus a commented opt-in shelf |
+| =firefox/userContent.css=           | =<profile>/chrome/=         | Empty of active rules; two commented opt-ins                       |
+| =~/.local/bin/firefox-chrome-install= | =$PATH=                   | The resolver and installer                                         |
+
+=userChrome.css= is four sections in order: =oneline_toolbar.css= verbatim,
+=icon_only_tabs.css= verbatim, a local layout block, and a local zenburn block.
+Keeping the upstream halves unmodified and appending after them is the pattern
+upstream itself recommends, and it is what makes a refresh a diff.
+
+The combined bar carries the requested buttons without any pref being set for
+it: merging the toolbars brings =downloads-button=, =unified-extensions-button=
+and the hamburger (=PanelUI-menu-button=, fixed markup at the end of =#nav-bar=)
+from one side and =logins-button=, =new-tab-button= and =alltabs-button= from
+the other onto the same row. =browser.uiCustomization.state= is deliberately
+*not* pinned in =user.js=: that would make the Customize window permanently
+ineffective. Button placement stays drag-and-drop.
+
+=firefox-chrome-install= probes profile roots in the order snap, flatpak,
+native — skipping any flavour not installed — takes the first root with a
+resolvable profile, prefers =profiles.ini='s =[Install...]= section over a
+legacy =Default=1=, and copies the three files in. It prints every path it
+resolved on every run, backs up once anything at a destination it did not
+write, and takes =--check= to report sync state without changing anything,
+=--prune= to name the files in the profile's =chrome/= this layer does not own,
+and =--profile DIR= to bypass the resolver entirely. =--prune= reports and never
+deletes: the set of things that legitimately live in a profile's =chrome/= — a
+theme's assets, a backup still worth keeping — is not knowable from inside the
+script, and removing a file from someone's browser profile on a guess is not a
+thing to do unattended.
+
+=user.js= stays deliberately minimal, because a pref set there cannot be
+changed from Firefox's own UI in any lasting way — the next startup puts it
+back. It carries what the layer *requires*, not what is merely preferred.
+
+=vars.css= is deleted rather than carried forward.
+
+** Consequences
+- The customisation is now in git. A drifted or wiped profile is a
+  =firefox-chrome-install= away, on any machine, from a =git pull=.
+- The bottom toolbar is *gone*, replaced by a combined top bar. That is a
+  visible change to a five-year habit, and the reason it is a decision rather
+  than a refresh. The rotted file it replaces was not working correctly anyway.
+- Firefox now matches =doom-theme= and the terminal. One palette, three
+  consumers; retuning means editing the =--zb-*= block, not hunting hexes.
+- Copying means the profile can drift from the repository. =--check= is the
+  answer, and is why it prints paths unconditionally.
+- One manual step after editing the CSS: =doom sync= (or saving =config.org=)
+  tangles, then =firefox-chrome-install= copies, then restart Firefox. Three
+  steps where the shell layer needs one.
+- =user.js= now exists in a profile that had none. Anything put in it is
+  pinned against the Firefox settings UI, which is a foot-gun if the file grows.
+- The chrome now depends on Firefox's built-in Dark theme staying active.
+  Switching to "System theme — auto" drops most of the =--lwt-*= assignments;
+  the system-theme fallbacks are set too, so the result degrades rather than
+  breaks.
+- Three otherwise-attractive upstream tweaks are now unavailable — anything
+  moving the toolbars below content, and =hide_tabs_with_one_tab.css=, which
+  would leave an empty grid column rather than reclaim the space. They are
+  recorded in =config.org='s menu table so the incompatibility is not
+  rediscovered.
+- A future machine with an unusual layout is handled by =--profile=, not by a
+  code change.
+
+** Rejected alternatives
+Beyond the candidate tables: an Emacs-side drift check at startup, in the shape
+of the credential-store guard of [[id:adr-credential-state-guard][ADR-038]],
+was considered and dropped. That guard exists because the thing it watches
+cannot be tangled and its loss is unrecoverable. Firefox CSS is neither — it is
+in the repository, and the cost of drift is a slightly wrong-looking browser.
+=--check= run when something looks off is proportionate; a startup hook is not.
+
+** Validation
+- The resolver was exercised against both real roots on this machine and
+  returns =s5v1taq3.default-release= for each, i.e. it does *not* fall for the
+  stale =Default=1= in the native root.
+- Install, re-install and =--check= were exercised end to end against a sandbox
+  profile: the first run backs up an unmanaged =user.js= and an unmanaged
+  =userChrome.css= once each, the second reports all three unchanged, and
+  =--check= exits 0 when in sync and 1 otherwise.
+- =config.org= tangles cleanly; all four files appear with =firefox-chrome-install=
+  at mode 700.
+- Both upstream blocks in the tangled =userChrome.css= were compared
+  byte-for-byte against the current upstream files and are identical.
+- =userChrome.css= and =userContent.css= both parse to balanced braces with no
+  unterminated comment and no =+= in any custom-property name — the commented-out
+  shelf entries do not swallow live rules.
+- =firefox-chrome-install= was run against the live profile on 2026-09-06. It
+  resolved =s5v1taq3.default-release= under the snap root
+  (=~/snap/firefox/common/.mozilla/firefox/=), which is the root the running
+  =/usr/bin/firefox= reads; it installed =user.js=, =chrome/userChrome.css= and
+  =chrome/userContent.css=, all three now byte-identical to the tangled files,
+  and it backed the displaced 2021 =userChrome.css= up as
+  =userChrome.css.bak-2026-09-06= exactly once. The stale native root
+  =~/.mozilla/firefox/s5v1taq3.default-release/chrome/= was correctly left
+  alone.
+- *Not yet done*: Firefox has not been restarted since that install, so none of
+  this has been seen rendered. On the next restart, confirm: one toolbar row;
+  tabs as favicons on the right of the address bar; downloads, extensions,
+  hamburger, passwords, new-tab and all-tabs all present on that row; zenburn
+  colours in the chrome, the hamburger panel and the address-bar dropdown; and
+  a yellow line above the active tab. The 7fr/3fr split is a guess at a
+  comfortable width and is the most likely thing to want adjusting.
+- =--prune= was exercised against both the live profile and a sandbox one: it
+  reports =vars.css= (January 2021) as unmanaged and
+  =userChrome.css.bak-2026-09-06= as a backup, distinguishing the two, and it
+  says so and exits 0 when a =chrome/= holds nothing but the two managed
+  stylesheets. =--check= still exits 0 against the live profile.
+- Also outstanding: =chrome/vars.css= survives in the snap profile's =chrome/=
+  directory. Nothing in the tangled CSS imports it, so it is inert — it is the
+  one unowned file left inside a directory this layer now manages, and
+  =--prune= is what will keep naming it until it is removed by hand.
+
+** Rollback
+=firefox-chrome-install= backs up whatever unmanaged file it displaces, so the
+2021 =userChrome.css= is preserved as =userChrome.css.bak-<date>= on first run;
+restoring it is a =mv=. Reverting only the *appearance* — back to a bottom
+toolbar with labelled tabs — means swapping section 1 and 2 of the
+=userChrome.css= block for upstream's =navbar_below_content.css= and dropping
+the tabs-on-right pref; the layer itself is unaffected either way. Removing the layer entirely means deleting
+=<profile>/chrome/= and =<profile>/user.js= — the pref they depend on is set in
+=prefs.js= independently and Firefox reverts to stock chrome. Dropping the
+whole section from =config.org= then retangling removes the source of truth,
+though the tangled files are not deleted by that and must be removed by hand.
+
+** Revisit condition
+- A Firefox upgrade breaks the combined bar or the icon tabs. The fix is a diff
+  against upstream's =oneline_toolbar.css= or =icon_only_tabs.css=, which is the
+  reason both are carried verbatim.
+- =doom-theme= stops being =doom-zenburn=. The =--zb-*= block is then wrong in
+  the same way =FZF_DEFAULT_OPTS= is wrong, and both want changing together.
+- Firefox ships native support for whatever the shelf is being used for, as it
+  did for vertical tabs. Native wins; delete the CSS.
+- The profile layout changes again — a fourth packaging flavour, or Mozilla
+  reworking =profiles.ini=. Both land in =candidate_roots= and
+  =resolve_profile=, which is why they are two small functions.
+- Something wanted genuinely cannot be expressed in CSS. That, and only that, is
+  when =fx-autoconfig= gets reconsidered.

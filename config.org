@@ -356,6 +356,12 @@ re-ask later.
 (setq doom-font (font-spec :family "JetBrains Mono" :size 13)
       doom-variable-pitch-font (font-spec :family "JetBrains Mono" :size 13))
 
+;; Smooth, sub-line scrolling. Global rather than a `nov-mode' hook because
+;; `pixel-scroll-precision-mode' has no buffer-local form -- it is one global
+;; minor mode or nothing. Prose is what makes the difference visible; code
+;; buffers are unharmed by it.
+(pixel-scroll-precision-mode 1)
+
 ;; Transparency: native Emacs 29+ alpha-background compositing -- no external
 ;; compositor needed (confirmed: this build is Cairo-enabled). Unfocused
 ;; frames fade further so the active window visually pops.
@@ -1075,18 +1081,268 @@ Errors for any account not listed in `+mu4e-spam-accounts'."
 
 ** EPUB reading: nov.el
 #+begin_src emacs-lisp
-;; --- EPUB reading (docs/decisions.org ADR-034) -----------------------------
-;; nov.el renders EPUB through `shr'. Nothing else is configured here on
-;; purpose: Evil bindings come from evil-collection (`:editor evil
-;; +everywhere' is on, and it ships a `nov' module), the reading position
-;; comes from Doom's global `save-place-mode', and browsing a library of
-;; files is what Dired/dirvish (`SPC o /', `SPC o s') already does.
+;; --- EPUB reading (docs/decisions.org ADR-034, ADR-040, ADR-041) -----------
+;; nov.el renders EPUB through `shr'. Evil bindings come from evil-collection
+;; (`:editor evil +everywhere' is on, and it ships a `nov' module), the
+;; reading position comes from Doom's global `save-place-mode', and browsing a
+;; library of files is what Dired/dirvish (`SPC o /', `SPC o s') already does.
+;;
+;; What *is* configured here is book typography (ADR-040) plus the reading
+;; affordances of ADR-041. ADR-034 assumed `perfect-margin' set nov's text
+;; column; it does not -- `nov-mode' ships in `perfect-margin-ignore-modes' by
+;; default, so the column had no owner and `nov-text-width' t left paragraphs
+;; unwrapped across the whole frame.
 (use-package! nov
   :mode ("\\.epub\\'" . nov-mode)
   :config
-  ;; `perfect-margin' already owns the text column; nov's own hard fill
-  ;; would wrap a second time inside those margins.
-  (setq nov-text-width t))
+  ;; No hard fill: `visual-fill-column' wraps and centres instead, so the
+  ;; column reflows on a window resize rather than baking newlines into the
+  ;; buffer.
+  (setq nov-text-width t)
+
+;;; Typography
+
+  (defcustom +nov-serif-fonts '("Literata" "Charis SIL" "Noto Serif")
+    "Body faces for `nov-mode', best first; the first installed one wins.
+Literata was drawn for Google Play Books. Charis SIL is Bitstream Charter
+redrawn with real OpenType data -- the plain \"Bitstream Charter\" installed
+here is a Type1 from `texlive-fonts-recommended' that `font-info' reports as
+`(opentype nil)', i.e. no kerning, which is why it is not in this list. Noto
+Serif is the always-present fallback."
+    :type '(repeat string)
+    :group 'nov)
+
+  (defcustom +nov-serif-height 1.15
+    "Scaling factor for the `nov-mode' body face."
+    :type 'number
+    :group 'nov)
+
+  (defcustom +nov-measure 66
+    "Target characters per line for `nov-mode'.
+Bringhurst's ideal for a single column; Butterick gives 45-90 as the range."
+    :type 'integer
+    :group 'nov)
+
+  (defun +nov-serif-family ()
+    "Return the first installed family in `+nov-serif-fonts'."
+    (let ((installed (font-family-list)))
+      (or (seq-find (lambda (family) (member family installed)) +nov-serif-fonts)
+          (face-attribute 'variable-pitch :family))))
+
+  (defun +nov-measure-columns (family height)
+    "Columns of the default face that hold `+nov-measure' chars of FAMILY at HEIGHT.
+`visual-fill-column-width' counts columns of the *default* (monospace) face,
+and the body face is proportional, so the two numbers differ. Measuring beats
+hardcoding: the answer moves with `doom-font', with the chosen serif, and with
+`text-scale-adjust'."
+    (let* ((alphabet "abcdefghijklmnopqrstuvwxyz")
+           (sample (substring (apply #'concat (make-list 4 alphabet))
+                              0 +nov-measure)))
+      (max 40 (round (/ (float (string-pixel-width
+                                (propertize sample 'face
+                                            (list :family family :height height))))
+                        (frame-char-width))))))
+
+  (defun +nov-typography-h ()
+    "Set book typography for the current `nov-mode' buffer."
+    (let ((family (+nov-serif-family)))
+      (setq-local visual-fill-column-width (+nov-measure-columns family +nov-serif-height)
+                  visual-fill-column-center-text t
+                  ;; Butterick: 120-145% of the point size. 1.3 is mid-range.
+                  line-spacing 0.3
+                  ;; A full-width cover plate pushes the first page off screen;
+                  ;; nov honours this in `nov-insert-image'.
+                  shr-max-image-proportion 0.6)
+      ;; A text face rather than the UI font -- `doom-variable-pitch-font' is
+      ;; JetBrains Mono here, i.e. monospace (ADR-022), so `nov-variable-pitch'
+      ;; was switching from one monospace face to the same one. `shr-text'
+      ;; inherits `variable-pitch', so remapping the one covers body text.
+      (face-remap-add-relative 'variable-pitch :family family :height +nov-serif-height)
+      ;; Headings do *not* inherit `variable-pitch': shrface's faces inherit
+      ;; `org-level-N', which inherit `outline-N', which leave the family
+      ;; unspecified and so fall back to the monospace default. Give them the
+      ;; body face and a classic display scale.
+      (cl-loop for (face . scale) in '((shrface-h1-face . 1.6)
+                                       (shrface-h2-face . 1.4)
+                                       (shrface-h3-face . 1.25)
+                                       (shrface-h4-face . 1.15)
+                                       (shrface-h5-face . 1.05)
+                                       (shrface-h6-face . 1.0)
+                                       (shr-h1 . 1.6) (shr-h2 . 1.4)
+                                       (shr-h3 . 1.25) (shr-h4 . 1.15)
+                                       (shr-h5 . 1.05) (shr-h6 . 1.0))
+               when (facep face)
+               do (face-remap-add-relative face :family family
+                                           :height (* +nov-serif-height scale)))
+      ;; Doom's `global-hl-line-modes' includes `special-mode', which nov-mode
+      ;; derives from -- a highlight band across a page of prose.
+      (hl-line-mode -1)))
+
+;;; Reading progress in the header line
+
+  (defun +nov-progress ()
+    "Chapter and position readout for the `nov-mode' header line."
+    (format "  %d/%d  %d%%"
+            (1+ nov-documents-index)
+            (length nov-documents)
+            (/ (* 100 (point)) (max 1 (point-max)))))
+
+  (defun +nov-header-line-progress-h ()
+    "Append `+nov-progress' to the header line nov just built.
+`nov-render-title' escapes % in `nov-header-line-format', so a progress spec
+cannot go in that string; it has to be appended after the render. The
+string test is what keeps this from nesting on every chapter."
+    (when (stringp header-line-format)
+      (setq header-line-format (list header-line-format
+                                     '(:eval (+nov-progress))))))
+
+  (add-hook 'nov-post-html-render-hook #'+nov-header-line-progress-h)
+
+;;; Table of contents in a side window
+
+  (defun +nov--toc-entries ()
+    "Return ((LABEL . INDEX) ...) for the current book's table of contents.
+Indices are resolved here, against the TOC document's own directory, because
+`nov-visit-relative-file' resolves against whichever chapter is on screen."
+    (let* ((toc-index (nov-find-document (lambda (doc) (eq (car doc) nov-toc-id))))
+           (toc-path (and toc-index (cdr (aref nov-documents toc-index))))
+           (directory (and toc-path (file-name-directory toc-path)))
+           (html (cond ((null toc-path) nil)
+                       ((version< nov-epub-version "3.0") (nov-ncx-to-html toc-path))
+                       (t (nov-slurp toc-path))))
+           (dom (and html (with-temp-buffer
+                            (insert html)
+                            (libxml-parse-html-region (point-min) (point-max))))))
+      (delq nil
+            (mapcar
+             (lambda (anchor)
+               (let* ((href (dom-attr anchor 'href))
+                      (label (string-trim (dom-texts anchor)))
+                      (file (and href (car (split-string href "#"))))
+                      (path (and file (not (string-empty-p file))
+                                 (file-truename (nov-make-path directory file))))
+                      (index (and path (nov-find-document
+                                        (lambda (doc)
+                                          (equal path (file-truename (cdr doc))))))))
+                 (when (and index (not (string-empty-p label)))
+                   (cons label index))))
+             (dom-by-tag dom 'a)))))
+
+  (defun +nov/toc-sidebar ()
+    "Show this book's table of contents in a side window.
+Unlike `nov-goto-toc' (`t'), which renders the TOC over the book in the same
+buffer, this leaves the page where it is and jumps from the side window."
+    (interactive)
+    (let* ((source (current-buffer))
+           (entries (+nov--toc-entries))
+           (buffer (get-buffer-create (format "*nov TOC: %s*" (buffer-name source)))))
+      (unless entries (user-error "Couldn't parse a table of contents"))
+      (with-current-buffer buffer
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (dolist (entry entries)
+            (insert-text-button
+             (car entry)
+             'action (let ((index (cdr entry)))
+                       (lambda (_button)
+                         (let ((window (get-buffer-window source)))
+                           (with-selected-window (or window (selected-window))
+                             (switch-to-buffer source)
+                             (nov-goto-document index)))))
+             'follow-link t)
+            (insert "\n"))
+          (goto-char (point-min)))
+        (special-mode)
+        (setq-local cursor-type 'box))
+      (select-window
+       (display-buffer-in-side-window buffer '((side . left) (window-width . 0.22))))))
+  ;; ponytail: chapter granularity only -- a TOC entry pointing at an anchor
+  ;; inside a chapter lands at the chapter's top. Resolve `shr-target-id' the
+  ;; way `nov-visit-relative-file' does if that starts mattering.
+
+;;; Knuth-Plass justification (opt-in)
+
+  (defvar-local +nov-justify nil
+    "Non-nil to justify this buffer's text with `justify-kp'.")
+
+  (defun +nov-justify-h ()
+    "Justify the rendered page when `+nov-justify' is on.
+Adapted from nov.el's README. Justification without hyphenation rivers, which
+is why this is per-buffer and off by default."
+    (when (and +nov-justify (get-buffer-window))
+      (require 'justify-kp)
+      (let ((max-width (pj-line-width))
+            buffer-read-only)
+        (save-excursion
+          (goto-char (point-min))
+          (while (not (eobp))
+            (unless (looking-at "^[[:space:]]*$")
+              (goto-char (line-end-position))
+              (when (> (shr-pixel-column) max-width)
+                (goto-char (line-beginning-position))
+                (pj-justify)))
+            (forward-line 1))))))
+
+  (add-hook 'nov-post-html-render-hook #'+nov-justify-h)
+
+  (defun +nov/toggle-justification ()
+    "Toggle Knuth-Plass justification in this book.
+A re-render is required either way: justification inserts real line breaks,
+so turning it off means throwing the page away and building it again."
+    (interactive)
+    (setq +nov-justify (not +nov-justify))
+    (nov-render-document)
+    (message "Justification %s" (if +nov-justify "on" "off")))
+
+  (add-hook! 'nov-mode-hook
+             #'visual-line-mode
+             #'visual-fill-column-mode
+             #'+nov-typography-h)
+
+  (map! :map nov-mode-map
+        :n "T" #'+nov/toc-sidebar
+        :n "J" #'+nov/toggle-justification))
+
+;; Org-style headings, outline folding and imenu over `shr' buffers -- nov
+;; here, and eww/mu4e for free. `shrface-mode' calls `shrface-basic' and
+;; `shrface-trial' itself, so neither is called here.
+(use-package! shrface
+  :hook (nov-mode . shrface-mode)
+  :config
+  (setq shrface-href-versatile t
+        ;; Non-nil would disable outline-minor-mode and imenu along with the
+        ;; bullets -- i.e. everything this package is here for.
+        shrface-toggle-bullets nil)
+  (defun +nov-restore-svg-renderer-h ()
+    "Put nov's SVG handler back after `shrface-basic' overwrites it.
+`shrface-basic' rebuilds `nov-shr-rendering-functions' from img and title
+only, which silently drops `nov-render-svg' and with it every SVG image in an
+EPUB."
+    (when (boundp 'nov-shr-rendering-functions)
+      (add-to-list 'nov-shr-rendering-functions '(svg . nov-render-svg))))
+  (add-hook 'shrface-mode-hook #'+nov-restore-svg-renderer-h)
+
+  (defun +nov-shrface-imenu-h ()
+    "Give imenu back to shrface after `nov-imenu-setup' claims it.
+nov's own index is the book's TOC, which `+nov/toc-sidebar' (`T') and
+`nov-goto-toc' (`t') already cover twice over; shrface's is the headline tree
+*inside* the chapter, which nothing else provides."
+    (when (bound-and-true-p shrface-mode)
+      (setq imenu-create-index-function #'shrface-imenu-get-tree)))
+  ;; Appended: `nov-imenu-setup' is on `nov-mode-hook' from nov.el's own
+  ;; top level, so it runs after anything added here and would win otherwise.
+  (add-hook 'nov-mode-hook #'+nov-shrface-imenu-h 'append))
+
+;; Calibre library browser. Needs the `calibredb' CLI (ships with calibre);
+;; without it the commands load but every query fails.
+(use-package! calibredb
+  :commands (calibredb calibredb-find-file calibredb-consult-read)
+  :config
+  (setq calibredb-root-dir "~/Calibre Library"
+        calibredb-db (expand-file-name "metadata.db" calibredb-root-dir)
+        calibredb-library-alist '(("~/Calibre Library"))))
+
+(map! :leader :desc "Ebook library (calibredb)" "o E" #'calibredb)
 #+end_src
 
 ** App launcher
@@ -2224,6 +2480,17 @@ lives in =docs/decisions.org=, and the verified state in =docs/inventory.org=.
 ;; EPUB reading (docs/decisions.org ADR-034): Doom ships no ebook module, and
 ;; nov.el is the only maintained Emacs EPUB renderer.
 (package! nov)
+;; Already in the tree as a `writeroom-mode' (`:ui zen') dependency; declared
+;; so nov's text column doesn't rest on another package's dependency list.
+(package! visual-fill-column)
+;; Org-style headings, outline folding and imenu over any `shr' buffer -- nov,
+;; eww, mu4e. See docs/decisions.org ADR-041.
+(package! shrface)
+;; Knuth-Plass justification for nov. Off by default: no hyphenation dictionary
+;; is in play, so justified text rivers. `+nov/toggle-justification' turns it on.
+(package! justify-kp :recipe (:host github :repo "Fuco1/justify-kp"))
+;; Calibre library browser. Needs the `calibredb' CLI, which ships with calibre.
+(package! calibredb)
 
 ;; elfeed-tube's mpv half. `:app rss +youtube' declares elfeed-tube only, but
 ;; its config.el binds `C-c C-f' and `C-c C-w' to `elfeed-tube-mpv-follow-mode'
@@ -2852,6 +3119,188 @@ echo "  gpg --decrypt $out | tar -C \"\$restore_dir\" -xf -"
 echo "  gpg --import \"\$restore_dir/secret-key.asc\" && cp -a \"\$restore_dir/password-store\" ~/.password-store"
 #+end_src
 
+** ~/.local/bin/emacs-rebuild
+Builds and installs Emacs from source, with the feature flags this
+configuration actually needs. See [[id:adr-emacs-rebuild-flags][ADR-042]] for
+the flag audit -- why =--with-xwidgets= and =--with-imagemagick= are in and
+everything else was rejected.
+
+This exists because the previous build's procedure lived in
+=~/src/emacs-build/*.sh=, outside any repository. That is the same shape as the
+=~/.bashrc= layer that silently reverted twice, and the reason
+[[id:adr-literate-config][ADR-035]] exists. Tangled from here, the laptop gets
+the procedure from a =git pull= rather than from someone reconstructing it.
+
+The script is host-agnostic on purpose: it derives =libgccjit= from the
+installed GCC major, probes for WebKitGTK 4.1 before falling back to 4.0, and
+treats ImageMagick as optional. It refuses to run as root, verifies the
+tarball's signature before building, and copies the existing binary aside
+before =make install= -- on this machine =/usr/local/bin/emacs-31.1= is the
+*only* Emacs, so a failed install with no backup means no editor.
+
+#+begin_src sh :tangle ~/.local/bin/emacs-rebuild :shebang "#!/usr/bin/env bash" :tangle-mode (identity #o700)
+# Generated from ~/.config/doom/config.org -- edit there, not here.
+# Any change made directly to this file is lost on the next tangle.
+# See docs/decisions.org ADR-035 (why this is tangled) and ADR-042 (the flags).
+
+set -euo pipefail
+
+VERSION="${EMACS_VERSION:-31.1}"
+ROOT="${EMACS_BUILD_ROOT:-$HOME/src/emacs-build}"
+SRC="$ROOT/emacs-$VERSION"
+DOOM="$HOME/.config/emacs/bin/doom"
+JOBS="${JOBS:-$(nproc)}"
+IMAGEMAGICK_PREFIX="${IMAGEMAGICK_PREFIX:-/opt/imagemagick7}"
+
+# Emacs 31.x tarballs are signed by Sean Whitton, the release manager. A
+# different major release will have a different signer -- when that happens the
+# fix is to check the new fingerprint against the announcement on
+# info-gnu-emacs and update this line, NOT to skip verification.
+SIGNING_KEY="9B917007AE030E36E4FC248B695B7AE4BF066240"
+
+die() { echo "emacs-rebuild: $*" >&2; exit 1; }
+say() { printf '\n==> %s\n' "$*"; }
+
+if [ "$(id -u)" -eq 0 ]; then
+    die "run as your own user, not with sudo -- Doom must rebuild as you, or it
+writes root-owned files into ~/.config/emacs"
+fi
+
+# --- source ----------------------------------------------------------------
+mkdir -p "$ROOT"
+cd "$ROOT"
+tarball="emacs-$VERSION.tar.xz"
+
+if [ ! -d "$SRC" ]; then
+    if [ ! -f "$tarball" ]; then
+        say "Downloading Emacs $VERSION"
+        curl -fsSL -O "https://ftp.gnu.org/gnu/emacs/$tarball"
+        curl -fsSL -O "https://ftp.gnu.org/gnu/emacs/$tarball.sig"
+    fi
+
+    say "Verifying the signature"
+    if ! gpg --list-keys "$SIGNING_KEY" >/dev/null 2>&1; then
+        echo "The release signing key is not in your keyring. Fetch it with:"
+        echo "  gpg --locate-external-key spwhitton@spwhitton.name"
+        echo "and confirm the fingerprint is $SIGNING_KEY before re-running."
+        die "refusing to build an unverified tarball"
+    fi
+    gpg --verify "$tarball.sig" "$tarball" \
+        || die "signature check FAILED -- do not build this tarball"
+
+    say "Extracting"
+    tar xf "$tarball"
+fi
+[ -d "$SRC" ] || die "no source tree at $SRC"
+
+# --- build dependencies ----------------------------------------------------
+# Pinned to whatever GCC is actually installed: libgccjit is versioned in
+# lockstep with GCC, so a hardcoded major breaks on a different release.
+gcc_major="$(gcc -dumpversion | cut -d. -f1)"
+
+# WebKitGTK is 4.1 on anything current; 4.0 is the older ABI. configure probes
+# in the same order (configure.ac:4459-4465), so match it here.
+if apt-cache show libwebkit2gtk-4.1-dev >/dev/null 2>&1; then
+    webkit_dev=libwebkit2gtk-4.1-dev
+elif apt-cache show libwebkit2gtk-4.0-dev >/dev/null 2>&1; then
+    webkit_dev=libwebkit2gtk-4.0-dev
+else
+    die "no libwebkit2gtk dev package available -- xwidgets cannot be built here"
+fi
+
+say "Installing build dependencies (sudo prompt follows)"
+sudo apt-get update
+sudo apt-get install -y \
+    texinfo libgtk-3-dev libgnutls28-dev libtiff-dev libgif-dev \
+    libjpeg-dev libxpm-dev libjansson-dev "libgccjit-$gcc_major-dev" \
+    libtree-sitter-dev libwebp-dev libxml2-dev libacl1-dev \
+    librsvg2-dev libharfbuzz-dev libdbus-1-dev libgpm-dev \
+    liblcms2-dev libsystemd-dev "$webkit_dev"
+
+# --- optional ImageMagick 7 ------------------------------------------------
+# Emacs 31 requires MagickWand >= 7 (configure.ac:3710) and Ubuntu 24.04 ships
+# only 6.9, so IM7 is a separate source build living outside the distro tree.
+# Absent, the build simply goes ahead without it.
+magick_flag="--without-imagemagick"
+if [ -d "$IMAGEMAGICK_PREFIX/lib/pkgconfig" ]; then
+    export PKG_CONFIG_PATH="$IMAGEMAGICK_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+    if pkg-config --atleast-version=7 MagickWand 2>/dev/null; then
+        magick_flag="--with-imagemagick"
+        say "ImageMagick $(pkg-config --modversion MagickWand) found at $IMAGEMAGICK_PREFIX"
+    fi
+fi
+if [ "$magick_flag" = "--without-imagemagick" ]; then
+    say "No MagickWand >= 7 -- building without ImageMagick"
+fi
+
+# --- configure and build ---------------------------------------------------
+cd "$SRC"
+
+# distclean first: this script exists to *change* configure flags, and a tree
+# carrying objects from the previous flag set is the classic way to get a
+# binary that does not match its own configure line.
+say "Cleaning the tree"
+make distclean >/dev/null 2>&1 || true
+
+say "Configuring"
+./configure \
+    --prefix=/usr/local \
+    --with-native-compilation=aot \
+    --with-tree-sitter \
+    --with-x-toolkit=gtk3 \
+    --with-cairo \
+    --with-mailutils \
+    --with-xwidgets \
+    "$magick_flag"
+
+say "Building with -j$JOBS (native-compiling all of Emacs's own Lisp -- long)"
+make -j"$JOBS"
+
+# --- install ---------------------------------------------------------------
+installed="/usr/local/bin/emacs-$VERSION"
+if [ -f "$installed" ]; then
+    say "Backing up the current binary to $installed.bak"
+    # The lisp under /usr/local/share is reinstalled byte-identical from the
+    # same source version, so the C binary is the entire rollback.
+    sudo cp -a "$installed" "$installed.bak"
+fi
+
+say "Installing to /usr/local (sudo prompt follows)"
+sudo make install
+hash -r
+
+# --- verify ----------------------------------------------------------------
+say "Verifying the feature set"
+features="$(emacs --batch --eval '(princ system-configuration-features)')"
+echo "$features" | tr ' ' '\n' | sed 's/^/    /'
+
+echo "$features" | grep -qw XWIDGETS \
+    || die "XWIDGETS missing from the new build -- check config.log in $SRC"
+if [ "$magick_flag" = "--with-imagemagick" ]; then
+    echo "$features" | grep -qw IMAGEMAGICK \
+        || die "IMAGEMAGICK requested but missing -- check config.log in $SRC"
+fi
+emacs --version | head -1
+
+# --- Doom ------------------------------------------------------------------
+# Changing configure flags changes the native-compilation build hash, and the
+# eln cache is keyed on it (~/.config/emacs/.local/cache/eln/<version>-<hash>).
+# Every .eln is therefore stale, which is why this is a --rebuild and not a
+# plain sync.
+say "Rebuilding Doom's packages against the new binary"
+"$DOOM" --force sync --rebuild
+"$DOOM" doctor || true
+
+cat <<EOF
+
+Done. Restart any running Emacs -- a daemon started before the install is
+still the old binary.
+
+Rollback:
+  sudo mv $installed.bak $installed && hash -r
+EOF
+#+end_src
+
 ** ~/.inputrc
 Readline configuration. Emacs runs Evil, so the shell matches it.
 
@@ -2903,3 +3352,701 @@ set bell-style none
 [merge]
 	conflictstyle = zdiff3
 #+end_src
+
+* Firefox layer
+:PROPERTIES:
+:ID:       literate-firefox-layer
+:END:
+
+The third thing this file owns, after Emacs and the shell. Firefox's UI
+customisation lives in three files inside a *profile directory* whose path is
+different on every machine, and the profile directory is not a place you can
+safely put a git checkout. So this layer tangles the three files to a stable,
+version-controlled path and ships a small installer that finds the profile and
+copies them in. See [[id:adr-firefox-chrome-layer][ADR-043]] for why it copies
+rather than symlinks, and for the menu of tweaks that were considered and left
+out.
+
+What the three files actually do: one combined toolbar carrying favicon-only
+tabs to the right of the address bar, painted in the same zenburn palette as
+Emacs and the terminal.
+
+** Why the paths are the hard part
+
+There is no single Firefox profile path. On this machine there are two profile
+*roots* and, inside them, two profiles -- and the obvious way of picking one
+picks the wrong one:
+
+| Flavour | Profile root                                        |
+|---------+-----------------------------------------------------|
+| snap    | =~/snap/firefox/common/.mozilla/firefox=            |
+| flatpak | =~/.var/app/org.mozilla.firefox/.mozilla/firefox=   |
+| native  | =~/.mozilla/firefox=                                |
+
+Within a root, =profiles.ini= has an =[InstallXXXX]= section whose =Default== names
+the profile the installed Firefox actually opens, *and* one or more
+=[ProfileN]= sections of which one carries the legacy =Default=1=. On this
+machine those disagree: =~/.mozilla/firefox/profiles.ini= marks
+=pdc35998.default= (abandoned in 2021) as =Default=1=, while the install
+section names =s5v1taq3.default-release=. A resolver that reads =Default=1=
+installs your CSS into a profile nothing opens, and the symptom is silence --
+Firefox starts, looks unchanged, and nothing is wrong anywhere you would think
+to look.
+
+=firefox-chrome-install= therefore prefers the =[Install...]= section and only
+falls back to =Default=1=, and it *prints every path it resolved on every run*,
+so "which profile is this actually going to" is never a question you have to
+answer by hand.
+
+To confirm independently: =about:support= in a running Firefox, the "Profile
+Folder" row.
+
+** firefox/user.js
+
+The prefs the CSS layer cannot work without. Firefox has ignored
+=userChrome.css= at startup since version 69 unless
+=toolkit.legacyUserProfileCustomizations.stylesheets= is true, and the
+=userchrome.*= prefs below are read by =@media -moz-pref()= inside the
+stylesheets themselves -- they are switches for the CSS, not Firefox settings.
+
+=user.js= is applied to =prefs.js= on every startup, which is exactly the
+property wanted here -- a pref set this way survives a profile reset and cannot
+drift. It is also why this file stays *minimal*: anything listed here becomes
+un-changeable from Firefox's own UI, because the next restart puts it back.
+Taste-level prefs belong in the UI, not here. In particular
+=browser.uiCustomization.state= is deliberately absent: pinning it would make
+the Customize window permanently ineffective.
+
+#+begin_src js :tangle firefox/user.js :mkdirp yes
+// Generated from ~/.config/doom/config.org -- edit there, not here.
+// Any change made directly to this file is lost on the next tangle.
+// Installed into the active Firefox profile by ~/.local/bin/firefox-chrome-install.
+// See docs/decisions.org ADR-043.
+
+// Required since Firefox 69: without this, chrome/userChrome.css and
+// chrome/userContent.css are never loaded.
+user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+
+// Read by @media -moz-pref() in userChrome.css, not by Firefox itself.
+// Puts the tab strip to the right of the address bar on the combined bar.
+user_pref("userchrome.navbar-tabs-oneliner.tabs-on-right.enabled", true);
+
+// Nothing else. A pref set here cannot be changed from Firefox's own settings
+// UI in any lasting way -- the next startup overwrites it. Add a line only for
+// something that must be true on every machine, every time.
+#+end_src
+
+** firefox/userChrome.css
+
+Styles the browser *interface*. Two things are enabled: tabs and the main
+toolbar share a single row with the tabs reduced to favicons and sitting to the
+right of the address bar, and the whole chrome is repainted in zenburn to match
+Emacs and the terminal.
+
+That single row carries the buttons worth having on it. Nothing here places
+them -- they are already where Firefox's own Customize mode put them, and
+merging the two toolbars simply brings both sets onto one line:
+=downloads-button=, =unified-extensions-button= and the hamburger
+(=PanelUI-menu-button=, which is fixed markup at the end of =#nav-bar= and
+cannot be moved anyway) come from the nav-bar side; =logins-button= --
+passwords -- along with the new-tab and all-tabs buttons come from the tabs
+side. Moving any of them is drag-and-drop in Customize.
+
+This replaces the bottom-toolbar customisation this configuration had run since
+2021. The two are mutually exclusive, and not by taste:
+=navbar_below_content.css= works by taking =#nav-bar= out of flow with
+=position: fixed=, while =oneline_toolbar.css= works by making
+=#navigator-toolbox= a two-column grid and placing both toolbars in one row of
+it. A fixed-position grid item is not in the grid. Keeping the combined bar at
+the *bottom* was possible, but only by hand-writing the composition -- turning
+=#main-window > body= into a two-column grid and placing the toolbars in its
+last row -- which is a custom style with no upstream to diff against when
+Firefox next moves its markup. The top position is two upstream files, verbatim.
+
+Both are carried verbatim for that reason, with local changes appended after
+them rather than edited in, which is the pattern upstream itself recommends.
+Upstream files are MPL-2.0; their source notices are kept as that licence
+requires.
+
+Requires Firefox 133+ for =@media -moz-pref()=; this profile is on 154. Both
+upstream files no-op under =sidebar.verticalTabs=, which is off here -- this
+profile uses the revamped sidebar (=sidebar.revamp=true=) with horizontal tabs.
+
+#+begin_src css :tangle firefox/userChrome.css :mkdirp yes
+/* Generated from ~/.config/doom/config.org -- edit there, not here.
+   Any change made directly to this file is lost on the next tangle.
+   Installed into the active Firefox profile by ~/.local/bin/firefox-chrome-install.
+   See docs/decisions.org ADR-043. */
+
+/* ======================================================================== *
+ * 1. Tabs and main toolbar on one row. Upstream, verbatim.
+ *    Side is chosen by userchrome.navbar-tabs-oneliner.tabs-on-right.enabled,
+ *    which firefox/user.js sets to true.
+ * ======================================================================== */
+
+/* Source file https://github.com/MrOtherGuy/firefox-csshacks/tree/master/chrome/oneline_toolbar.css made available under Mozilla Public License v. 2.0
+See the above repository for updates as well as full license text. */
+
+/**
+ * Shows tabs and main toolbar side-by-side.
+ * By default, tabs are on left side, you can change that by setting pref
+ * "userchrome.navbar-tabs-oneliner.tabs-on-right.enabled" to true
+ * Requires Fx 133+
+ */
+
+:root{
+  --uc-oneline-toolbar-split: 6fr 4fr /* Meaning, left side takes 60%, right side 40% */
+}
+
+@media -moz-pref("userchrome.force-window-controls-on-left.enabled"){
+  .titlebar-buttonbox-container{
+    order: -1 !important;
+    > .titlebar-buttonbox{
+      flex-direction: row-reverse;
+    }
+  }
+}
+@media not -moz-pref("sidebar.verticalTabs"){
+  :root:not([chromehidden~="toolbar"]) #navigator-toolbox{
+    display: grid;
+    grid-template-columns: 6fr 4fr;
+  }
+  #toolbar-menubar,
+  #PersonalToolbar,
+  .global-notificationbox,
+  #notifications-toolbar,
+  #tab-notification-deck{
+    grid-column: 1/3;
+  }
+  :root[sizemode="fullscreen"] #toolbar-menubar{
+    min-height: 0 !important;
+  }
+  #nav-bar{
+    border-top: none !important;
+  }
+  #TabsToolbar, #nav-bar{
+    grid-row: 2/3;
+  }
+  /* Rules to show them conditionally are further down */
+  #main-window#main-window[sizemode="fullscreen"] .titlebar-spacer,
+  #nav-bar > :is(.titlebar-buttonbox-container,.titlebar-spacer),
+  #TabsToolbar > :is(.titlebar-buttonbox-container,.titlebar-spacer){
+    display: none !important;
+  }
+  @media -moz-pref("userchrome.navbar-tabs-oneliner.tabs-on-right.enabled"){
+    #nav-bar, #toolbar-menubar{ order: -1; }
+  }
+  /* Tabs on right */
+  @media -moz-pref("userchrome.navbar-tabs-oneliner.tabs-on-right.enabled"){
+    /* CASE 1 of 4 */
+    @media -moz-pref("userchrome.force-window-controls-on-left.enabled"),
+      (-moz-gtk-csd-reversed-placement),
+      (-moz-platform: macos){
+        :root[sizemode="fullscreen"] #nav-bar > .titlebar-buttonbox-container{
+          display: flex !important;
+        }
+        :root[customtitlebar] :where(#toolbar-menubar:is([autohide=""],[autohide="true"])){
+          + #TabsToolbar{
+            :root[sizemode="normal"] & {
+              > .titlebar-spacer[type="post-tabs"]{
+                display: flex !important;
+              }
+            }
+          }
+          ~ #nav-bar > :is(.titlebar-buttonbox-container,.titlebar-spacer[type="pre-tabs"]){
+            display: flex !important;
+          }
+        }
+    }
+    /* CASE 2 of 4 */
+    @media not (-moz-pref("userchrome.force-window-controls-on-left.enabled")
+      or (-moz-gtk-csd-reversed-placement)
+      or (-moz-platform: macos)){
+        :root[sizemode="fullscreen"] #TabsToolbar > .titlebar-buttonbox-container{
+          display: flex !important;
+        }
+        :root[customtitlebar] :where(#toolbar-menubar:is([autohide=""],[autohide="true"])){
+          + #TabsToolbar > :is(.titlebar-buttonbox-container,.titlebar-spacer[type="post-tabs"]){
+            display: flex !important;
+          }
+          :root[sizemode="normal"] & {
+            ~ #nav-bar > .titlebar-spacer[type="pre-tabs"]{
+              display: flex !important;
+            }
+          }
+        }
+    }
+  }
+  /* Tabs on left */
+  @media not -moz-pref("userchrome.navbar-tabs-oneliner.tabs-on-right.enabled"){
+    /* CASE 3 of 4 */
+    @media -moz-pref("userchrome.force-window-controls-on-left.enabled"),
+      (-moz-gtk-csd-reversed-placement),
+      (-moz-platform: macos){
+        :root[sizemode="fullscreen"] #TabsToolbar > .titlebar-buttonbox-container{
+          display: flex !important;
+        }
+        :root[customtitlebar] :where(#toolbar-menubar:is([autohide=""],[autohide="true"])){
+          + #TabsToolbar > :is(.titlebar-buttonbox-container,.titlebar-spacer[type="pre-tabs"]){
+            display: flex !important;
+          }
+          :root[sizemode="normal"] & {
+            ~ #nav-bar > .titlebar-spacer[type="post-tabs"]{
+              display: flex !important;
+            }
+          }
+        }
+    }
+    /* CASE 4 of 4 */
+    @media not (-moz-pref("userchrome.force-window-controls-on-left.enabled")
+      or (-moz-gtk-csd-reversed-placement)
+      or (-moz-platform: macos)){
+        :root[sizemode="fullscreen"] #nav-bar > .titlebar-buttonbox-container{
+          display: flex !important;
+        }
+        :root[customtitlebar] :where(#toolbar-menubar:is([autohide=""],[autohide="true"])){
+          :root[sizemode="normal"] & {
+            + #TabsToolbar > .titlebar-spacer[type="pre-tabs"]{
+              display: flex !important;
+            }
+          }
+          ~ #nav-bar > :is(.titlebar-buttonbox-container,.titlebar-spacer[type="post-tabs"]){
+            display: flex !important;
+          }
+        }
+    }
+  }
+}
+/* ======================================================================== *
+ * 2. Tabs show a favicon and nothing else. Upstream, verbatim.
+ * ======================================================================== */
+
+/* Source file https://github.com/MrOtherGuy/firefox-csshacks/tree/master/chrome/icon_only_tabs.css made available under Mozilla Public License v. 2.0
+See the above repository for updates as well as full license text. */
+
+@media not -moz-pref("sidebar.verticalTabs"){
+  .tab-content > :not(.tab-icon-stack){
+    display: none;
+  }
+  .tab-icon-image:not([src]){
+    display: block !important;
+  }
+  .tab-icon-stack > *{ margin-inline: 0 !important; }
+  .tabbrowser-tab{
+    flex-grow: 0 !important;
+  }
+
+  .tabbrowser-tab[fadein]{
+    min-width: calc(16px + 2 * 10px + 4px) !important;
+    :root[uidensity="compact"] & {
+      min-width: calc(16px + 2 * var(--tab-inline-padding,0px) + 4px) !important;
+    }
+    [collapsed] > &:not([selected]){
+      min-width: 0 !important;
+    }
+  }
+  :root:not([uidensity="compact"]) .tab-content{ padding-inline: 10px !important; }
+
+  .tab-audio-button{
+    --button-size-icon-small: 16px !important;
+    --button-min-height-small: var(--button-size-icon-small) !important;
+    --button-background-color-ghost: var(--toolbox-background-color-inactive,var(--toolbox-bgcolor-inactive));
+    --button-border-radius: var(--border-radius-circle) !important;
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin-inline: 0 !important;
+  }
+}
+/* ======================================================================== *
+ * 3. Layout adjustments. Appended rather than edited into the two blocks
+ *    above, so refreshing either of them stays a diff.
+ * ======================================================================== */
+
+@media not -moz-pref("sidebar.verticalTabs"){
+
+  /* Upstream declares --uc-oneline-toolbar-split and then hardcodes 6fr 4fr in
+     the grid without using it. Wire the variable up, so the split is one edit.
+     With tabs on the right, `order: -1` on #nav-bar puts it in column 1 --
+     grid auto-placement follows order-modified document order -- so the first
+     value is the navigation side and the second is the tabs side.
+
+     7fr 3fr rather than upstream's 6fr 4fr because these tabs are favicons:
+     ~40px each, so 30% of a 1920px window still holds about fourteen of them,
+     and the address bar keeps the rest. */
+  :root{ --uc-oneline-toolbar-split: 7fr 3fr; }
+
+  :root:not([chromehidden~="toolbar"]) #navigator-toolbox{
+    grid-template-columns: var(--uc-oneline-toolbar-split);
+  }
+
+  /* Keep the tab strip against the right edge of its column rather than
+     letting a handful of icon tabs float in the middle of it. */
+  #TabsToolbar > .toolbar-items{ justify-content: flex-end; }
+}
+
+/* ======================================================================== *
+ * 4. Zenburn.
+ *
+ * The palette is doom-zenburn's, taken from doom-zenburn-theme.el rather than
+ * eyeballed, so Firefox, Emacs (`doom-theme') and the terminal (ghostel, and
+ * the explicit FZF_DEFAULT_OPTS hexes in the shell layer) are all the same
+ * colours. Names in the comments are zenburn's own.
+ *
+ * These are `--lwt-*' (lightweight-theme) variables, which apply only while a
+ * non-default theme is active. Firefox's built-in *Dark* theme
+ * (firefox-compact-dark@mozilla.org) is the one in use here and is enough. On
+ * "System theme - auto" some of them are ignored, which is why the system-theme
+ * fallbacks (--toolbar-bgcolor, --tab-selected-bgcolor) are set as well.
+ *
+ * Structure follows upstream's chrome/color_variable_template.css.
+ * ======================================================================== */
+
+:root{
+  /* zenburn palette, straight from doom-zenburn-theme.el. `+' is not a legal
+     character in a CSS identifier, so zenburn's bg+1 becomes --zb-bg-plus1;
+     spelling it out keeps it distinguishable from bg-1 at a glance. */
+  --zb-bg-minus1:  #2B2B2B; /* zenburn-bg-1  */
+  --zb-bg-minus05: #383838; /* zenburn-bg-05 */
+  --zb-bg:         #3F3F3F; /* zenburn-bg    */
+  --zb-bg-plus1:   #4F4F4F; /* zenburn-bg+1  */
+  --zb-bg-plus2:   #5F5F5F; /* zenburn-bg+2  */
+  --zb-bg-plus3:   #6F6F6F; /* zenburn-bg+3  */
+  --zb-fg:         #DCDCDC; /* zenburn-fg    */
+  --zb-fg-plus1:   #FFFFEF; /* zenburn-fg+1  */
+  --zb-yellow:     #F0DFAF; /* zenburn-yellow */
+  --zb-blue:       #8CD0D3; /* zenburn-blue   */
+
+  /* Popup panels: the hamburger menu, the downloads panel, extension popups */
+  --arrowpanel-background: var(--zb-bg) !important;
+  --arrowpanel-border-color: var(--zb-bg-plus2) !important;
+  --arrowpanel-color: var(--zb-fg) !important;
+  --arrowpanel-dimmed: rgba(0,0,0,0.24) !important;
+
+  /* Window and toolbar background. The toolbox sits a shade below the toolbar
+     so the combined bar reads as one surface against the window frame. */
+  --lwt-accent-color: var(--zb-bg-minus1) !important;
+  --lwt-accent-color-inactive: var(--zb-bg-minus05) !important;
+  --toolbar-bgcolor: var(--zb-bg) !important;
+
+  /* Tabs. --tab-selected-bgcolor is the system-theme path,
+     --lwt-selected-tab-background-color the lightweight-theme one. */
+  --tab-selected-bgcolor: var(--zb-bg-plus1) !important;
+  --lwt-selected-tab-background-color: var(--zb-bg-plus1) !important;
+  --lwt-text-color: var(--zb-fg) !important;
+
+  /* Toolbar buttons */
+  --toolbarbutton-icon-fill: var(--zb-fg) !important;
+  --lwt-toolbarbutton-hover-background: var(--zb-bg-plus2) !important;
+  --lwt-toolbarbutton-active-background: var(--zb-bg-plus3) !important;
+
+  /* Address bar. Focus border is zenburn blue -- the same accent the
+     mode-line uses in Emacs -- so focus is obvious without being loud. */
+  --toolbar-field-background-color: var(--zb-bg-minus05) !important;
+  --toolbar-field-focus-background-color: var(--zb-bg-plus1) !important;
+  --toolbar-field-color: var(--zb-fg) !important;
+  --toolbar-field-focus-color: var(--zb-fg-plus1) !important;
+  --toolbar-field-border-color: var(--zb-bg-plus2) !important;
+  --toolbar-field-focus-border-color: var(--zb-blue) !important;
+  --urlbar-popup-url-color: var(--zb-blue) !important;
+
+  /* Sidebar. This profile runs the revamped sidebar (sidebar.revamp), so it
+     is on screen often enough to be worth matching. */
+  --lwt-sidebar-background-color: var(--zb-bg-minus05) !important;
+  --lwt-sidebar-text-color: var(--zb-fg) !important;
+}
+
+/* Divider between the toolbars, and the fallback border around a selected tab */
+#navigator-toolbox{ --lwt-tabs-border-color: var(--zb-bg-plus2) !important; }
+
+/* The line above the active tab. Zenburn yellow: this is the one deliberately
+   bright thing in the chrome, and it marks the tab you are on. */
+#tabbrowser-tabs{ --lwt-tab-line-color: var(--zb-yellow) !important; }
+
+/* The sidebar header area reads this one rather than the --lwt- variable */
+#sidebar-box{ --sidebar-background-color: var(--zb-bg-minus05) !important; }
+#+end_src
+
+** firefox/userContent.css
+
+Styles *pages* rather than the browser frame: web content plus Firefox's own
+=about:= pages. The only enabled rule carries zenburn's background onto the
+blank pages, so opening a tab does not flash white against the dark chrome.
+Everything else is opt-in, because content styling is the half of this layer
+that can actually make a site unreadable.
+
+#+begin_src css :tangle firefox/userContent.css :mkdirp yes
+/* Generated from ~/.config/doom/config.org -- edit there, not here.
+   Any change made directly to this file is lost on the next tangle.
+   Installed into the active Firefox profile by ~/.local/bin/firefox-chrome-install.
+   See docs/decisions.org ADR-043. */
+
+@namespace url("http://www.w3.org/1999/xhtml");
+
+/* Zenburn background on the blank pages, so a new tab does not flash white.
+   #3F3F3F is zenburn-bg, the same value as `doom-theme' and the terminal.
+   Shape from content/newtab_background_color.css (MPL-2.0). */
+@-moz-document url("about:home"),url("about:blank"),url("about:newtab"),url("about:privatebrowsing"){
+  body{ background-color: #3F3F3F !important; }
+}
+@-moz-document url("about:privatebrowsing"){
+  .search-handoff-button{ background-color: rgba(255,255,255,0.06) !important; }
+  .fake-textbox{ color: #989890 !important }
+}
+
+/* ------------------------------------------------------------------------ *
+ * Opt-in shelf -- nothing below is active.
+ * ------------------------------------------------------------------------ */
+
+/* Thin zenburn scrollbars everywhere. Applied globally, including to sites
+   that set their own -- that is the trade.
+   Shape from content/css_scrollbar_width_color.css (MPL-2.0). */
+/*
+:root{ scrollbar-color: #6F6F6F #3F3F3F }
+*{ scrollbar-width: thin }
+*/
+#+end_src
+
+** ~/.local/bin/firefox-chrome-install
+
+Resolves the active Firefox profile and copies the three tangled files into it.
+
+*It copies; it does not symlink.* Under the snap -- which is what Ubuntu's
+=firefox= package installs, and what this machine runs -- Firefox is confined by
+AppArmor. Its =home= interface grants =owner @{HOME}/[^s.]** rwklix=, which
+excludes every top-level dot-directory in =$HOME=. =~/.config/doom= is one, so a
+symlink from the profile into this repository resolves to a path Firefox is not
+permitted to read, and the denial is silent: no error in the UI, the stylesheet
+simply never applies. A copy has no such problem and works identically on
+native, snap and flatpak installs, which is the whole point of this layer.
+
+The cost of copying is that the profile can drift from the repository. That is
+what =--check= is for; run it when a customisation appears not to have taken.
+
+: firefox-chrome-install            # copy the tangled files into the profile
+: firefox-chrome-install --check    # report paths and sync state, change nothing
+: firefox-chrome-install --profile /path/to/profile   # override the resolver
+: firefox-chrome-install --prune    # list files in chrome/ this layer does not own
+
+#+begin_src sh :tangle ~/.local/bin/firefox-chrome-install :shebang "#!/usr/bin/env bash" :tangle-mode (identity #o700)
+# Generated from ~/.config/doom/config.org -- edit there, not here.
+# Any change made directly to this file is lost on the next tangle.
+# See docs/decisions.org ADR-035 (why this is tangled) and ADR-043 (this layer).
+
+set -euo pipefail
+
+SRC="${FIREFOX_CHROME_SRC:-${DOOMDIR:-$HOME/.config/doom}/firefox}"
+PROFILE="${FIREFOX_PROFILE:-}"
+CHECK=0
+PRUNE=0
+
+die() { echo "firefox-chrome-install: $*" >&2; exit 1; }
+
+usage() {
+    cat <<'USAGE'
+Usage: firefox-chrome-install [--check] [--profile DIR]
+
+Copies userChrome.css, userContent.css and user.js from the doom repository
+into the active Firefox profile.
+
+  --check         report resolved paths and sync state; change nothing
+  --prune         list files in the profile's chrome/ that this layer does not
+                  own; reports only, never deletes
+  --profile DIR   use DIR as the profile instead of resolving one
+
+Environment: FIREFOX_CHROME_SRC, FIREFOX_PROFILE
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --check)   CHECK=1 ;;
+        --prune)   PRUNE=1 ;;
+        --profile) shift; PROFILE="${1:-}"; [ -n "$PROFILE" ] || die "--profile needs a directory" ;;
+        -h|--help) usage; exit 0 ;;
+        *)         usage >&2; die "unknown argument: $1" ;;
+    esac
+    shift
+done
+
+[ -d "$SRC" ] || die "no tangled source at $SRC -- run 'doom sync' to tangle config.org"
+
+# --- profile roots, in the order they should be believed -------------------
+# One per installed flavour. The native path is always a candidate because a
+# tarball or distro build leaves no package-manager trace to probe for.
+candidate_roots() {
+    if command -v snap >/dev/null 2>&1 && snap list firefox >/dev/null 2>&1; then
+        echo "$HOME/snap/firefox/common/.mozilla/firefox"
+    fi
+    if command -v flatpak >/dev/null 2>&1 && flatpak info org.mozilla.firefox >/dev/null 2>&1; then
+        echo "$HOME/.var/app/org.mozilla.firefox/.mozilla/firefox"
+    fi
+    echo "$HOME/.mozilla/firefox"
+}
+
+# Resolve one root's default profile. profiles.ini has two notions of
+# "default" and they disagree in practice: the [InstallXXXX] section names the
+# profile the *installed* Firefox opens, while a [ProfileN] section may still
+# carry a legacy Default=1 pointing at something abandoned years ago. Prefer
+# the install section; fall back to Default=1 only when there is none.
+resolve_profile() {
+    local root="$1"
+    [ -f "$root/profiles.ini" ] || return 1
+    awk -v root="$root" -F= '
+      function abs(p){ return (substr(p,1,1) == "/") ? p : root "/" p }
+      function keep(){ if(fallback == "" && def && path != "") fallback = abs(path) }
+      /^\[Install/ { keep(); sect = "install"; next }
+      /^\[/        { keep(); sect = "profile"; path = ""; rel = "1"; def = 0; next }
+      sect == "install" && $1 == "Default" { inst = $2; next }
+      $1 == "Path"       { sub(/^[^=]*=/, ""); path = $0 }
+      $1 == "IsRelative" { rel = $2 }
+      $1 == "Default"    { def = ($2 == "1") }
+      END { keep(); if(inst != "") print abs(inst); else print fallback }
+    ' "$root/profiles.ini"
+}
+
+root=""
+if [ -z "$PROFILE" ]; then
+    while IFS= read -r candidate; do
+        [ -d "$candidate" ] || continue
+        PROFILE="$(resolve_profile "$candidate" || true)"
+        if [ -n "$PROFILE" ] && [ -d "$PROFILE" ]; then root="$candidate"; break; fi
+        PROFILE=""
+    done < <(candidate_roots)
+fi
+
+[ -n "$PROFILE" ] || die "no Firefox profile found. Checked:
+$(candidate_roots | sed 's/^/  /')
+Open about:support in Firefox, copy the Profile Folder path, and re-run with
+  firefox-chrome-install --profile <that path>"
+[ -d "$PROFILE" ] || die "no such profile directory: $PROFILE"
+# A real profile has these. Anything else means the resolver went astray.
+[ -f "$PROFILE/prefs.js" ] || echo "firefox-chrome-install: warning: no prefs.js in $PROFILE -- is this really a profile?" >&2
+
+echo "source  : $SRC"
+echo "root    : ${root:-(given)}"
+echo "profile : $PROFILE"
+echo "chrome  : $PROFILE/chrome"
+
+# --- the three files, and where each lands ---------------------------------
+files_src=("$SRC/userChrome.css"  "$SRC/userContent.css"  "$SRC/user.js")
+files_dst=("$PROFILE/chrome/userChrome.css" "$PROFILE/chrome/userContent.css" "$PROFILE/user.js")
+
+# --- --prune: name what is in chrome/ that this layer did not put there -----
+# Reports only. Deleting a file out of someone's browser profile because a
+# script did not recognise it is not a thing to do unattended, and the set of
+# things that legitimately live here (a theme's assets, an old backup worth
+# keeping) is not knowable from in here.
+if [ "$PRUNE" -eq 1 ]; then
+    found=0
+    while IFS= read -r f; do
+        case "${f##*/}" in
+            userChrome.css|userContent.css) continue ;;
+            *.bak-*) echo "  backup    $f" ;;
+            *)       echo "  unmanaged $f" ;;
+        esac
+        found=1
+    done < <(find "$PROFILE/chrome" -mindepth 1 -maxdepth 1 2>/dev/null | sort)
+    if [ "$found" -eq 0 ]; then
+        echo "  nothing unowned in $PROFILE/chrome"
+    else
+        echo
+        echo "Nothing was deleted. Remove by hand what you no longer want."
+    fi
+    exit 0
+fi
+
+if [ "$CHECK" -eq 1 ]; then
+    status=0
+    for i in "${!files_src[@]}"; do
+        s="${files_src[$i]}"; d="${files_dst[$i]}"
+        if   [ ! -f "$s" ];             then echo "  MISSING SRC $s";       status=1
+        elif [ ! -f "$d" ];             then echo "  NOT INSTALLED $d";     status=1
+        elif cmp -s "$s" "$d";          then echo "  in sync      $d"
+        else                                 echo "  DIFFERS      $d";      status=1
+        fi
+    done
+    exit "$status"
+fi
+
+mkdir -p "$PROFILE/chrome"
+for i in "${!files_src[@]}"; do
+    s="${files_src[$i]}"; d="${files_dst[$i]}"
+    [ -f "$s" ] || die "missing $s -- run 'doom sync' to tangle config.org"
+    if [ -f "$d" ] && cmp -s "$s" "$d"; then
+        echo "  unchanged    $d"
+        continue
+    fi
+    # Back up anything at the destination that this layer did not write, once.
+    # Losing a hand-written user.js, or an arkenfox one, to a first run would
+    # be a bad way to meet this script.
+    if [ -f "$d" ] && ! grep -q 'Generated from ~/.config/doom/config.org' "$d"; then
+        backup="$d.bak-$(date +%F)"
+        [ -e "$backup" ] || { cp -a "$d" "$backup"; echo "  backed up unmanaged $d -> $backup"; }
+    fi
+    cp -f "$s" "$d"
+    echo "  installed    $d"
+done
+
+if pgrep -x firefox >/dev/null 2>&1; then
+    echo
+    echo "Firefox is running. Restart it -- user.js is read only at startup."
+fi
+#+end_src
+
+** The menu: tweaks weighed and left out
+
+Ranked by how much they change for how little they can break. Nothing in this
+table is enabled -- rank 1 is commented out in =userContent.css=, the rest are
+one =curl= away in the upstream repository.
+[[https://github.com/MrOtherGuy/firefox-csshacks][MrOtherGuy/firefox-csshacks]]
+is the reference collection -- long-maintained, one self-contained file per
+tweak, MPL-2.0, and tested on Linux.
+
+| Rank | Tweak                      | Upstream file                           | What it buys                                                                        | Risk |
+|------+----------------------------+-----------------------------------------+---------------------------------------------------------------------------------------+------|
+|    1 | Thin scrollbars            | =content/css_scrollbar_width_color.css= | Zenburn scrollbars on every page. Commented out in =userContent.css=, with the palette already applied | Low  |
+|    2 | Autohide bookmarks toolbar | =chrome/autohide_bookmarks_toolbar.css= | Bookmarks on urlbar focus or hover, gone otherwise. ~90 lines, so linked not inlined   | Med  |
+|    3 | Compact urlbar dropdown    | =chrome/compact_urlbar_megabar.css=     | The address-bar popup stops eating half the window                                    | Med  |
+|    4 | Autohide the whole toolbox | =chrome/autohide_toolbox.css=           | Full-content browsing, chrome on hover. The most dramatic single file                 | Med  |
+|    5 | Dark =about:= pages        | =content/dark_settings_pages.css=       | Carries the dark treatment into Firefox's own settings pages                          | Med  |
+|    6 | Multi-row tabs             | =chrome/multi-row_tabs.css=             | Tabs wrap instead of shrinking. Largely moot now the tabs are favicons                | Med  |
+|    7 | Compact proton             | =chrome/compact_proton.css=             | Undoes the Proton padding globally. Touches a lot                                     | High |
+
+Three that are *incompatible with the combined bar* rather than merely
+unwanted, so they are recorded here to save the discovery a second time:
+
+| Tweak                       | Upstream file                             | Why it cannot be added |
+|-----------------------------+-------------------------------------------+--------------------------|
+| Toolbar at the bottom       | =chrome/navbar_below_content.css=         | Takes =#nav-bar= out of flow with =position: fixed=, so it leaves the =#navigator-toolbox= grid the combined bar depends on. This is what the layer used to run |
+| All toolbars below content  | =chrome/toolbars_below_content_v2.css=    | Sets =#navigator-toolbox{display: contents}=, contradicting the =display: grid= the combined bar needs on the same element |
+| Hide tab strip at one tab   | =chrome/hide_tabs_with_one_tab.css=       | Collapses =#TabsToolbar= to =height: 0.1px=, which with the grid layout leaves an empty column instead of reclaiming the space |
+
+Three things deliberately *not* taken:
+
+- *A whole-browser theme* -- Cascade, ShyFox, MinimalisticFox, SimplerentFox
+  and friends. Each is a coherent, good-looking redesign, and each is also a
+  few hundred lines of selectors against internal Firefox markup that no longer
+  belongs to you: upgrades break them, and debugging someone else's 400-line
+  theme is not a thing to do at 11pm. The same rule that keeps this repository
+  to one tool per responsibility applies here -- take the specific tweak, not
+  the framework. The zenburn block in =userChrome.css= is the opposite of this:
+  about thirty variable assignments, from a palette this configuration already
+  owns.
+- *The Firefox Color extension* (installed in this profile) for the zenburn
+  palette. It does exactly this job through a UI, and it stores the result in
+  extension storage -- not a file, so not tangleable, not diffable, and gone
+  with the profile. The CSS variables are the same colours in a form this
+  repository can actually keep.
+- *=userChrome.js= / =fx-autoconfig=* -- the loader that lets you run arbitrary
+  JavaScript in the browser chrome, not merely CSS. It is genuinely more
+  capable and it is a much larger surface: an =autoconfig.js= in the Firefox
+  *installation* directory (which the snap makes read-only anyway), scripts
+  running with chrome privileges, and no support of any kind. If a want ever
+  cannot be met with CSS, that is the moment to revisit it, not before.
+
+Firefox's own settings cover more than they used to, and are the first place to
+look before writing a selector: the revamped sidebar and native vertical tabs
+are shipped UI since 136, =browser.uidensity= gives compact mode, the built-in
+Dark theme is what makes the =--lwt-*= variables above apply at all, and
+toolbar layout is drag-and-drop in Customize. CSS is for what is left over.
