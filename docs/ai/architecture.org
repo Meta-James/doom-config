@@ -41,7 +41,11 @@ Full agentic coding ──▶ claude-code-ide.el ──▶ MCP ──▶ claude 
                      separate from these per-token API credentials
 #+END_SRC
 
-No secondary agentic-coding frontend — see [[id:adr-agent-shell-rejected][ADR-005]].
+No secondary agentic-coding frontend yet installed — [[id:adr-agent-shell-rejected][ADR-005]]'s rejection
+was superseded 2026-09-09 by [[id:adr-agent-shell-secondary][ADR-044]] (agent-shell + Codex, accepted but not
+yet implemented; claude-code-ide.el stays primary). This diagram reflects
+installed state only and will gain an agent-shell/Codex box once ADR-044's
+implementation step actually runs.
 
 * Responsibility boundaries
 
@@ -51,7 +55,8 @@ No secondary agentic-coding frontend — see [[id:adr-agent-shell-rejected][ADR-
 | In-buffer code completion (non-AI) | Corfu +orderless +icons | Company → Corfu, [[id:adr-corfu-migration][ADR-021]] |
 | Chat / conversational         | gptel, via Doom's =:tools llm= | Multi-provider rework in Phase 4; module owns the package, popup and keymap since [[id:adr-llm-module-owns-ai-keys][ADR-028]] — this repo carries only backends + directives |
 | Focused text/code transform   | gptel presets/directives | Replaces custom rewrite commands, Phase 4 |
-| Repository-wide agentic coding | claude-code-ide.el | Sole agent, [[id:adr-primary-agent][ADR-004]] |
+| Repository-wide agentic coding (Claude) | claude-code-ide.el | Sole agent for this axis, [[id:adr-primary-agent][ADR-004]] |
+| Repository-wide agentic coding (Codex, second opinion) | agent-shell | Accepted, not yet installed, [[id:adr-agent-shell-secondary][ADR-044]] |
 | Terminal agent hosting        | Doom's ghostel module | Switched from vterm 2026-08-17, [[id:adr-terminal-backend-ghostel][ADR-014]] |
 | Context assembly              | Explicit commands only | Never silent — region/buffer/diagnostic/project context is always an explicit action |
 | Diff and patch review         | Ediff + Magit        | No new package |

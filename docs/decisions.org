@@ -7190,7 +7190,7 @@ ADR-040's state, which is self-contained and still correct.
 * ADR-042: Emacs build flags — add xwidgets and ImageMagick, and move the procedure into the repository
 :PROPERTIES:
 :ID:       adr-emacs-rebuild-flags
-:STATUS:   Decided; script written and tangled, prerequisites installed. The rebuild itself has *not* been run — see Validation
+:STATUS:   Done. Rebuilt and installed 2026-09-05; restarted into the new binary and confirmed working 2026-09-09 — see Validation
 :DATE:     2026-09-05
 :END:
 
@@ -7376,13 +7376,25 @@ what makes an in-place Emacs upgrade safe for a live session:
 - straight's =build-31.1/= is keyed on the Emacs *version*, not the build hash,
   so its =.elc= files remain valid for both binaries.
 
+Restarted and confirmed, 2026-09-09:
+- The user restarted Emacs into the rebuilt binary (=31.1-ea051f05=).
+  =emacs --version= reports =GNU Emacs 31.1=; =(featurep 'xwidget-internal)=
+  and =(image-type-available-p 'imagemagick)= both evaluate to =t= in the
+  running session — checked via =emacs -Q --batch=, so this is the binary's
+  own capability, not something a stale straight build or user config could
+  fake.
+- No crash, no regression reported at restart. Per the Rollback section
+  below, =emacs-31.1.bak= stays until a normal day's editing plus actual use
+  of xwidgets rendering and an ImageMagick-only format has happened — restart
+  alone does not clear that bar yet.
+
 Not done:
-- =doom sync --rebuild= has *not* been run, on purpose. It rewrites
-  =straight/build-31.1/= underneath the live session, which is the one step in
+- =doom sync --rebuild= has *not* been run yet. It rewrites
+  =straight/build-31.1/= underneath the session, which is the one step in
   this whole sequence that could disturb it. It is also optional: the =.elc=
   files stay valid, and the new binary simply finds no =.eln= for its hash and
-  native-compiles lazily. The right moment is immediately after the first
-  restart into the new binary.
+  native-compiles lazily. Now that the restart has happened, this is the next
+  step, not a blocked one.
 - No machine other than this one has been touched. The laptop's distribution
   version is unknown, so the 4.1/4.0 WebKit fallback is reasoned, not
   exercised.
@@ -7715,3 +7727,191 @@ though the tangled files are not deleted by that and must be removed by hand.
   =resolve_profile=, which is why they are two small functions.
 - Something wanted genuinely cannot be expressed in CSS. That, and only that, is
   when =fx-autoconfig= gets reconsidered.
+
+* ADR-044: agent-shell as a secondary agentic-coding frontend, for Codex — not a replacement for claude-code-ide.el
+:PROPERTIES:
+:ID:       adr-agent-shell-secondary
+:STATUS:   Accepted, not yet implemented — nothing installed. See Validation
+:DATE:     2026-09-09
+:END:
+
+** Context
+[[id:adr-agent-shell-rejected][ADR-005]] rejected agent-shell as a secondary agent "for now", with an explicit
+revisit condition: *"the user actually wants to use a second agent backend
+(Codex, Gemini CLI, etc.)"*. The user has now said exactly that — they want
+Codex and an open-source model in addition to Claude, having read two
+external surveys (=agent-shell-setups-and-workflows-2026.org=,
+=doom-agentic-org-workflow.org=, both dated 2026-08-29, author "ChatGPT",
+saved under =~/Downloads=) that describe agent-shell-plus-worktrees as the
+community-standard multi-agent setup. The user also said they are open to
+agent-shell *replacing* claude-code-ide.el as the primary frontend, not only
+sitting alongside it — a bigger question than ADR-005 anticipated, since
+ADR-005's revisit condition assumed claude-code-ide.el would stay primary
+regardless.
+
+This entry answers both questions: whether to add agent-shell at all, and
+whether it should be primary or secondary.
+
+** Decision drivers
+- ADR-005's own revisit trigger, now met.
+- AGENTS.md's hard rule: "Don't add a second [tool] without a clearly
+  distinct, frequently-useful role the first can't cover" — a second agent
+  backend needs a real justification, not just "it's popular."
+- Don't install something whose actual working configuration is unverified
+  upstream — this repo's standard is live evidence, not survey claims.
+- The two survey docs are useful for workflow *ideas* (worktrees, Org-as-
+  system-of-record) but are dated, third-party-authored, and unverified
+  against this repo's current package/config state — treated as a lead to
+  check, not as evidence in themselves.
+
+** Candidates
+| Candidate | Fate | Reason |
+|-----------+------+--------|
+| Keep claude-code-ide.el sole agent, do nothing | Rejected | Doesn't satisfy the user's stated want for Codex access |
+| agent-shell *replaces* claude-code-ide.el as primary | Rejected | See Evidence — agent-shell's own Claude backend is a strict downgrade on the Claude axis specifically: separate npm package and credential, no reuse of the existing =claude= CLI login/session, and none of claude-code-ide.el's Emacs-side MCP tools (xref, imenu, treesit-info, project-info) exposed back to the agent. Replacing primary would trade a working deep integration for a shallower one, for no gain on the axis it would be replacing |
+| agent-shell as *secondary*, Codex backend only | *Chosen* | Distinct role (second model family, "second opinion" per the survey's own §2.4), doesn't touch the Claude axis where claude-code-ide.el is already deeper |
+| agent-shell secondary, Codex + OpenCode/Ollama (open-source model) now | Rejected, for now | See Evidence — the specific combination (agent-shell → OpenCode → local Ollama) is an open, unresolved upstream issue with no confirmed working configuration. Installing it now would mean shipping something unverified into a "canonical, live-evidence" repo |
+| agent-shell secondary, OpenCode against a *hosted* open-weight API instead of local Ollama | Deferred | Sidesteps the local-Ollama gap above, but needs its own credential (=pass= entry) and provider choice the user hasn't made yet — user's answer was "undecided," not "hosted." Revisit once a provider is picked |
+
+** Evidence
+Checked 2026-09-09:
+- This repo: =packages.el:56-58= and =config.org:1404-1423= confirm
+  claude-code-ide.el is the only agent package currently installed, matching
+  [[id:adr-primary-agent][ADR-004]]/[[id:adr-agent-shell-rejected][ADR-005]] as recorded.
+- =github.com/xenodium/agent-shell= (fetched 2026-09-09): 1.8k stars, 230
+  forks, 1,886 commits on main, 27 open issues — active. Both =agent-shell=
+  and its dependency =acp.el= are on MELPA; confirmed directly against
+  MELPA's =archive.json=: =agent-shell 20260908=, =acp 20260908=,
+  =shell-maker 20260820= — all current as of yesterday. This repo uses
+  straight.el (not package.el/MELPA) via Doom's =package!=, matching the
+  existing =claude-code-ide.el= pattern of an explicit =:recipe (:host github
+  :repo ...)= rather than a bare MELPA pull — recommended for agent-shell
+  too, since GitHub issue #533 (closed) shows MELPA's snapshot has lagged
+  the =shell-maker= version agent-shell needs at least once before;
+  straight's github recipe always builds current main, sidestepping that
+  class of bug entirely.
+- Codex backend: =npm install -g @agentclientprotocol/codex-acp=, auth via
+  login or API key through =agent-shell-openai-make-authentication=. This is
+  the OpenAI-model axis specifically — genuinely distinct from Claude, so
+  the "clearly distinct role" bar in AGENTS.md is met.
+- Claude backend *through agent-shell*: =npm install -g
+  @agentclientprotocol/claude-agent-acp=, auth via
+  =agent-shell-anthropic-make-authentication= — a *separate* login/credential
+  path from the =claude= CLI's own subscription login that claude-code-ide.el
+  already reuses. This confirms ADR-004's original evidence ("does not reuse
+  the existing =claude= CLI session/login the way claude-code-ide.el does")
+  is still accurate 2026-09-09, not stale. It is the direct reason agent-shell
+  does not replace claude-code-ide.el for the Claude axis.
+- Open-source/local model: =github.com/xenodium/agent-shell/issues/526=
+  (open, unresolved, no maintainer response at time of check): a user
+  reports getting OpenCode+local-Ollama working *standalone*, and
+  OpenCode+agent-shell working *standalone* with cloud-default models, but
+  *not the combination* — agent-shell calls opencode directly in a way that
+  doesn't appear to route through a locally-configured Ollama provider.
+  Ollama's own OpenCode integration docs (=docs.ollama.com/integrations/
+  opencode=, fetched 2026-09-09) describe the standalone OpenCode+Ollama
+  config (=~/.config/opencode/opencode.json=, an =openai-compatible=
+  provider entry pointed at =http://localhost:11434/v1=) but say nothing
+  about agent-shell. No third source found that closes this gap.
+- Evil compatibility: agent-shell's README documents a known friction point
+  — =RET= needs separate insert/normal-state rebinding
+  (=evil-define-key 'insert ... #'newline=, =evil-define-key 'normal ...
+  #'comint-send-input=) to behave sanely under Evil. This matches ADR-005's
+  original evidence note and needs doing at install time, not left to
+  upstream defaults, given this repo's evil-first hard rule.
+
+** Decision
+Accepted, scoped narrower than the user's full ask:
+
+1. Install =agent-shell= (straight/github recipe, matching claude-code-ide.el's
+   pattern) as a *secondary* agentic-coding frontend. claude-code-ide.el
+   remains primary per [[id:adr-primary-agent][ADR-004]] — not replaced. ADR-004's "sole primary"
+   framing is narrowed rather than reversed: sole primary *for the Claude
+   axis specifically*, since that's the axis on which claude-code-ide.el's
+   deeper integration actually matters.
+2. Wire the Codex ACP backend (=@agentclientprotocol/codex-acp=) as
+   agent-shell's first configured agent. This is the part of the user's ask
+   with a confirmed-working path.
+3. Do *not* install an open-source/local-model backend yet. The specific
+   combination the user would need (agent-shell → OpenCode → Ollama, or
+   agent-shell → OpenCode → a hosted open-weight provider) has no confirmed
+   working configuration (local) or no chosen provider (hosted). This is
+   [[id:adr-agent-shell-rejected][ADR-005]]'s revisit condition partially met — Codex fires it, open-source
+   does not yet.
+3a. Fix the Evil =RET= behavior in =agent-shell-mode-map= at install time per
+    the Evidence section, rather than leaving upstream insert/normal-state
+    defaults in place.
+
+Implementation (not yet done — see Validation):
+- =packages.el=: =(package! agent-shell :recipe (:host github :repo
+  "xenodium/agent-shell"))=, plus its =acp= dependency the same way if
+  straight doesn't resolve it automatically from agent-shell's own
+  dependency declaration.
+- =config.org=: a new =*** Secondary agent: agent-shell + Codex= subsection
+  under "Agentic coding: claude-code-ide.el", tangling a =use-package!
+  agent-shell= block with the Evil =RET= fix and a localleader entry
+  (=,= =a a=, following the survey doc's own recommendation to use
+  localleader rather than fighting Doom's global leader for a rapidly-
+  changing package's command surface) — not a global =SPC o= binding unless
+  a free leaf is confirmed first.
+- Outside the repo: =npm install -g @agentclientprotocol/codex-acp=, then
+  =codex login= (or API key) before first use.
+
+** Consequences
+- Two agentic-coding frontends now exist, but scoped to different axes
+  (Claude via CLI-reuse+MCP depth vs. Codex via ACP) rather than duplicating
+  the same role — matches the per-axis scoping precedent [[id:adr-corfu-migration][ADR-021]] already
+  set for completion engines.
+- A new credential/session surface: Codex's own login, separate from both
+  the =claude= CLI login and the =pass=-backed API tokens gptel uses. Needs a
+  line in =docs/ai/providers.org= once installed.
+- agent-shell's command surface changes fast (the survey doc itself warns of
+  this); the localleader-only approach limits blast radius to one prefix
+  map rather than the global leader.
+- Open-source/local-model access remains unmet. This is a known gap, not an
+  oversight — tracked by this ADR's Revisit condition below, not silently
+  dropped.
+- docs/ai/architecture.org's diagram and responsibility table need updating
+  once this is actually implemented (they still say "No secondary agentic-
+  coding frontend" and "Sole agent") — done alongside this entry so the docs
+  don't fall out of sync with a decision that's Accepted but not yet Implemented;
+  see the cross-reference added there.
+
+** Rejected alternatives
+See Candidates table above.
+
+** Validation
+Not yet done — nothing installed. This ADR is Accepted (the research and
+decision are final) but Implementation is pending explicit user go-ahead for
+the =npm install=/=package!=/=doom sync= steps, per this repo's rule that
+package installs need current-turn approval. When implemented, validation
+should confirm:
+- =agent-shell= loads under Doom (=doom sync=, =doom doctor= clean).
+- =codex-acp= reachable on PATH, =agent-shell= can start a Codex session and
+  round-trip a trivial prompt.
+- Evil =RET= behaves correctly in both insert and normal state in an
+  agent-shell buffer.
+- claude-code-ide.el continues to work unaffected (regression check on the
+  primary path).
+
+** Rollback
+=packages.el= entry removal + =doom sync=; delete the =config.org= subsection
+and re-tangle. =npm uninstall -g @agentclientprotocol/codex-acp= and
+=codex logout= outside the repo. Nothing else in the config depends on
+agent-shell, matching the isolation claude-code-ide.el's own rollback
+(ADR-004) already established as the pattern.
+
+** Revisit when
+- The upstream agent-shell↔OpenCode↔Ollama gap (issue #526) closes with a
+  documented working configuration, or the user picks a hosted open-weight
+  provider instead — either resolves the open-source-model half of this
+  ADR.
+- agent-shell's Claude backend starts reusing the =claude= CLI's own
+  login/session (removing the separate-credential downside) — at that point
+  the "replace primary" question in the Candidates table is worth
+  re-scoring, since the main objection would be gone.
+- Codex or agent-shell itself stalls (same bar as ADR-004's revisit
+  condition for claude-code-ide.el).
+- A third agent backend request comes up — re-open the "clearly distinct
+  role" test per-backend rather than assuming agent-shell's presence
+  justifies adding more.
