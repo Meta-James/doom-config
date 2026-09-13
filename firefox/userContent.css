@@ -4,26 +4,85 @@
    See docs/decisions.org ADR-043. */
 
 @namespace url("http://www.w3.org/1999/xhtml");
+@namespace xul url("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul");
+
+/* The same zenburn values as userChrome.css section 4. Duplicated because a
+   custom property does not cross from the chrome document to a content one. */
+:root{
+  --zb-bg-minus1:  #2B2B2B; /* zenburn-bg-1  */
+  --zb-bg-minus05: #383838; /* zenburn-bg-05 */
+  --zb-bg:         #3F3F3F; /* zenburn-bg    */
+  --zb-bg-plus1:   #4F4F4F; /* zenburn-bg+1  */
+  --zb-bg-plus2:   #5F5F5F; /* zenburn-bg+2  */
+  --zb-bg-plus3:   #6F6F6F; /* zenburn-bg+3  */
+  --zb-fg:         #DCDCDC; /* zenburn-fg    */
+  --zb-fg-plus1:   #FFFFEF; /* zenburn-fg+1  */
+  --zb-yellow:     #F0DFAF; /* zenburn-yellow */
+  --zb-blue:       #8CD0D3; /* zenburn-blue   */
+}
 
 /* Zenburn background on the blank pages, so a new tab does not flash white.
-   #3F3F3F is zenburn-bg, the same value as `doom-theme' and the terminal.
    Shape from content/newtab_background_color.css (MPL-2.0). */
 @-moz-document url("about:home"),url("about:blank"),url("about:newtab"),url("about:privatebrowsing"){
-  body{ background-color: #3F3F3F !important; }
+  body{ background-color: var(--zb-bg) !important; }
 }
 @-moz-document url("about:privatebrowsing"){
   .search-handoff-button{ background-color: rgba(255,255,255,0.06) !important; }
-  .fake-textbox{ color: #989890 !important }
+  .fake-textbox{ color: var(--zb-bg-plus3) !important }
 }
 
-/* ------------------------------------------------------------------------ *
- * Opt-in shelf -- nothing below is active.
- * ------------------------------------------------------------------------ */
-
-/* Thin zenburn scrollbars everywhere. Applied globally, including to sites
-   that set their own -- that is the trade.
+/* Thin zenburn scrollbars everywhere, including on sites that set their own --
+   that is the trade, and it is the reason this one is global where the rest of
+   the file is scoped to about: pages.
    Shape from content/css_scrollbar_width_color.css (MPL-2.0). */
-/*
-:root{ scrollbar-color: #6F6F6F #3F3F3F }
+:root{ scrollbar-color: var(--zb-bg-plus3) var(--zb-bg) }
 *{ scrollbar-width: thin }
-*/
+
+/* Firefox's own settings pages -- about:preferences, about:addons,
+   about:config -- carry the dark treatment but not the zenburn one, so they
+   read as a different application. Recoloured from
+   content/dark_settings_pages.css (MPL-2.0); the hardcoded greys of the
+   original are replaced by the palette above, and its section for the retired
+   discovery.addons.mozilla.org page is dropped. */
+@-moz-document url-prefix("about:addons"),
+  url-prefix("about:preferences"),
+  url-prefix("about:config"),
+  url-prefix("chrome://browser/content/"),
+  url-prefix("chrome://mozapps/content/"),
+  url-prefix("chrome://pippki/content/"){
+  :root,
+  html{
+    --in-content-page-color: var(--zb-fg) !important;
+    --in-content-text-color: var(--zb-fg) !important;
+    --in-content-page-background: var(--zb-bg) !important;
+    --in-content-box-background: var(--zb-bg-plus1) !important;
+    --in-content-box-background-odd: var(--zb-bg-minus05) !important;
+    --in-content-border-color: var(--zb-bg-plus2) !important;
+    --in-content-deemphasized-text: var(--zb-bg-plus3) !important;
+    --in-content-accent-color: var(--zb-blue) !important;
+    --in-content-focus-outline-color: var(--zb-blue) !important;
+    --link-color: var(--zb-blue) !important;
+    --link-color-hover: var(--zb-yellow) !important;
+    scrollbar-color: var(--zb-bg-plus3) var(--zb-bg) !important;
+    color: var(--zb-fg) !important;
+  }
+
+  xul|menulist > xul|menupopup{ background-color: var(--zb-bg) !important; }
+
+  .updateSettingCrossUserWarningContainer,
+  .info-panel,
+  .extension-controlled,
+  .message-bar,
+  .alert,
+  xul|treecol{
+    background-color: var(--zb-bg-plus1) !important;
+    color: var(--zb-fg) !important;
+  }
+
+  /* Dropdown arrows and checkbox ticks are SVG masks, not filled text */
+  .menulist-dropmarker,
+  .checkbox-icon{
+    -moz-context-properties: fill;
+    fill: currentColor !important;
+  }
+}

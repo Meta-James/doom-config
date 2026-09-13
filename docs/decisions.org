@@ -7712,3 +7712,72 @@ though the tangled files are not deleted by that and must be removed by hand.
   =resolve_profile=, which is why they are two small functions.
 - Something wanted genuinely cannot be expressed in CSS. That, and only that, is
   when =fx-autoconfig= gets reconsidered.
+
+** Update 2026-09-13: ranks 1–5 of the shelf taken, and zenburn pushed further
+This is an extension of this ADR rather than a new one: the shelf was recorded
+here precisely so it could be drawn from later, and drawing from it changes
+nothing about the layer's structure.
+
+*What was taken.* Ranks 1 through 5 — thin scrollbars, autohide bookmarks
+toolbar, compact address-bar dropdown, autohide toolbox, dark =about:= pages.
+Ranks 6 and 7 stay unchosen: multi-row tabs is moot now that tabs are favicons,
+and compact proton touches too much for what it returns.
+
+*The two dramatic ones are behind prefs.* =userChrome.css= sections 6 and 7 are
+each wrapped in =@media -moz-pref(...)=, gated on
+=userchrome.autohide-bookmarks.enabled= and =userchrome.autohide-toolbox.enabled=,
+both set true in =firefox/user.js=. This costs one line per section and buys the
+ability to judge a change by flipping it at =about:config= and restarting,
+instead of retangling and reinstalling to find out. It is the same mechanism
+upstream's =oneline_toolbar.css= already uses for the tabs-on-right choice, so
+it is a pattern this layer was carrying anyway rather than a new one. A pref
+flipped at =about:config= lasts the session; =user.js= reasserts itself at the
+next startup, which is the intended asymmetry — experiment cheaply, commit
+deliberately.
+
+*Autohide toolbox is compatible with the combined bar,* where
+=navbar_below_content.css= was not, and the distinction is worth keeping
+straight: =autohide_toolbox.css= takes =#navigator-toolbox= — the grid
+*container* — out of flow, which leaves its grid intact, whereas
+=navbar_below_content.css= moves =#nav-bar=, a grid *item*, out of the grid it
+is supposed to occupy.
+
+*Dark =about:= pages was recoloured rather than carried verbatim,* the one place
+this update departs from the carry-upstream-unchanged rule. Upstream's
+=dark_settings_pages.css= hardcodes its own greys (=rgb(42,42,46)= and
+friends), which would have put a second, near-miss dark palette inside a
+configuration whose whole point is one palette. The selectors are upstream's;
+the colours are the =--zb-*= block. Its section for
+=discovery.addons.mozilla.org= is dropped — upstream's own comment says the
+modern add-ons manager no longer uses it.
+
+*The palette is now declared twice,* once in each stylesheet. Custom properties
+do not cross from the chrome document to a content one, so =userContent.css=
+cannot see =userChrome.css='s =:root=. The alternative was hardcoding the same
+hexes at a dozen content-side call sites. Ten duplicated assignments, in two
+files that are tangled from adjacent blocks of the same =config.org= section, is
+the cheaper wrong thing. *They must be kept in step*, and that is the only real
+maintenance cost this update adds.
+
+*Section 8 assigns variables, never markup* — the same discipline as section 4,
+for the same reason. It reaches the surfaces the first pass missed: context
+menus and dropdowns (=--panel-*=, where section 4 had only covered the
+=--arrowpanel-*= group behind the hamburger), the attention state on toolbar
+icons, focus rings, the chrome/content separator, panel and dialog buttons, the
+address bar's search-mode chiclet, selected text inside chrome fields, and
+chrome-side scrollbars. Two selector rules are the exception and are deliberate:
+the find bar reads none of those variables because it is styled as content, and
+two icons are drawn from an SVG mask rather than filled by
+=--toolbarbutton-icon-fill=. A variable that upstream renames degrades to a
+no-op; a selector that upstream renames degrades to a broken window, which is
+why there are two of them and not twenty.
+
+*Validation, as of 2026-09-13.* =config.org= tangles cleanly; both stylesheets
+parse to balanced braces with no unterminated comment and no =+= in a custom
+property name; every =var(--zb-*)= reference in both files resolves to a
+declaration in the same file. Installed and confirmed rendered the same day:
+=--check= reports all three in sync, and ranks 2 and 4 — the two that change how
+the window *behaves* rather than how it looks — were judged worth keeping on
+first use. =chrome/vars.css= and the 2026-09-06 backup were removed by hand at
+the same time, so =--prune= now reports the profile's =chrome/= as holding
+nothing this layer does not own.

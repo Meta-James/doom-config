@@ -290,3 +290,319 @@ See the above repository for updates as well as full license text. */
 
 /* The sidebar header area reads this one rather than the --lwt- variable */
 #sidebar-box{ --sidebar-background-color: var(--zb-bg-minus05) !important; }
+
+/* ======================================================================== *
+ * 5. Compact address-bar dropdown. Upstream, verbatim.
+ *    The results popup stops claiming half the window for five results.
+ * ======================================================================== */
+
+/* Source file https://github.com/MrOtherGuy/firefox-csshacks/tree/master/chrome/compact_urlbar_megabar.css made available under Mozilla Public License v. 2.0
+See the above repository for updates as well as full license text. */
+
+/* Make urlbar appear more compact */
+#searchbar-new[breakout][breakout-extend],
+#urlbar[breakout][breakout-extend] {
+  margin-left: 0 !important;
+  width: var(--urlbar-width) !important;
+  margin-top: calc((var(--urlbar-container-height) - var(--urlbar-height)) / 2) !important;
+}
+.urlbarView{
+  margin-inline: 0 !important;
+  width: auto !important;
+}
+.urlbarView-row{
+  padding: 0 2px !important;
+}
+.urlbarView-row-inner{
+  padding-inline-start: 4px !important;
+  padding-block: 3px !important;
+}
+.urlbar-background,
+#urlbar-background{
+  animation: none !important;
+}
+.urlbar-input-container{
+  padding: var(--urlbar-container-padding,0) 1px !important;
+  height: var(--urlbar-min-height) !important;
+}
+#identity-icon{
+  margin-block: var(--urlbar-icon-padding);
+}
+.urlbarView > .search-one-offs:not([hidden]){
+  padding-block: 0px !important;
+}
+
+/* ======================================================================== *
+ * 6. Bookmarks toolbar on demand. Upstream, verbatim, behind a pref.
+ *    Bookmarks appear on address-bar focus or on hovering the toolbar area,
+ *    and fold away 600ms after. Toggle at about:config without retangling:
+ *    userchrome.autohide-bookmarks.enabled
+ * ======================================================================== */
+
+@media -moz-pref("userchrome.autohide-bookmarks.enabled"){
+
+/* Source file https://github.com/MrOtherGuy/firefox-csshacks/tree/master/chrome/autohide_bookmarks_toolbar.css made available under Mozilla Public License v. 2.0
+See the above repository for updates as well as full license text. */
+
+:root{
+  --uc-toolbox-background-image: var(--toolbox-background-image,var(--toolbar-bgimage));
+  --uc-toolbox-background-color: var(--toolbox-background-color,var(--toolbox-bgcolor));
+  --uc-toolbar-background-color: var(--toolbar-background-color,var(--toolbar-bgcolor));
+}
+
+#PersonalToolbar{
+  --uc-bm-height: 20px; /* Might need to adjust if the toolbar has other buttons */
+  --uc-bm-padding: 4px; /* Vertical padding to be applied to bookmarks */
+  --uc-autohide-toolbar-delay: 600ms; /* The toolbar is hidden after 0.6s */
+
+  /* 0deg = "show" ; 90deg = "hide" ;  Set the following to control when bookmarks are shown */
+  --uc-autohide-toolbar-focus-rotation: 0deg; /* urlbar is focused */
+  --uc-autohide-toolbar-hover-rotation: 0deg; /* cursor is over the toolbar area */
+  --uc-toolbarbutton-inner-padding: var(--toolbarbutton-padding-inner,var(--toolbarbutton-inner-padding));
+  --uc-toolbarbutton-outer-padding: var(--toolbarbutton-padding-outer,var(--toolbarbutton-outer-padding));
+  --uc-bmb-bottom-margin: -1px;
+}
+
+:root[uidensity="touch"] #PersonalToolbar{ --uc-bm-padding: 7px }
+
+#PersonalToolbar:not([customizing]){
+  position: relative;
+  margin-bottom: calc(var(--uc-bmb-bottom-margin) - var(--uc-bm-height) - 2 * var(--uc-bm-padding));
+  transform: rotateX(90deg);
+  transform-origin: top;
+  transition: transform 135ms linear var(--uc-autohide-toolbar-delay) !important;
+  z-index: 1;
+  /* The following properties should allow the themes with trasparent toolbars to work */
+  background-color: transparent !important;
+  background-repeat: no-repeat,var(--lwt-background-tiling);
+    /* y position will be wrong if menubar is enabled... */
+  --uc-bg-y: calc(-2 * (var(--tab-margin-block,var(--tab-block-margin,0px)) + var(--uc-toolbarbutton-inner-padding) + var(--uc-toolbarbutton-outer-padding)) - var(--tab-min-height) - 24px - var(--bookmark-block-padding));
+  background-position: top left,var(--lwt-background-alignment,top left);
+  background-position-y:0,var(--uc-bg-y),var(--uc-bg-y),var(--uc-bg-y);
+  background-size: cover, var(--toolbox-background-size), auto, auto,auto,auto;
+  background-image: linear-gradient(var(--uc-toolbar-background-color)),
+    var(--uc-toolbox-background-image,var(--uc-toolbar-background-image,linear-gradient(transparent))),
+    var(--lwt-header-image,var(--lwt-additional-images)),
+    linear-gradient(var(--uc-toolbox-background-color)) !important;
+}
+/* This is simply for Firefox < 150 */
+.browser-toolbox-background > #PersonalToolbar:not([customizing]){
+  background-repeat: no-repeat,no-repeat,var(--lwt-background-tiling);
+  background-position: top left,top left,var(--lwt-background-alignment,top left);
+  background-position-y:0,var(--uc-bg-y),var(--uc-bg-y),var(--uc-bg-y);
+}
+@media -moz-pref("sidebar.verticalTabs"){
+  #PersonalToolbar{
+    --uc-toolbar-background-color: transparent;
+  }
+  #PersonalToolbar:not([customizing]){
+    margin-bottom: calc(0px - var(--uc-bm-height) - 2 * var(--uc-bm-padding));
+    --uc-bg-y: calc(0px - (2 * var(--uc-toolbarbutton-inner-padding) + var(--uc-toolbarbutton-outer-padding)) - 27px - var(--bookmark-block-padding));
+  }
+}
+:root[uidensity="compact"] #PersonalToolbar{
+  --uc-toolbarbutton-outer-padding: 1px !important;
+}
+#PlacesToolbarItems > .bookmark-item,
+#OtherBookmarks,
+#PersonalToolbar > #import-button{
+  padding-block: var(--uc-bm-padding) !important;
+}
+
+#nav-bar:focus-within + #PersonalToolbar{
+  transition-delay: 100ms !important;
+  transform: rotateX(var(--uc-autohide-toolbar-focus-rotation,0));
+}
+#navigator-toolbox:is(:hover,:focus-within){
+  border-bottom-color: transparent !important;
+}
+#navigator-toolbox:hover > #PersonalToolbar{
+  transition-delay: 100ms !important;
+  transform: rotateX(var(--uc-autohide-toolbar-hover-rotation,0));
+}
+:root:not([lwtheme]) #PersonalToolbar{
+  background-color: var(--toolbar-background-color,var(--toolbar-bgcolor)) !important;
+}
+#nav-bar.browser-titlebar + #PersonalToolbar{
+  background-color: var(--uc-toolbox-background-color) !important;
+}
+#navigator-toolbox:hover > #nav-bar:focus-within + #PersonalToolbar {
+  transform: rotateX(0);
+}
+#navigator-toolbox{
+  --browser-area-z-index-toolbox: 4;
+}
+@media -moz-pref("browser.nova.enabled"){
+  #navigator-toolbox{
+    overflow: visible !important;
+  }
+  #PersonalToolbar{
+    --uc-bmb-bottom-margin: -2px;
+  }
+  :root[builtintheme] #PersonalToolbar{
+    background-repeat: no-repeat repeat;
+  }
+}
+
+}
+
+/* ======================================================================== *
+ * 7. The whole toolbox on demand. Upstream, verbatim, behind a pref.
+ *    The most dramatic thing here: chrome folds away entirely and returns on
+ *    hover or address-bar focus. Toggle at about:config without retangling:
+ *    userchrome.autohide-toolbox.enabled
+ *    Compatible with the combined bar because it takes #navigator-toolbox --
+ *    the grid *container* -- out of flow, leaving the grid itself intact.
+ *    navbar_below_content.css is rejected for the opposite reason: it moves a
+ *    grid *item*. See ADR-043.
+ * ======================================================================== */
+
+@media -moz-pref("userchrome.autohide-toolbox.enabled"){
+
+/* Source file https://github.com/MrOtherGuy/firefox-csshacks/tree/master/chrome/autohide_toolbox.css made available under Mozilla Public License v. 2.0
+See the above repository for updates as well as full license text. */
+
+:root{
+  --uc-autohide-toolbox-delay: 200ms; /* Wait 0.1s before hiding toolbars */
+  --uc-toolbox-rotation: 82deg;  /* This may need to be lower on mac - like 75 or so */
+}
+
+:root[sizemode="maximized"]{
+  --uc-toolbox-rotation: 88.5deg;
+}
+
+:root[sizemode="fullscreen"],
+:root[sizemode="fullscreen"] #navigator-toolbox{ margin-top: 0 !important; }
+
+#navigator-toolbox{
+  --browser-area-z-index-toolbox: 3;
+  position: fixed !important;
+  background: inherit;
+  background-color: var(--lwt-accent-color,black) !important;
+  transition: transform 82ms linear, opacity 82ms linear !important;
+  transition-delay: var(--uc-autohide-toolbox-delay) !important;
+  transform-origin: top;
+  transform: rotateX(var(--uc-toolbox-rotation));
+  opacity: 0;
+  line-height: 0;
+  z-index: 1;
+  pointer-events: none;
+  width: 100vw;
+}
+#navigator-toolbox.chrome-block{
+  margin-top: 0 !important;
+  border-top-width: 0px !important;
+}
+:root[sessionrestored] toolbar #searchbar-new:popover-open,
+:root[sessionrestored] #urlbar:popover-open{
+  pointer-events: none;
+  opacity: 0;
+  transition: transform 82ms linear var(--uc-autohide-toolbox-delay), opacity 0ms calc(var(--uc-autohide-toolbox-delay) + 82ms);
+  transform-origin: 0px calc(0px - var(--tab-min-height) - var(--tab-margin-block,var(--tab-block-margin,0px)) * 2);
+  transform: rotateX(89.9deg);
+}
+:root:is([window-modal-open],[customizing]) toolbar #searchbar-new:popover-open,
+:root:is([window-modal-open],[customizing]) #urlbar:popover-open,
+#mainPopupSet:has(> [panelopen]:not(#ask-chat-shortcuts,#selection-shortcut-action-panel,#chat-shortcuts-options-panel,#tab-preview-panel), > #tab-group-editor > [panelopen]) ~ toolbox :is(.urlbar:popover-open,#urlbar:popover-open),
+#navigator-toolbox:is(:hover,:focus-within,[movingtab]) :is(.urlbar:popover-open,#urlbar:popover-open),
+:where(:root[sessionrestored]) #navigator-toolbox .urlbar:popover-open:is([focused],[open]),
+:where(:root[sessionrestored]) #urlbar-container > #urlbar:popover-open:is([focused],[open]){
+  pointer-events: auto;
+  opacity: 1;
+  transition-delay: 33ms;
+  transform: rotateX(0deg);
+}
+
+:root[window-modal-open] #navigator-toolbox,
+#mainPopupSet:has(> [panelopen]:not(#ask-chat-shortcuts,#selection-shortcut-action-panel,#chat-shortcuts-options-panel,#tab-preview-panel), > #tab-group-editor > [panelopen]) ~ toolbox,
+#navigator-toolbox:has(#urlbar:is([open],[focus-within])),
+#navigator-toolbox:has(.urlbar:is([open],[focus-within])),
+#navigator-toolbox:is(:hover,:focus-within,[movingtab]){
+  transition-delay: 33ms !important;
+  transform: rotateX(0);
+  opacity: 1;
+}
+
+#navigator-toolbox > *{ line-height: normal; pointer-events: auto }
+
+/* Don't apply transform before window has been fully created */
+:root:not([sessionrestored]) #navigator-toolbox{ transform:none !important }
+
+:root[customizing] #navigator-toolbox{
+  position: relative !important;
+  transform: none !important;
+  opacity: 1 !important;
+}
+
+#navigator-toolbox[inFullscreen] > #PersonalToolbar,
+#PersonalToolbar:is([collapsed=""],[collapsed="true"]){ display: none }
+
+/* This is a bit hacky fix for an issue that will make urlbar zero pixels tall after you enter customize mode */
+:is(#urlbar,.urlbar)[breakout][breakout-extend]:popover-open > .urlbar-input-container{
+  padding-block: calc(min(4px,(var(--urlbar-container-height) - var(--urlbar-height)) / 2) + var(--urlbar-container-padding)) !important;
+}
+
+}
+
+/* ======================================================================== *
+ * 8. Zenburn, continued: the surfaces section 4 did not reach.
+ *    Same rule as section 4 -- assign to Firefox's own variables, do not
+ *    restyle its markup. A variable that gets renamed upstream degrades to a
+ *    no-op; a selector that gets renamed degrades to a broken window.
+ * ======================================================================== */
+
+:root{
+  /* Context menus and the bookmarks/history dropdowns. Section 4 set the
+     --arrowpanel-* group, which covers the hamburger panel but not these. */
+  --panel-background: var(--zb-bg) !important;
+  --panel-color: var(--zb-fg) !important;
+  --panel-border-color: var(--zb-bg-plus2) !important;
+  --panel-item-hover-bgcolor: var(--zb-bg-plus1) !important;
+  --panel-item-active-bgcolor: var(--zb-bg-plus2) !important;
+
+  /* The icon that wants attention -- a finished download, a pending update.
+     Firefox's default here is its own blue, the one saturated thing left. */
+  --toolbarbutton-icon-fill-attention: var(--zb-blue) !important;
+
+  /* Keyboard focus rings, everywhere in the chrome */
+  --focus-outline-color: var(--zb-blue) !important;
+
+  /* The hairline between chrome and page */
+  --chrome-content-separator-color: var(--zb-bg-minus1) !important;
+
+  /* Buttons in panels and dialogs */
+  --button-background-color: var(--zb-bg-plus1) !important;
+  --button-background-color-hover: var(--zb-bg-plus2) !important;
+  --button-text-color: var(--zb-fg) !important;
+  --button-primary-background-color: var(--zb-blue) !important;
+  --button-primary-text-color: var(--zb-bg-minus1) !important;
+
+  /* The chiclet the address bar grows in search mode */
+  --urlbar-box-bgcolor: var(--zb-bg-plus1) !important;
+  --urlbar-box-text-color: var(--zb-fg) !important;
+  --urlbar-box-hover-bgcolor: var(--zb-bg-plus2) !important;
+  --urlbar-box-hover-text-color: var(--zb-fg-plus1) !important;
+
+  /* Selected text inside chrome fields -- the address bar, the find bar */
+  --lwt-toolbar-field-highlight: var(--zb-bg-plus3) !important;
+  --lwt-toolbar-field-highlight-text: var(--zb-fg-plus1) !important;
+
+  /* Scrollbars inside chrome surfaces: menus, panels, the sidebar. The
+     content-side equivalent lives in userContent.css. */
+  scrollbar-color: var(--zb-bg-plus3) var(--zb-bg);
+}
+
+/* The find bar reads none of the above -- it is a toolbar, styled as content */
+.browserContainer > findbar{
+  background-color: var(--zb-bg) !important;
+  color: var(--zb-fg) !important;
+  border-top-color: var(--zb-bg-plus2) !important;
+}
+
+/* Icons that are drawn from an SVG mask rather than filled by
+   --toolbarbutton-icon-fill: the tab close button, the panel back arrow. */
+.tab-close-button,
+.subviewbutton-back{
+  -moz-context-properties: fill;
+  fill: var(--zb-fg) !important;
+}

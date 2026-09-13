@@ -463,7 +463,19 @@ is a manual =rm=. =firefox-chrome-install --prune= lists it.
 three files, and backed the 2021 =userChrome.css= up as
 =userChrome.css.bak-2026-09-06=. =--check= now exits 0 with all three in sync.
 *Confirmed rendered* on 2026-09-13, on the first restart after the install. The
-7fr/3fr split was left as tangled. The chrome is zenburn, deliberately — it
+7fr/3fr split was left as tangled.
+
+*Extended and confirmed* on 2026-09-13: shelf ranks 1–5 were taken the same day
+(thin scrollbars, autohide bookmarks toolbar, compact address-bar dropdown,
+autohide toolbox, zenburn =about:= pages), and zenburn was extended to context
+menus, focus rings, panel buttons and the find bar. Installed, restarted and confirmed
+good the same day; =--check= reports all three in sync. Ranks 2 and 4 are gated
+on =userchrome.autohide-bookmarks.enabled= and
+=userchrome.autohide-toolbox.enabled=. See ADR-043's 2026-09-13 update.
+
+=chrome/vars.css= and =chrome/userChrome.css.bak-2026-09-06= were deleted on
+2026-09-13. =--prune= now reports the profile's =chrome/= as holding nothing
+this layer does not own. The chrome is zenburn, deliberately — it
 tracks =doom-zenburn-theme.el=, Emacs and the terminal, not the GTK theme. The
 GTK side is Yaru-dark with =color-scheme= =prefer-dark=, which is what makes
 Firefox apply its built-in Dark theme and so makes the =--lwt-*= variables take
