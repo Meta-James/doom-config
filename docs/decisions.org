@@ -7673,13 +7673,10 @@ in the repository, and the cost of drift is a slightly wrong-looking browser.
   =userChrome.css.bak-2026-09-06= exactly once. The stale native root
   =~/.mozilla/firefox/s5v1taq3.default-release/chrome/= was correctly left
   alone.
-- *Not yet done*: Firefox has not been restarted since that install, so none of
-  this has been seen rendered. On the next restart, confirm: one toolbar row;
-  tabs as favicons on the right of the address bar; downloads, extensions,
-  hamburger, passwords, new-tab and all-tabs all present on that row; zenburn
-  colours in the chrome, the hamburger panel and the address-bar dropdown; and
-  a yellow line above the active tab. The 7fr/3fr split is a guess at a
-  comfortable width and is the most likely thing to want adjusting.
+- Confirmed rendered on 2026-09-13, on the first Firefox restart after the
+  install: the combined bar, the favicon tab strip and the zenburn chrome all
+  came up as intended, and the 7fr/3fr split needed no adjustment. The layer is
+  therefore validated end to end — resolver, installer, and appearance.
 - =--prune= was exercised against both the live profile and a sandbox one: it
   reports =vars.css= (January 2021) as unmanaged and
   =userChrome.css.bak-2026-09-06= as a backup, distinguishing the two, and it

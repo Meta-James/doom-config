@@ -462,8 +462,12 @@ is a manual =rm=. =firefox-chrome-install --prune= lists it.
 =~/snap/firefox/common/.mozilla/firefox/s5v1taq3.default-release=, installed all
 three files, and backed the 2021 =userChrome.css= up as
 =userChrome.css.bak-2026-09-06=. =--check= now exits 0 with all three in sync.
-*Not yet seen rendered* — Firefox has not been restarted since, so the
-appearance is unverified.
+*Confirmed rendered* on 2026-09-13, on the first restart after the install. The
+7fr/3fr split was left as tangled. The chrome is zenburn, deliberately — it
+tracks =doom-zenburn-theme.el=, Emacs and the terminal, not the GTK theme. The
+GTK side is Yaru-dark with =color-scheme= =prefer-dark=, which is what makes
+Firefox apply its built-in Dark theme and so makes the =--lwt-*= variables take
+effect at all; the two are related that way and no other.
 
 * Known environment issues
 :PROPERTIES:
