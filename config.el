@@ -2162,3 +2162,23 @@ agenda is being drawn. Authorizing is a user-initiated act: do it once via
 ;; (exwm-enable)
 
 ;; ;; Open Workspaces and start programs?
+
+(defun +my/firefox-chrome-check-h ()
+  "Warn when the Firefox profile has drifted from the tangled chrome layer.
+Runs `firefox-chrome-install --check', which reports and changes nothing."
+  (let ((script (expand-file-name "~/.local/bin/firefox-chrome-install")))
+    (when (file-executable-p script)
+      (make-process
+       :name "firefox-chrome-check"
+       :buffer (generate-new-buffer " *firefox-chrome-check*")
+       :noquery t
+       :command (list script "--check")
+       :sentinel
+       (lambda (proc _event)
+         (when (memq (process-status proc) '(exit signal))
+           (unless (zerop (process-exit-status proc))
+             (warn "Firefox chrome layer has drifted from the profile:\n%s\nRun `firefox-chrome-install' to reinstall it."
+                   (with-current-buffer (process-buffer proc) (buffer-string))))
+           (kill-buffer (process-buffer proc))))))))
+
+(add-hook 'doom-first-file-hook #'+my/firefox-chrome-check-h)

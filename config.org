@@ -3443,6 +3443,80 @@ user_pref("userchrome.autohide-toolbox.enabled", true);
 // something that must be true on every machine, every time.
 #+end_src
 
+** The zenburn palette, generated
+:PROPERTIES:
+:ID:       literate-firefox-palette
+:END:
+
+Both stylesheets below open with the same ten =--zb-*= custom properties, and
+until 2026-09-13 both declared them by hand -- the one standing maintenance
+cost [[id:adr-firefox-chrome-layer][ADR-043]] recorded, since the two lists had
+to be kept in step by remembering to. They are generated instead: the block
+below reads the hex values out of the active Doom theme's own source file and
+is noweb-expanded into each stylesheet at tangle time, so changing
+=doom-theme= repaints both on the next tangle.
+
+It reads the theme *file* rather than calling =doom-color=, which would be the
+obvious thing. The tangle runs in a bare =emacs --batch= that has loaded
+early-init and org and nothing else (see =+literate-tangle=), so =doom-themes=
+is not on its =load-path= and the theme is not active. The file is always
+there, and parsing it needs nothing loaded.
+
+The label in each comment is the theme's *own* trailing comment on that line,
+so a different theme names its colours in its own vocabulary rather than
+inheriting zenburn's. A missing theme file or a missing colour raises, which
+fails the tangle -- the alternative, an empty palette tangled silently, is a
+Firefox with unreadable chrome.
+
+#+name: zenburn-palette
+#+begin_src emacs-lisp :tangle no :results value
+(let* ((theme (save-excursion
+                (goto-char (point-min))
+                (if (re-search-forward "^(setq doom-theme '\\([^)[:space:]]+\\)" nil t)
+                    (match-string-no-properties 1)
+                  (error "No `doom-theme' setq found in config.org"))))
+       (source (or (car (file-expand-wildcards
+                         (expand-file-name
+                          (format "straight/build-*/doom-themes/%s-theme.el" theme)
+                          doom-local-dir)))
+                   (error "No source file for theme %s" theme)))
+       ;; CSS property name . the colour's name in doom-themes. `+' is not a
+       ;; legal character in a CSS identifier, so bg+1 becomes bg-plus1;
+       ;; spelling it out keeps it distinguishable from bg-1 at a glance.
+       (wanted '(("bg-minus1" . base1) ("bg-minus05" . bg-alt) ("bg" . bg)
+                 ("bg-plus1" . base5) ("bg-plus2" . base6) ("bg-plus3" . base7)
+                 ("fg" . fg) ("fg-plus1" . base8)
+                 ("yellow" . yellow) ("blue" . blue)))
+       rows)
+  (with-temp-buffer
+    (insert-file-contents source)
+    (dolist (pair wanted)
+      (goto-char (point-min))
+      (unless (re-search-forward
+               (format "^[ (]*(%s[ \t]+'(\"\\(#[0-9A-Fa-f]\\{6\\}\\)\"\\(.*\\)$"
+                       (regexp-quote (symbol-name (cdr pair))))
+               nil t)
+        (error "Theme %s defines no colour `%s'" theme (cdr pair)))
+      (let ((hex (match-string-no-properties 1))
+            (rest (match-string-no-properties 2)))
+        (push (list (car pair) hex
+                    (if (string-match ";;[ \t]*\\([^ \t]+\\)[ \t]*$" rest)
+                        (match-string 1 rest)
+                      (symbol-name (cdr pair))))
+              rows))))
+  (setq rows (nreverse rows))
+  (let ((name-width (apply #'max (mapcar (lambda (r) (length (car r))) rows)))
+        (label-width (apply #'max (mapcar (lambda (r) (length (nth 2 r))) rows))))
+    (mapconcat (lambda (r)
+                 (format "  --zb-%s:%s %s; /* %s%s */"
+                         (car r)
+                         (make-string (- name-width (length (car r))) ?\s)
+                         (nth 1 r)
+                         (nth 2 r)
+                         (make-string (- label-width (length (nth 2 r))) ?\s)))
+               rows "\n")))
+#+end_src
+
 ** firefox/userChrome.css
 
 Styles the browser *interface*. Two things are enabled: tabs and the main
@@ -3479,7 +3553,7 @@ Requires Firefox 133+ for =@media -moz-pref()=; this profile is on 154. Both
 upstream files no-op under =sidebar.verticalTabs=, which is off here -- this
 profile uses the revamped sidebar (=sidebar.revamp=true=) with horizontal tabs.
 
-#+begin_src css :tangle firefox/userChrome.css :mkdirp yes
+#+begin_src css :tangle firefox/userChrome.css :mkdirp yes :noweb yes
 /* Generated from ~/.config/doom/config.org -- edit there, not here.
    Any change made directly to this file is lost on the next tangle.
    Installed into the active Firefox profile by ~/.local/bin/firefox-chrome-install.
@@ -3710,19 +3784,11 @@ See the above repository for updates as well as full license text. */
  * ======================================================================== */
 
 :root{
-  /* zenburn palette, straight from doom-zenburn-theme.el. `+' is not a legal
-     character in a CSS identifier, so zenburn's bg+1 becomes --zb-bg-plus1;
-     spelling it out keeps it distinguishable from bg-1 at a glance. */
-  --zb-bg-minus1:  #2B2B2B; /* zenburn-bg-1  */
-  --zb-bg-minus05: #383838; /* zenburn-bg-05 */
-  --zb-bg:         #3F3F3F; /* zenburn-bg    */
-  --zb-bg-plus1:   #4F4F4F; /* zenburn-bg+1  */
-  --zb-bg-plus2:   #5F5F5F; /* zenburn-bg+2  */
-  --zb-bg-plus3:   #6F6F6F; /* zenburn-bg+3  */
-  --zb-fg:         #DCDCDC; /* zenburn-fg    */
-  --zb-fg-plus1:   #FFFFEF; /* zenburn-fg+1  */
-  --zb-yellow:     #F0DFAF; /* zenburn-yellow */
-  --zb-blue:       #8CD0D3; /* zenburn-blue   */
+  /* Generated from the active Doom theme; see "The zenburn palette,
+     generated" in config.org. `+' is not a legal character in a CSS
+     identifier, so zenburn's bg+1 becomes --zb-bg-plus1; spelling it out
+     keeps it distinguishable from bg-1 at a glance. */
+<<zenburn-palette()>>
 
   /* Popup panels: the hamburger menu, the downloads panel, extension popups */
   --arrowpanel-background: var(--zb-bg) !important;
@@ -4100,13 +4166,14 @@ Firefox's own settings pages.
 The palette is declared again here rather than shared with =userChrome.css=.
 The two files style different documents and neither can see the other's custom
 properties, so a duplicate block of ten assignments is the price of not
-hardcoding the same hexes at a dozen call sites. Keep the two lists in step.
+hardcoding the same hexes at a dozen call sites. Both copies come from the one
+generator above, so the two lists cannot fall out of step.
 
 *This is the half of the layer that can make a site unreadable.* Everything
 here is either scoped to an =about:= page or is a scrollbar; nothing restyles
 arbitrary web content, and that line is worth holding.
 
-#+begin_src css :tangle firefox/userContent.css :mkdirp yes
+#+begin_src css :tangle firefox/userContent.css :mkdirp yes :noweb yes
 /* Generated from ~/.config/doom/config.org -- edit there, not here.
    Any change made directly to this file is lost on the next tangle.
    Installed into the active Firefox profile by ~/.local/bin/firefox-chrome-install.
@@ -4115,19 +4182,11 @@ arbitrary web content, and that line is worth holding.
 @namespace url("http://www.w3.org/1999/xhtml");
 @namespace xul url("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul");
 
-/* The same zenburn values as userChrome.css section 4. Duplicated because a
-   custom property does not cross from the chrome document to a content one. */
+/* The same values as userChrome.css section 4, from the same generator.
+   Repeated in the output because a custom property does not cross from the
+   chrome document to a content one. */
 :root{
-  --zb-bg-minus1:  #2B2B2B; /* zenburn-bg-1  */
-  --zb-bg-minus05: #383838; /* zenburn-bg-05 */
-  --zb-bg:         #3F3F3F; /* zenburn-bg    */
-  --zb-bg-plus1:   #4F4F4F; /* zenburn-bg+1  */
-  --zb-bg-plus2:   #5F5F5F; /* zenburn-bg+2  */
-  --zb-bg-plus3:   #6F6F6F; /* zenburn-bg+3  */
-  --zb-fg:         #DCDCDC; /* zenburn-fg    */
-  --zb-fg-plus1:   #FFFFEF; /* zenburn-fg+1  */
-  --zb-yellow:     #F0DFAF; /* zenburn-yellow */
-  --zb-blue:       #8CD0D3; /* zenburn-blue   */
+<<zenburn-palette()>>
 }
 
 /* Zenburn background on the blank pages, so a new tab does not flash white.
@@ -4211,7 +4270,8 @@ simply never applies. A copy has no such problem and works identically on
 native, snap and flatpak installs, which is the whole point of this layer.
 
 The cost of copying is that the profile can drift from the repository. That is
-what =--check= is for; run it when a customisation appears not to have taken.
+what =--check= is for. It no longer has to be remembered: Emacs runs it once
+per session and warns on drift -- see [[id:literate-firefox-drift-check][Announcing profile drift]] below.
 
 : firefox-chrome-install            # copy the tangled files into the profile
 : firefox-chrome-install --check    # report paths and sync state, change nothing
@@ -4382,6 +4442,49 @@ if pgrep -x firefox >/dev/null 2>&1; then
     echo
     echo "Firefox is running. Restart it -- user.js is read only at startup."
 fi
+#+end_src
+
+** Announcing profile drift
+:PROPERTIES:
+:ID:       literate-firefox-drift-check
+:END:
+
+Because the layer copies rather than symlinks, the profile goes stale the
+moment =doom sync= retangles =firefox/*.css= and nothing runs
+=firefox-chrome-install= afterwards. Nothing said so: the symptom was a
+customisation that appeared not to take, and the diagnosis was remembering
+that this layer exists at all. This runs =--check= once per session and warns
+if the three files differ. =--check= changes nothing and exits non-zero on
+drift, which is the whole of the interface used here.
+
+Deliberately *not* wired into =doom sync=: drift also arrives without a sync
+-- a different profile becomes the default, an extension rewrites =user.js= --
+and a check at Emacs startup catches all of it, including the sync case, since
+a sync is followed by a restart anyway.
+
+This is an Emacs block inside the Firefox section; it tangles to =config.el=
+like the rest of the Emacs configuration and lands at the end of it.
+
+#+begin_src emacs-lisp :tangle config.el
+(defun +my/firefox-chrome-check-h ()
+  "Warn when the Firefox profile has drifted from the tangled chrome layer.
+Runs `firefox-chrome-install --check', which reports and changes nothing."
+  (let ((script (expand-file-name "~/.local/bin/firefox-chrome-install")))
+    (when (file-executable-p script)
+      (make-process
+       :name "firefox-chrome-check"
+       :buffer (generate-new-buffer " *firefox-chrome-check*")
+       :noquery t
+       :command (list script "--check")
+       :sentinel
+       (lambda (proc _event)
+         (when (memq (process-status proc) '(exit signal))
+           (unless (zerop (process-exit-status proc))
+             (warn "Firefox chrome layer has drifted from the profile:\n%s\nRun `firefox-chrome-install' to reinstall it."
+                   (with-current-buffer (process-buffer proc) (buffer-string))))
+           (kill-buffer (process-buffer proc))))))))
+
+(add-hook 'doom-first-file-hook #'+my/firefox-chrome-check-h)
 #+end_src
 
 ** The menu: tweaks weighed and left out

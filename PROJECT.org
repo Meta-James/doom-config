@@ -506,19 +506,27 @@ crosses a line the earlier stages do not: each adds a component this
 configuration did not have, so each needs its own ADR rather than a checkbox
 here. Nothing in stage 3 should start until stage 1 is done.
 
-*** Stage 1 — pay down what the shelf work incurred
+*** DONE Stage 1 — pay down what the shelf work incurred
+CLOSED: [2026-09-13]
 :PROPERTIES:
 :EFFORT:   1h
 :END:
 
-- [ ] Generate the =--zb-*= palette from =doom-zenburn-theme.el= at tangle time
+Both done 2026-09-13; written up as ADR-043's second update of that date. The
+generated palette is byte-identical in every value and differs only in the
+alignment of eight comments, which the hand-written list had set in two groups.
+The drift check hangs off =doom-first-file-hook= rather than
+=doom-after-sync-hook=, because drift also arrives without a sync and a startup
+check catches both.
+
+- [X] Generate the =--zb-*= palette from =doom-zenburn-theme.el= at tangle time
   rather than declaring it by hand in two stylesheets. An elisp block reading
   the theme's colour alist, referenced by noweb into both the =userChrome.css=
   and =userContent.css= blocks. Acceptance: both tangled files come back
   byte-identical to the current ones, and changing =doom-theme= changes both.
   This removes the "keep the two lists in step" hazard ADR-043's 2026-09-13
   update records as the only real maintenance cost of that work.
-- [ ] Make profile drift announce itself: run =firefox-chrome-install --check=
+- [X] Make profile drift announce itself: run =firefox-chrome-install --check=
   from whatever already runs after a =doom sync=, or a pre-commit hook.
   Acceptance: an out-of-sync profile produces a visible non-zero exit somewhere
   the user actually looks. Today drift is silent until something looks wrong.

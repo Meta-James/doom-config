@@ -6,17 +6,18 @@
 @namespace url("http://www.w3.org/1999/xhtml");
 @namespace xul url("http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul");
 
-/* The same zenburn values as userChrome.css section 4. Duplicated because a
-   custom property does not cross from the chrome document to a content one. */
+/* The same values as userChrome.css section 4, from the same generator.
+   Repeated in the output because a custom property does not cross from the
+   chrome document to a content one. */
 :root{
-  --zb-bg-minus1:  #2B2B2B; /* zenburn-bg-1  */
-  --zb-bg-minus05: #383838; /* zenburn-bg-05 */
-  --zb-bg:         #3F3F3F; /* zenburn-bg    */
-  --zb-bg-plus1:   #4F4F4F; /* zenburn-bg+1  */
-  --zb-bg-plus2:   #5F5F5F; /* zenburn-bg+2  */
-  --zb-bg-plus3:   #6F6F6F; /* zenburn-bg+3  */
-  --zb-fg:         #DCDCDC; /* zenburn-fg    */
-  --zb-fg-plus1:   #FFFFEF; /* zenburn-fg+1  */
+  --zb-bg-minus1:  #2B2B2B; /* zenburn-bg-1   */
+  --zb-bg-minus05: #383838; /* zenburn-bg-05  */
+  --zb-bg:         #3F3F3F; /* zenburn-bg     */
+  --zb-bg-plus1:   #4F4F4F; /* zenburn-bg+1   */
+  --zb-bg-plus2:   #5F5F5F; /* zenburn-bg+2   */
+  --zb-bg-plus3:   #6F6F6F; /* zenburn-bg+3   */
+  --zb-fg:         #DCDCDC; /* zenburn-fg     */
+  --zb-fg-plus1:   #FFFFEF; /* zenburn-fg+1   */
   --zb-yellow:     #F0DFAF; /* zenburn-yellow */
   --zb-blue:       #8CD0D3; /* zenburn-blue   */
 }

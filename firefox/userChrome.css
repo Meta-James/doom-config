@@ -228,17 +228,18 @@ See the above repository for updates as well as full license text. */
  * ======================================================================== */
 
 :root{
-  /* zenburn palette, straight from doom-zenburn-theme.el. `+' is not a legal
-     character in a CSS identifier, so zenburn's bg+1 becomes --zb-bg-plus1;
-     spelling it out keeps it distinguishable from bg-1 at a glance. */
-  --zb-bg-minus1:  #2B2B2B; /* zenburn-bg-1  */
-  --zb-bg-minus05: #383838; /* zenburn-bg-05 */
-  --zb-bg:         #3F3F3F; /* zenburn-bg    */
-  --zb-bg-plus1:   #4F4F4F; /* zenburn-bg+1  */
-  --zb-bg-plus2:   #5F5F5F; /* zenburn-bg+2  */
-  --zb-bg-plus3:   #6F6F6F; /* zenburn-bg+3  */
-  --zb-fg:         #DCDCDC; /* zenburn-fg    */
-  --zb-fg-plus1:   #FFFFEF; /* zenburn-fg+1  */
+  /* Generated from the active Doom theme; see "The zenburn palette,
+     generated" in config.org. `+' is not a legal character in a CSS
+     identifier, so zenburn's bg+1 becomes --zb-bg-plus1; spelling it out
+     keeps it distinguishable from bg-1 at a glance. */
+  --zb-bg-minus1:  #2B2B2B; /* zenburn-bg-1   */
+  --zb-bg-minus05: #383838; /* zenburn-bg-05  */
+  --zb-bg:         #3F3F3F; /* zenburn-bg     */
+  --zb-bg-plus1:   #4F4F4F; /* zenburn-bg+1   */
+  --zb-bg-plus2:   #5F5F5F; /* zenburn-bg+2   */
+  --zb-bg-plus3:   #6F6F6F; /* zenburn-bg+3   */
+  --zb-fg:         #DCDCDC; /* zenburn-fg     */
+  --zb-fg-plus1:   #FFFFEF; /* zenburn-fg+1   */
   --zb-yellow:     #F0DFAF; /* zenburn-yellow */
   --zb-blue:       #8CD0D3; /* zenburn-blue   */
 

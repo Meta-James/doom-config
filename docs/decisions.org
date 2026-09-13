@@ -7781,3 +7781,63 @@ the window *behaves* rather than how it looks — were judged worth keeping on
 first use. =chrome/vars.css= and the 2026-09-06 backup were removed by hand at
 the same time, so =--prune= now reports the profile's =chrome/= as holding
 nothing this layer does not own.
+
+** Update 2026-09-13: the palette is generated, and drift announces itself
+
+Stage 1 of the browser-integration plan in =PROJECT.org=, which exists to pay
+off the two pieces of debt this ADR's own update created rather than to add
+anything new.
+
+*The palette is no longer written by hand.* The ten =--zb-*= declarations
+appeared verbatim in both =userChrome.css= and =userContent.css=, and the
+update above named keeping the two lists in step as the layer's only standing
+maintenance cost. A named =emacs-lisp= block, =zenburn-palette=, now reads the
+hex values out of the active Doom theme's source file and is noweb-expanded
+into both stylesheets at tangle time. There is one list, in one place, and
+changing =doom-theme= repaints both stylesheets on the next tangle.
+
+It parses the theme *file* rather than calling =doom-color=, which is the
+obvious approach and does not work here: =+literate-tangle= runs the tangle in
+an =emacs --batch= that has loaded early-init and org and nothing else, so
+=doom-themes= is not on that process's =load-path= and no theme is active. The
+file is on disk either way and parsing it needs nothing loaded. The label in
+each generated comment is the theme's own trailing comment on that line, so a
+theme that is not zenburn names its colours in its own vocabulary; =doom-one=,
+which carries no such comments, falls back to the =doom-themes= names. A
+missing theme file or a missing colour signals an error and fails the tangle,
+which is the intended behaviour — an empty palette tangled silently would
+leave Firefox's chrome unreadable with nothing to point at.
+
+The tangled output is identical in every value and differs from the
+hand-written files only in alignment: eight of the ten comments gain a single
+space before their closing =*/=. The hand-written list had been aligned in two
+groups, the eight background and foreground entries to one column and
+=--zb-yellow= and =--zb-blue= to another; the generator pads all ten to the
+longest label. Nothing about how the files render changes.
+
+*Profile drift now announces itself.* Because the layer copies rather than
+symlinks, a =doom sync= that retangles the stylesheets leaves the profile a
+version behind until =firefox-chrome-install= is run again, and nothing said
+so — the symptom was a customisation that appeared not to have taken, and
+noticing it required remembering that this layer exists. =+my/firefox-chrome-check-h=
+runs =firefox-chrome-install --check= once per session on =doom-first-file-hook=
+and raises a warning naming the out-of-sync files if the script exits non-zero.
+=--check= reports and changes nothing, so the worst case is a spurious warning,
+never a surprise write into a browser profile.
+
+It deliberately hangs off Emacs startup rather than =doom-after-sync-hook=.
+Drift also arrives without a sync — a different profile becomes the default, an
+extension rewrites =user.js= — and the startup check catches those too,
+including the sync case, since a sync is followed by a restart anyway. It also
+avoids introducing a =$DOOMDIR/cli.el=, which would be a fourth kind of
+tangled output for one warning.
+
+*Validation, 2026-09-13.* Tangled through the real batch path
+(=emacs --batch= loading early-init and org, as =+literate-tangle= does) rather
+than from an interactive Emacs, since that is the path that has to work: both
+stylesheets tangle, and every hex value matches the hand-written files. The
+theme-swap acceptance was checked by tangling a copy of =config.org= with
+=doom-theme= set to =doom-one=, which produced =doom-one='s palette in both
+files. =--check= exits 0 against the installed profile and 1 with
+=FIREFOX_CHROME_SRC= pointed at the changed tree, which is the condition the
+startup warning fires on.
