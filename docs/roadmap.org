@@ -209,5 +209,10 @@ scheduled or scoped yet.
 - File and media management
 - EXWM (or another Emacs-centred window-management approach) — EXWM package was
   deliberately removed in Phase 1 ([[id:adr-remove-exwm][ADR-002]]); re-declare when this phase starts
+- Browser integration — Firefox beyond [[id:adr-firefox-chrome-layer][ADR-043]]'s
+  chrome layer: =org-protocol= capture, Evil-style browsing, and the credential
+  and bibliography paths. Staged in
+  [[id:project-browser-integration][PROJECT.org]]; stage 1 is debt from the
+  chrome work and is worth doing whether or not the rest is ever scheduled.
 - Notifications and desktop integration
 - Reproducible machine provisioning

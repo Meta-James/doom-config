@@ -486,6 +486,115 @@ entries. Full writeup: [[id:adr-literate-config][ADR-035]].
   section, where it earns its keep. Deliberately not done during the migration
   — it would have made the byte-for-byte check impossible.
 
+** TODO Browser integration — Firefox beyond the chrome layer
+:PROPERTIES:
+:ID:       project-browser-integration
+:EFFORT:   7h
+:END:
+
+Proposed 2026-09-13, immediately after [[id:adr-firefox-chrome-layer][ADR-043]]'s
+opt-in shelf was drawn down to ranks 1–5. Off-roadmap in the same sense as the
+transmission, EPUB and literate-config entries: the roadmap's active phase is AI
+integration and this is not that.
+
+The ordering is deliberate and is the whole point of writing it down. Stage 1 is
+debt the shelf work itself created and should be paid before anything is built
+on top of it. Stage 2 is native Firefox settings, which under the
+already-established rule (prefer the platform feature to a selector) must be
+tried *before* any further CSS. Stage 3 is new tools, and every item in it
+crosses a line the earlier stages do not: each adds a component this
+configuration did not have, so each needs its own ADR rather than a checkbox
+here. Nothing in stage 3 should start until stage 1 is done.
+
+*** Stage 1 — pay down what the shelf work incurred
+:PROPERTIES:
+:EFFORT:   1h
+:END:
+
+- [ ] Generate the =--zb-*= palette from =doom-zenburn-theme.el= at tangle time
+  rather than declaring it by hand in two stylesheets. An elisp block reading
+  the theme's colour alist, referenced by noweb into both the =userChrome.css=
+  and =userContent.css= blocks. Acceptance: both tangled files come back
+  byte-identical to the current ones, and changing =doom-theme= changes both.
+  This removes the "keep the two lists in step" hazard ADR-043's 2026-09-13
+  update records as the only real maintenance cost of that work.
+- [ ] Make profile drift announce itself: run =firefox-chrome-install --check=
+  from whatever already runs after a =doom sync=, or a pre-commit hook.
+  Acceptance: an out-of-sync profile produces a visible non-zero exit somewhere
+  the user actually looks. Today drift is silent until something looks wrong.
+
+*** Stage 2 — native settings, before any more CSS
+:PROPERTIES:
+:EFFORT:   45m
+:END:
+
+- [ ] =browser.compactmode.show= true, then Compact in Customize. Acceptance:
+  if this delivers what shelf rank 7 (=compact_proton.css=) would, record rank 7
+  as permanently rejected in ADR-043's menu rather than merely unchosen — a
+  native setting beating 200 lines of selectors against internal markup is
+  exactly the shape that table exists to capture.
+- [ ] Settle the font question across Emacs and Firefox together. =doom-font= is
+  still commented out, so Emacs runs Doom's default while Firefox runs Ubuntu
+  11 — two faces on one screen. Set =doom-font= and Firefox's serif/sans/mono
+  content defaults from one decision. Acceptance: one named family per role,
+  recorded, both applications using it. Likely the largest perceived-coherence
+  win left, and it is not a Firefox task alone.
+- [ ] Tune =about:reader= to the reading column [[id:adr-nov-typography][ADR-040]]
+  already settled for nov.el. Same numbers, one =@-moz-document= in
+  =userContent.css=. Acceptance: a reader-mode page and an EPUB in nov look like
+  the same reading surface.
+
+*** Stage 3 — new tools, one ADR each
+:PROPERTIES:
+:EFFORT:   5h
+:END:
+
+Ordered by value. Each needs the [[id:docs-decisions][decisions.org]] treatment
+before implementation, and each must answer ADR-021's one-tool-per-
+responsibility question explicitly.
+
+- [ ] *=org-protocol= capture from Firefox.* There is no =org-protocol= handler
+  and no =.desktop= entry for one, while vulpea, citar, PARA and GTD all landed
+  upstream this week. Capturing a page into an org note is the missing half of
+  that work. Needs: a desktop entry registering the scheme, a capture template,
+  and either a bookmarklet or the capture extension. Acceptance: a page captured
+  from Firefox lands in the right org file with title and URL, from a cold
+  Emacs. Highest workflow value on this list.
+- [ ] *Tridactyl.* Vim keys in the browser — the Evil-first rule applied to the
+  one application that currently ignores it. No existing tool owns this
+  responsibility, so ADR-021 permits it, but the ADR should say so rather than
+  assume it. Two things make it fit this repository specifically: its config is
+  a plain file, so it can be tangled from =config.org= like the rest of the
+  layer, and =set editorcmd emacsclient= opens any textarea in Emacs.
+  Acceptance: config tangled not hand-written, a zenburn colourscheme, and a
+  textarea editing in Emacs.
+- [ ] *passff*, putting the existing =pass= store behind Firefox autofill
+  instead of standing up a second credential path. *Spike the native-messaging
+  host under snap confinement before committing to this* — that is the usual
+  reason it silently fails, and finding out first costs an hour where finding
+  out last costs an evening. Acceptance for the spike: the host either responds
+  or is proven blocked, written up either way.
+- [ ] *Zotero connector*, feeding the citar bibliography that just landed. Worth
+  it only if papers are actually being collected; revisit when citar has real
+  use rather than on principle.
+- [ ] *Dark Reader*, for sites with no dark mode of their own. ADR-043 rejected
+  the Firefox Color extension because its state lives in extension storage
+  rather than a file; Dark Reader is the same objection but weaker, since it
+  exports JSON that could live in this repository and be re-imported by hand.
+  The ADR has to decide whether "tangleable but only by hand" clears the bar
+  ADR-043 set. Lowest priority, and the easiest to talk yourself into.
+
+*** Rejected, with reasons
+- *arkenfox user.js* — good work, but a few thousand privacy prefs against a
+  =user.js= this layer deliberately keeps to what the chrome *requires*, and
+  owning that merge every release is the real cost. Take individual prefs if
+  wanted; never the file.
+- *Shelf rank 6, multi-row tabs* — moot now that tabs are favicons, as ADR-043's
+  menu already records.
+- *=userChrome.js= / fx-autoconfig* — unchanged from ADR-043: reconsidered only
+  when something wanted genuinely cannot be expressed in CSS, and nothing in
+  this plan is that.
+
 ** TODO Phase 7 — Capability activation: use what is already installed
 :PROPERTIES:
 :ID:       project-phase-7
