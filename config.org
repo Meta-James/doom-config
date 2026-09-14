@@ -4880,3 +4880,71 @@ above. Firefox will not hand an unknown scheme to the desktop while it believes
 it should expose it itself, which is what the
 =network.protocol-handler.expose.org-protocol= pref in =firefox/user.js=
 settles.
+
+** ~/.local/share/applications/emacs-mailto.desktop
+
+Registers the =mailto:= URL scheme so a mail link anywhere on the desktop
+composes in Emacs rather than in a browser. See
+[[id:adr-mailto-emacs][ADR-047]].
+
+The reason this exists is the one ADR-045 gave, twice over. The scheme *looked*
+handled — =~/.config/mimeapps.list= named =brave-browser.desktop=, and Brave has
+never been installed on this machine — and underneath that dead line the Emacs
+build's own =emacs-mail.desktop=, installed to =/usr/local/share/applications/=
+by [[id:adr-emacs-build-flags][ADR-042]]'s =make install=, was quietly winning
+the fallback. That entry is build output: the next =emacs-rebuild= rewrites it,
+which is the objection [[id:adr-literate-config][ADR-035]] makes about
+=~/.bashrc= and ADR-043 makes about the Firefox profile.
+
+=browse-url-mail=, not =message-mailto=, is the function called. Both open a
+=message-mode= buffer today, because =mail-user-agent= is still
+=message-user-agent= on this host — mu4e's lisp is not installed here at all,
+=(require 'mu4e)= fails, see [[id:inv-desktop-state][inventory.org]]. The
+difference is what happens when it *is*: =browse-url-mail= goes through
+=compose-mail= and so through =mail-user-agent=, which Doom's =:email mu4e=
+module sets to =mu4e-user-agent=. So this entry needs no edit on the day mail is
+built out here — it follows whatever this configuration's mail client is, which
+is the [[id:adr-corfu-migration][ADR-021]] rule stated as a handler.
+
+=(pop server-eval-args-left)= is Emacs's own idiom, lifted from the
+=emacsclient-mail.desktop= that ships with the build. It matters for more than
+tidiness: the URL arrives from a web page, so it is untrusted, and this form
+passes it as *data* in =emacsclient='s argument list rather than interpolating
+it into the elisp being evaluated. The =emacs-magnet= script makes the same
+point about the =magnet:= scheme.
+
+*There is no =--create-frame=, and its absence is load-bearing rather than an
+oversight.* The obvious reading is that a mail handler should open a window, and
+the first draft of this entry said exactly that. It does not work: with =-c=,
+=emacsclient= takes the trailing =%u= as a *file to visit in the new frame*
+rather than as an argument left over for =--eval=, so =server-eval-args-left= is
+empty, =browse-url-mail= is called on nil, and nothing happens — silently, with
+a frame opening to make it look as though something did. Verified both ways on
+this host: with =-c=, no =message-mode= buffer is created at all; without it,
+=*unsent mail to noframe@example.com*= appears immediately.
+
+Emacs's own =emacsclient-mail.desktop= says the same by construction — its
+default =Exec= carries no =-c=, and =--create-frame= appears only in the
+separate =[Desktop Action new-window]=. Composing therefore lands in the running
+daemon's existing frame, which is where the user already is.
+=--alternate-editor== still starts a daemon if none is running.
+
+As with =org-protocol=, being listed is not being *default*; the association is
+user state in =~/.config/mimeapps.list=, set once by hand:
+
+: xdg-mime default emacs-mailto.desktop x-scheme-handler/mailto
+: update-desktop-database ~/.local/share/applications
+
+#+begin_src conf-desktop :tangle ~/.local/share/applications/emacs-mailto.desktop :mkdirp yes
+# Generated from ~/.config/doom/config.org -- edit there, not here.
+# Any change made directly to this file is lost on the next tangle.
+# See docs/decisions.org ADR-047.
+[Desktop Entry]
+Type=Application
+Name=Emacs (mailto)
+Comment=Compose mail in Emacs from a mailto: URL
+Exec=emacsclient --alternate-editor= --eval "(browse-url-mail (pop server-eval-args-left))" %u
+Terminal=false
+NoDisplay=true
+MimeType=x-scheme-handler/mailto;
+#+end_src

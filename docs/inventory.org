@@ -546,3 +546,76 @@ Known gaps in this checklist, honestly: it's reasoned from what this project
 actually did on this one machine, not verified against a second one. Order
 dependencies between steps 2-5 haven't been individually stress-tested (e.g.
 whether =doom sync= must run before or after the =pass= entries exist).
+
+* Desktop state: what this configuration depends on but does not own
+:PROPERTIES:
+:ID:       inv-desktop-state
+:END:
+
+Verified 2026-09-13/14. Background and the plan to close this out:
+[[id:project-desktop-state][PROJECT.org's Desktop state entry]].
+
+Everything here lives outside the repository and is depended on by something
+inside it. They all fail the same way — silently, with the symptom surfacing in
+an application that is not the one at fault.
+
+| Item                                                     | Tracked?                    | State as verified                                                      |
+|----------------------------------------------------------+-----------------------------+-----------------------------------------------------------------------------|
+| Firefox profile copies of the chrome layer               | Yes — tangled, =--check=, startup warning | In sync; =firefox-chrome-install --check= exits 0. The model for the rest |
+| =~/.local/bin/emacs-magnet=, =emacs-magnet.desktop=       | Yes, since 2026-09-13       | Tangled from =config.org=; both proved byte-identical to the hand-written originals |
+| =~/.local/share/applications/org-protocol.desktop=        | Yes                         | Tangled; =xdg-mime= default, verified end to end through =xdg-open=        |
+| =~/.config/mimeapps.list= associations                    | *No*                        | User state. Nothing asserts it; see the dangling rows below                 |
+| =~/.local/share/fonts/literata/=                          | *No*                        | Two variable files fetched by hand 2026-09-13                               |
+| =~/.local/share/fonts/jetbrains-mono-nerd/=               | *No*                        | 98 files from the =ryanoasis= release, fetched by hand                      |
+| Font =apt= packages                                       | *No*                        | =fonts-ebgaramond=, =fonts-vollkorn=, =fonts-ibm-plex=, =fonts-jetbrains-mono=, =fonts-sil-charis= — installed, but nothing names them |
+
+** The scheme handlers, and the two that were dangling
+
+=xdg-mime query default= as verified on this host:
+
+As found, 2026-09-13:
+
+| Scheme         | =mimeapps.list= said      | Actually resolved to           | Verdict                                       |
+|----------------+---------------------------+--------------------------------+-----------------------------------------------|
+| =org-protocol= | =org-protocol.desktop=    | =org-protocol.desktop=         | Correct; ours                                 |
+| =magnet=       | =emacs-magnet.desktop=    | =emacs-magnet.desktop=         | Correct; ours                                 |
+| =mailto=       | =brave-browser.desktop=   | =emacs-mail.desktop=           | Dead line, rescued by build output — see below |
+| =about=        | =brave-browser.desktop=   | nothing                        | Dangling                                      |
+| =webcal=       | =brave-browser.desktop=   | nothing                        | Dangling                                      |
+| =unknown=      | =brave-browser.desktop=   | nothing                        | Dangling                                      |
+
+*Brave has never been installed on this machine.* =find / -name 'brave-browser.desktop'=
+returns nothing. *Four* associations named it — the first count of three missed
+=unknown=, which is the generic "scheme nothing else claims" handler and so the
+one that would have swallowed the most.
+
+As of 2026-09-14 all four =brave-browser.desktop= lines are gone from
+=~/.config/mimeapps.list= (=grep -c brave-browser= returns 0). =mailto= resolves
+to the tangled =emacs-mailto.desktop= of [[id:adr-mailto-emacs][ADR-047]];
+=about=, =webcal= and =unknown= resolve to nothing, deliberately, because
+nothing in this configuration owns them and the desktop asking is the honest
+answer.
+
+=mailto= is the instructive one, and the reason the count of "dangling" rows
+depends on how you ask. The =mimeapps.list= line is dead, but XDG then falls
+through to =/usr/local/share/applications/emacs-mail.desktop= — build output
+from [[id:adr-emacs-build-flags][ADR-042]]'s =make install= — so mail links
+*worked*, by accident, through a file the next =emacs-rebuild= rewrites. Its
+=Exec= is =emacs -f message-mailto %u=: a whole new Emacs per click, ignoring
+the running daemon. Replaced by a tangled entry; see
+[[id:adr-mailto-emacs][ADR-047]].
+
+** mu4e: the module is on, the lisp is absent
+
+Checked in the running daemon: =(featurep 'mu4e)= is nil, =(locate-library "mu4e")=
+is nil, and =mail-user-agent= is =message-user-agent=, Emacs's default. The =mu=
+binary *is* present at =/usr/bin/mu=. So Doom's =:email mu4e= module is enabled
+and this host has no mu4e lisp to load — the elisp ships separately from the
+=mu= binary and was never installed.
+
+This extends, rather than contradicts,
+[[id:inv-homedir-state-loss][the credential and mail section above]]: mail
+was never set up here, and the module flag has been masking it. Nothing in the
+ADR-047 handler depends on fixing it — =browse-url-mail= routes through
+=mail-user-agent=, so it composes in =message-mode= today and in mu4e the day
+the lisp is installed, with no edit.

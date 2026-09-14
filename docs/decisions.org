@@ -8401,3 +8401,174 @@ in the configuration depends on any of it.
   at a =brave-browser.desktop= that is not installed anywhere on this machine.
   Planned as [[id:project-desktop-state][Desktop state]] in =PROJECT.org=; the
   installer itself needs its own ADR.
+
+* ADR-047: =mailto:= composes in Emacs, through a tangled handler that follows =mail-user-agent=
+:PROPERTIES:
+:ID:       adr-mailto-emacs
+:STATUS:   Implemented; handler installed and the association set, and verified to open a compose buffer from a real =mailto:= URL through =xdg-open=. It composes in =message-mode=, not mu4e, because this host has no mu4e lisp — see Consequences
+:DATE:     2026-09-14
+:END:
+
+** Context
+
+Stage 1 of [[id:project-desktop-state][PROJECT.org's Desktop state entry]],
+which exists because three ADRs in three days each ended by noting they had
+added state outside the repository with nothing watching it.
+
+The survey found =~/.config/mimeapps.list= pointing =x-scheme-handler/mailto=,
+=about= and =webcal= at =brave-browser.desktop=, and Brave has never been
+installed on this machine. The first reading was "three dangling associations".
+The second reading is more interesting and is what this entry is really about:
+=mailto= was *not* broken. XDG fell through the dead line to
+=/usr/local/share/applications/emacs-mail.desktop=, installed by the =make
+install= of [[id:adr-emacs-build-flags][ADR-042]]'s Emacs build, and mail links
+opened. Through build output, with =Exec=emacs -f message-mailto %u= — a whole
+new Emacs per click, ignoring the daemon that is already running, and rewritten
+by the next =emacs-rebuild=.
+
+That is the same shape as [[id:adr-org-protocol-capture][ADR-045]]'s =%F=
+handler, one turn worse: there, a wrong entry made the scheme look handled while
+doing nothing. Here a wrong entry makes it look handled *and works*, which is
+harder to notice and no more durable.
+
+** Decision drivers
+
+- One tool per responsibility ([[id:adr-corfu-migration][ADR-021]]). This
+  configuration has a mail client. A =mailto:= link opening a browser would be a
+  second mail client admitted through the back door.
+- [[id:adr-literate-config][ADR-035]]: what the configuration depends on is
+  tangled, not left as hand-made state that reverts. Build output is the clearest
+  possible case of state that reverts — on a schedule this repository controls.
+- The handler should not have to be edited when the mail client changes. This
+  host's mail situation is mid-flight (see Consequences), so a handler naming a
+  client would be wrong twice: wrong now, and wrong again later.
+- Untrusted input. A =mailto:= URL comes from a web page.
+
+** Candidates
+
+| Candidate                                                   | Fate     | Reason                                                                                          |
+|-------------------------------------------------------------+----------+-----------------------------------------------------------------------------------------------------|
+| Tangled entry calling =browse-url-mail= via =emacsclient=    | Chosen   | =browse-url-mail= goes through =compose-mail= and therefore =mail-user-agent=, which Doom's =:email mu4e= module sets. The handler follows whatever the mail client is, with no edit |
+| Tangled entry calling =mu4e~compose-mailto= or =mu4e= directly | Rejected | Names the client. Fails outright on this host today, where mu4e's lisp is absent, and would need editing if the client ever changed |
+| Leave the fallback to =/usr/local/.../emacs-mail.desktop=    | Rejected | Build output; =emacs-rebuild= rewrites it. Also =emacs -f message-mailto=, a new Emacs per click rather than the running daemon |
+| Repoint =mailto= at Firefox                                  | Rejected | A second mail client, against ADR-021, and this configuration's mail client is not a webmail tab |
+| Remove the =mailto= line and let the desktop ask each time    | Rejected | Correct for =about= and =webcal=, which have no owner here; wrong for =mailto=, which does |
+
+** Evidence
+
+Verified on this host, 2026-09-13/14:
+
+- =find / -name 'brave-browser.desktop' -not -path '/proc/*'= returns nothing.
+  =~/.config/mimeapps.list= names it on three lines.
+- Before the change, =xdg-mime query default x-scheme-handler/mailto= answered
+  =emacs-mail.desktop=, which exists only at
+  =/usr/local/share/applications/emacs-mail.desktop= with
+  =Exec=emacs -f message-mailto %u=. =about= and =webcal= answered nothing.
+- *mu4e's lisp is not installed here.* In the running daemon,
+  =(featurep 'mu4e)= and =(locate-library "mu4e")= are both nil and
+  =mail-user-agent= is =message-user-agent=, while =/usr/bin/mu= does exist.
+  Doom's =:email mu4e= module is enabled against absent lisp. Recorded in
+  [[id:inv-desktop-state][inventory.org]]; it is an extension of the
+  already-recorded fact that mail was never set up on this host, not a new
+  contradiction of it.
+- After the change, =xdg-open 'mailto:...'= opened a compose buffer in the
+  running daemon with the address, subject and body fields populated from the
+  URL — see Validation for exactly what was and was not exercised.
+
+** Decision
+
+- Tangle =~/.local/share/applications/emacs-mailto.desktop= from the =* Desktop
+  integration= section of =config.org=, with
+  =Exec=emacsclient --alternate-editor= --eval "(browse-url-mail (pop server-eval-args-left))" %u=.
+- Set the association once by hand, since it is user state a =.desktop= file
+  cannot assert:
+  =xdg-mime default emacs-mailto.desktop x-scheme-handler/mailto=.
+- Remove the dead =about=, =webcal= and =unknown= lines from =~/.config/mimeapps.list=
+  rather than repointing them. Neither scheme has an owner in this
+  configuration, and letting the desktop choose is the honest answer.
+
+Three details carry the weight:
+
+=browse-url-mail=, not =message-mailto=, so the handler names a *role* and not a
+client. Today both open =message-mode=; the day mu4e's lisp is installed,
+=mail-user-agent= becomes =mu4e-user-agent= and this entry follows without an
+edit. It is ADR-021's rule expressed as a desktop entry.
+
+=(pop server-eval-args-left)= is Emacs's own idiom, lifted from the
+=emacsclient-mail.desktop= that ships with the build. It passes the URL as
+*data* in =emacsclient='s argument list instead of interpolating it into the
+elisp being evaluated — the same care =emacs-magnet= takes with =magnet:= URIs,
+for the same reason.
+
+*No =--create-frame=*, and the absence is the part worth recording. The first
+draft of this entry had it, on the reasonable-sounding grounds that a handler
+should open a window. Testing it showed the opposite: with =-c=, =emacsclient=
+treats the trailing =%u= as a file to visit in the new frame rather than as an
+argument left for =--eval=, so =server-eval-args-left= comes back empty,
+=browse-url-mail= runs on nil, and nothing is composed — while a frame opens,
+making it look as though something happened. Verified both ways on this host.
+Emacs's own =emacsclient-mail.desktop= agrees by construction: no =-c= in its
+default =Exec=, only in the separate =[Desktop Action new-window]=.
+=--alternate-editor== still starts a daemon when none is running.
+
+That this was caught at all is the argument for Stage 3's =--check=. The
+handler was *written* correctly against upstream's documented idiom and was
+still wrong, and the failure mode was a frame opening with nothing in it — the
+third variation in three days on "registered, looks handled, does nothing".
+
+** Consequences
+
+- This configuration now claims the =mailto= role while being unable to *send*
+  mail on this host — no mu4e lisp, no =~/.msmtprc=, no =~/.mbsyncrc=. Composing
+  works; sending does not. That was already true before this entry and is not
+  made worse by it, but the handler makes the gap reachable in one click, which
+  is arguably how it should have been surfaced all along.
+- =:email mu4e= being enabled against absent lisp is a real defect this work
+  surfaced and did not fix. It belongs to the mail workstream, not here.
+- =about=, =webcal= and =unknown= now have no handler at all. That is a deliberate
+  downgrade from "dangling" to "absent": the desktop will ask, which is correct
+  when nothing owns the scheme.
+- Four tangled =.desktop= entries and three =xdg-mime= associations now exist,
+  each set by hand once. This is the argument for Stage 3's =desktop-install=
+  getting strictly stronger with each entry added.
+
+** Rejected alternatives
+
+See the Candidates table above.
+
+** Validation
+
+Done:
+
+- The tangled block reproduces the installed file byte-for-byte, proved by
+  extracting the block from =config.org= and hashing it against the file on
+  disk.
+- =xdg-mime query default x-scheme-handler/mailto= answers
+  =emacs-mailto.desktop=.
+- =xdg-open= on a =mailto:= URL with address, =?subject== and =&body= opened a
+  populated compose buffer in the running daemon.
+
+Not done, and not claimed: nothing was *sent*. This host cannot send mail. The
+mu4e path — =mail-user-agent= resolving to =mu4e-user-agent= — is reasoned from
+=compose-mail='s documented behaviour and Doom's module source, not exercised,
+because the lisp to exercise it is not installed.
+
+** Rollback
+
+=xdg-mime default emacs-mail.desktop x-scheme-handler/mailto= restores the
+previous behaviour, or delete the =mailto= line for none. Remove the block from
+=config.org= and delete
+=~/.local/share/applications/emacs-mailto.desktop=. The =about= and =webcal=
+lines can be restored from git history if a browser is ever installed that wants
+them.
+
+** Revisit when
+
+- mu4e's lisp is installed. Confirm =mail-user-agent= became =mu4e-user-agent=
+  and that a =mailto:= click composes in mu4e, which is the claim this entry
+  reasons about but could not test.
+- The mail workstream fixes sending. At that point the compose-but-cannot-send
+  asymmetry closes, and the =:email mu4e=-without-lisp defect should be closed
+  with it.
+- A browser that owns =about= or =webcal= is installed, at which point those two
+  lines want repointing rather than leaving absent.
