@@ -322,6 +322,47 @@ ordinary tangling of the primary checkout is unaffected."
 See `+my/font-family'. Changing a list here changes Emacs and Firefox
 together -- see docs/decisions.org ADR-044.")
 
+;; Where each of those families comes from. `+my/font-families' says what to
+;; prefer; this says how to get it, which is the half that was missing when
+;; ADR-044 installed five families by hand and left nothing naming them.
+;; `desktop-install' is generated from both, and the generator fails the tangle
+;; if a family is listed above with no source here -- that mismatch is exactly
+;; the drift this table exists to prevent. Not used at runtime; it is
+;; declaration, read at tangle time.
+(defvar +my/font-sources
+  '(("JetBrainsMono Nerd Font" tarball "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz" "jetbrains-mono-nerd")
+    ("Literata"       files "literata"
+     "https://raw.githubusercontent.com/google/fonts/main/ofl/literata/Literata%5Bopsz,wght%5D.ttf"
+     "https://raw.githubusercontent.com/google/fonts/main/ofl/literata/Literata-Italic%5Bopsz,wght%5D.ttf")
+    ("JetBrains Mono" apt "fonts-jetbrains-mono")
+    ("IBM Plex Mono"  apt "fonts-ibm-plex")
+    ("IBM Plex Sans"  apt "fonts-ibm-plex")
+    ("IBM Plex Serif" apt "fonts-ibm-plex")
+    ("EB Garamond"    apt "fonts-ebgaramond")
+    ("Vollkorn"       apt "fonts-vollkorn")
+    ("Charis SIL"     apt "fonts-sil-charis")
+    ("Ubuntu"         apt "fonts-ubuntu")
+    ("Noto Sans"      apt "fonts-noto-core")
+    ("Noto Serif"     apt "fonts-noto-core")
+    ("DejaVu Sans"    apt "fonts-dejavu-core")
+    ("DejaVu Sans Mono" apt "fonts-dejavu-core"))
+  "How to obtain each family named in `+my/font-families'.
+Each entry is (FAMILY METHOD . ARGS). `apt' takes a package name and is only
+ever *reported*, never installed -- that needs a password. `files' takes a
+subdirectory of ~/.local/share/fonts and then one URL per file. `tarball'
+takes a URL and a subdirectory to unpack into. See docs/decisions.org ADR-046.")
+
+;; The URL schemes this configuration claims, and the tangled .desktop entry
+;; that should own each. Being listed in a .desktop file is not the same as
+;; being the default: the association is user state in ~/.config/mimeapps.list,
+;; which no tangle reaches. `desktop-install' asserts these; `--check' reports
+;; when one has been taken over.
+(defvar +my/scheme-handlers
+  '(("x-scheme-handler/org-protocol" . "org-protocol.desktop")
+    ("x-scheme-handler/magnet"       . "emacs-magnet.desktop")
+    ("x-scheme-handler/mailto"       . "emacs-mailto.desktop"))
+  "Scheme to owning .desktop entry. See docs/decisions.org ADR-046.")
+
 (defun +my/font-family (role)
   "Return the first installed family for ROLE in `+my/font-families'.
 Falls back to the head of the list when no display is available to ask --
