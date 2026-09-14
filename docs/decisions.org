@@ -4773,6 +4773,34 @@ See the Candidates table above.
 :DATE:     2026-08-23
 :END:
 :LOGBOOK:
+- Note taken on [2026-09-13 Sun] \\
+  *The two out-of-git files this ADR depended on are now tangled from
+  =config.org=*, closing the gap the 2026-08-23 amendment opened and left
+  standing: =~/.local/bin/emacs-magnet= in the Shell layer section beside
+  =pass-backup= and =emacs-rebuild=, and
+  =~/.local/share/applications/emacs-magnet.desktop= in Desktop integration
+  beside =org-protocol.desktop=. This entry is no longer their only record;
+  =config.org= is. Done as Stage 2 of PROJECT.org's desktop-state entry, on
+  [[id:adr-literate-config][ADR-035]]'s terms.
+
+  The acceptance test was byte-identity, the same proof ADR-035 used for the
+  shell layer: =config.org= was copied to =/tmp=, its =:tangle ~/…= headers
+  rewritten to a sandbox-relative prefix so nothing could touch the real
+  =$HOME=, tangled, and diffed. Both files came out identical to what was
+  already on disk — =md5sum= =91aac4e4…= for the script (572 bytes) and
+  =e586be94…= for the desktop entry (214 bytes) — and the four previously
+  tangled =$HOME= files came out unchanged, so the insertion moved nothing.
+  =xdg-mime query default x-scheme-handler/magnet= still resolves to
+  =emacs-magnet.desktop=.
+
+  Two quirks were preserved rather than fixed, because fixing them in the same
+  change would have destroyed the proof: neither file carries the "generated
+  from =config.org=" header its siblings do, and the =.desktop= =Exec= line
+  hardcodes this machine's =$HOME= rather than resolving the wrapper on =PATH=,
+  so another host wants an edit there. One thing did change: the script tangles
+  =:tangle-mode (identity #o700)=, matching its three siblings, where the
+  hand-written file was 775. Content is identical; only the group and other
+  bits are dropped, and nothing but this user ever executes it.
 - Note taken on [2026-08-29 Fri] \\
   The two checks the 2026-08-23 entry left open are now closed by observation
   rather than by mechanism, on the first real transfers this daemon has seen.
@@ -4943,9 +4971,11 @@ because it would remove the system-package install entirely.
 - Amended 2026-08-23: the =browse-url-handlers= entry only governs links that
   originate *inside* Emacs. The desktop still routed =x-scheme-handler/magnet=
   to =org.qbittorrent.qBittorrent.desktop=, so a magnet clicked in Firefox went
-  to the client this ADR chose against. Two files outside this repo now close
-  that gap, and being outside =$DOOMDIR= they are not under git — this entry is
-  their only record:
+  to the client this ADR chose against. Two files close that gap. They were
+  hand-written in =$HOME= and outside git until 2026-09-13, when both were
+  brought into =config.org= as tangled blocks — see the =:LOGBOOK:= entry for
+  that date. =config.org= is now their source of truth; what follows is why
+  they are shaped the way they are:
   - =~/.local/bin/emacs-magnet= — escapes the URI for an Emacs Lisp string
     literal, then calls =emacsclient -a '' -e '(transmission-add "…")'=. The
     =-a ''= starts a daemon when no Emacs is running so a magnet is not
@@ -4994,9 +5024,12 @@ See the Candidates table above.
 - System package: =sudo apt remove transmission-daemon=. Torrent state and
   settings survive in =~/.config/transmission-daemon/= unless separately
   removed.
-- Desktop =magnet:= handler (added 2026-08-23, outside git):
+- Desktop =magnet:= handler (added 2026-08-23, tangled from =config.org= since
+  2026-09-13): delete the =~/.local/bin/emacs-magnet= and
+  =~/.local/share/applications/emacs-magnet.desktop= blocks from =config.org=
+  first, or the next tangle puts both files straight back. Then
   =xdg-mime default org.qbittorrent.qBittorrent.desktop x-scheme-handler/magnet=,
-  then =rm ~/.local/share/applications/emacs-magnet.desktop ~/.local/bin/emacs-magnet=
+  =rm ~/.local/share/applications/emacs-magnet.desktop ~/.local/bin/emacs-magnet=
   and =update-desktop-database ~/.local/share/applications=.
 
 ** Revisit when

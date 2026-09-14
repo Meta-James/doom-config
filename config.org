@@ -3373,6 +3373,56 @@ Rollback:
 EOF
 #+end_src
 
+** ~/.local/bin/emacs-magnet
+The desktop half of [[id:adr-torrent-transmission][ADR-030]]'s =magnet:=
+handling. The =.desktop= entry that points at it lives in
+[[id:literate-desktop-integration][Desktop integration]]; this is the thing it
+executes.
+
+All it does is hand the URI to a running Emacs as one string:
+=emacsclient -a '' -e '(transmission-add "…")'=. The =-a ''= starts a daemon
+when none is running, so a magnet clicked on a cold machine is not silently
+dropped.
+
+*The escaping is the whole script, and it is a security boundary.* The URI
+arrives from a web page, so it is untrusted. It is never interpolated into a
+shell command -- =emacsclient= is =exec='d with the URI as a single argument --
+and the only two characters that mean anything inside an Emacs Lisp string
+literal, =\= and ="=, are escaped before it goes in. ADR-030 proved that with a
+URI carrying an embedded =(shell-command "touch /tmp/pwned")= payload: it
+arrived at =transmission-add= as one 70-character string and the file was never
+created. Anything added here that builds a shell command out of =$url= reopens
+that hole.
+
+Tangled from here for the same reason =pass-backup= and =emacs-rebuild= are
+([[id:adr-literate-config][ADR-035]]): ADR-030 verified this chain end to end
+and then left the script hand-written in =$HOME=, outside git, with the ADR's
+prose as its only record. Lose =$HOME= and the torrent workflow goes with it.
+
+The block deliberately carries no "generated from" header, unlike its siblings
+above. The acceptance test for bringing it in was that the first tangle be
+*byte-identical* to the file already on disk, so nothing was added or reflowed
+on the way in -- the same proof ADR-035 used for the shell layer. The header is
+a separate change, and it does not belong in the commit that is the proof.
+
+#+begin_src sh :tangle ~/.local/bin/emacs-magnet :shebang "#!/usr/bin/env bash" :tangle-mode (identity #o700)
+# Hand a magnet: URI to the running Emacs, which routes it to transmission-add
+# (see $DOOMDIR/config.el browse-url-handlers, ADR-030).
+#
+# The URI comes from a web page, so it is untrusted. It is never interpolated
+# into a shell command; the only escaping done here is for the two characters
+# that are special inside an Emacs Lisp string literal.
+set -euo pipefail
+
+url=${1:-}
+[[ -n $url ]] || { echo "usage: emacs-magnet <magnet-uri>" >&2; exit 2; }
+
+esc=${url//\\/\\\\}
+esc=${esc//\"/\\\"}
+
+exec emacsclient -a '' -e "(transmission-add \"$esc\")"
+#+end_src
+
 ** ~/.inputrc
 Readline configuration. Emacs runs Evil, so the shell matches it.
 
@@ -4706,8 +4756,9 @@ toolbar layout is drag-and-drop in Customize. CSS is for what is left over.
 
 The fourth thing this file owns, after Emacs, the shell and Firefox: the
 =.desktop= entries that let the rest of the desktop hand work to Emacs. Today
-that is one entry, for =org-protocol=. See
-[[id:adr-org-protocol-capture][ADR-045]].
+that is two entries: =org-protocol=, for handing a page to a capture
+([[id:adr-org-protocol-capture][ADR-045]]), and =magnet=, for handing a torrent
+link to =transmission-add= ([[id:adr-torrent-transmission][ADR-030]]).
 
 ** ~/.local/share/applications/org-protocol.desktop
 
@@ -4757,6 +4808,56 @@ Exec=emacsclient --no-wait --alternate-editor= %u
 Terminal=false
 NoDisplay=true
 MimeType=x-scheme-handler/org-protocol;
+#+end_src
+
+** ~/.local/share/applications/emacs-magnet.desktop
+
+Registers the =magnet:= URL scheme, so a torrent link clicked in a *browser*
+reaches =transmission-add= inside Emacs rather than the GUI qBittorrent
+[[id:adr-torrent-transmission][ADR-030]] chose against.
+
+The =browse-url-handlers= entry ADR-030 put in the Emacs section only governs
+links that originate *inside* Emacs -- eww, elfeed, an Org link. A magnet
+clicked in Firefox never reaches it; that hop goes through XDG, which is what
+this entry answers. The script it executes is
+[[*~/.local/bin/emacs-magnet][=~/.local/bin/emacs-magnet=]], in the shell layer
+with its siblings.
+
+ADR-030 verified the whole chain end to end and then left both halves
+hand-written in =$HOME=, outside git, with the ADR's prose as their only
+record. That is the shape [[id:adr-literate-config][ADR-035]] was written
+about, and the reason they are tangled from here now.
+
+=Exec= names the wrapper by absolute path rather than relying on =PATH=:
+=~/.local/bin= is on the interactive shell's =PATH=, not necessarily on the
+environment a desktop launcher -- or a snap Firefox's =xdg-desktop-portal=
+=OpenURI= call -- hands to the process it spawns. =%u= is the field code for a
+single URL, the same distinction [[id:adr-org-protocol-capture][ADR-045]] draws
+about =emacsclient.desktop='s wrong =%F=. =NoDisplay=true= keeps it out of the
+applications menu: it is a handler, not something anyone launches.
+
+Being listed is not being *default*. That association is user state in
+=~/.config/mimeapps.list=, which no =.desktop= file can assert, so it is set
+once by hand:
+
+: xdg-mime default emacs-magnet.desktop x-scheme-handler/magnet
+: update-desktop-database ~/.local/share/applications
+
+Two quirks are preserved rather than fixed, because the acceptance test for
+bringing this file in was that the first tangle be *byte-identical* to what was
+already on disk. It carries no "generated from" header, and it hardcodes this
+machine's =$HOME= in =Exec=, so another host wants an edit there. Both are real,
+both are worth changing, and both belong in a later commit whose diff is not
+also the proof.
+
+#+begin_src conf-desktop :tangle ~/.local/share/applications/emacs-magnet.desktop :mkdirp yes
+[Desktop Entry]
+Name=Emacs (transmission)
+Comment=Hand magnet: links to transmission-daemon via Emacs
+Exec="/home/james/.local/bin/emacs-magnet" %u
+Type=Application
+NoDisplay=true
+MimeType=x-scheme-handler/magnet;
 #+end_src
 
 ** The Firefox half: a bookmarklet
