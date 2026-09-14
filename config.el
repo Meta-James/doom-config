@@ -1887,6 +1887,19 @@ for CITEKEY."
                  "* %?\n%U" :empty-lines 1)
                'append))
 
+(after! org
+  (add-to-list 'org-capture-templates
+               `("c" "Web capture (org-protocol)" entry
+                 (file+headline ,(expand-file-name "todo.org" org-directory) "Inbox")
+                 ;; `%:description' is the page title and `%:annotation' the
+                 ;; [[url][title]] link, both set by `org-protocol-capture';
+                 ;; `%i' is whatever was selected in the page. Title as the
+                 ;; heading keeps it searchable, the link on its own line keeps
+                 ;; it clickable, and `%?' puts point after the title so a note
+                 ;; can be typed immediately.
+                 "* %:description%?\n%U\n%:annotation\n\n%i" :empty-lines 1)
+               'append))
+
 ;; org-roam-ui: graph visualization, reading org-roam's OWN sqlite DB, not
 ;; Vulpea's. org-roam-directory is scoped to ~/org/roam/ only (see "org-roam
 ;; alongside Vulpea" above) -- so org-roam-ui graphs that one subtree and

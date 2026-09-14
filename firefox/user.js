@@ -18,6 +18,12 @@ user_pref("userchrome.navbar-tabs-oneliner.tabs-on-right.enabled", true);
 user_pref("userchrome.autohide-bookmarks.enabled", true);
 user_pref("userchrome.autohide-toolbox.enabled", true);
 
+// Hand org-protocol: URLs to the desktop instead of trying to resolve them
+// internally, which is what makes the capture bookmarklet reach Emacs at all.
+// See docs/decisions.org ADR-045; the handler itself is tangled to
+// ~/.local/share/applications/org-protocol.desktop.
+user_pref("network.protocol-handler.expose.org-protocol", false);
+
 // Compact density is a Firefox feature that is hidden rather than absent: this
 // pref only makes "Compact" appear in Customize's density menu, which still
 // has to be picked once by hand. It pins nothing -- the density itself stays a

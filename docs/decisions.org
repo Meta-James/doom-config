@@ -8175,3 +8175,189 @@ all of this and can be left or deleted from
 - Any additional language group needs the same treatment — the current prefs are
   =x-western= only, which is correct for this machine and would not be on one
   reading CJK.
+
+* ADR-045: Capture a web page into org with org-protocol, through a tangled desktop entry and a bookmarklet
+:PROPERTIES:
+:ID:       adr-org-protocol-capture
+:STATUS:   Implemented; the whole chain verified live against the running daemon, including through the desktop handler. The bookmarklet itself is the one step that cannot be installed from here and needs a human
+:DATE:     2026-09-13
+:END:
+
+** Context
+
+Stage 3 of the browser-integration plan in =PROJECT.org=, and the item it ranked
+highest: vulpea, citar, PARA and GTD all landed upstream in the same week, and
+capturing a page into an org note was described there as "the missing half of
+that work". The plan stated the gap as "there is no =org-protocol= handler and
+no =.desktop= entry for one".
+
+Checking that first — as with the =doom-font= premise in
+[[id:adr-font-roles][ADR-044]] — changed the shape of the work twice over, in
+opposite directions:
+
+- *More was already present than the plan assumed.* Doom's =:lang org= already
+  loads =org-protocol=, lazily, through a =server-visit-files= advice that
+  watches for an argument matching =org-protocol:/=. There is no module flag to
+  set, no =require= to add, and no package to declare. This is the third time in
+  this repository that "not named in =config.org=" has been mistaken for "not
+  configured"; the Emacs half of this feature needed exactly one capture
+  template.
+- *What was present was worse than nothing.*
+  =xdg-mime query default x-scheme-handler/org-protocol= answered
+  =emacsclient.desktop=, i.e. the scheme looked handled. It is Emacs's own entry,
+  installed to =/usr/local/share/applications/= by the =make install= of
+  [[id:adr-emacs-build-flags][ADR-042]]'s build, and its =Exec= line ends in
+  =%F= — the field code for a *file list*, not =%u= for a URL. A registration
+  that resolves to a text-editor launcher fails in the least informative way
+  available: the click does nothing, and every diagnostic says a handler is
+  installed.
+
+** Decision drivers
+
+- One tool per responsibility ([[id:adr-corfu-migration][ADR-021]]). Nothing in
+  this configuration currently owns "get a web page into org", so the role is
+  free — but it should be filled by the smallest thing that fills it.
+- [[id:adr-firefox-chrome-layer][ADR-043]]'s objection to the Firefox Color
+  extension applies to capture extensions too: configuration that lives in
+  extension storage is not a file, not tangleable, not diffable, and gone with
+  the profile.
+- [[id:adr-literate-config][ADR-035]]: anything this configuration depends on
+  should be tangled from =config.org=, not left as hand-made state that reverts.
+  The =/usr/local= entry is a live demonstration — it is rewritten by
+  =emacs-rebuild=.
+- Capture must work from a cold machine, not only when a daemon happens to be
+  up.
+
+** Candidates
+
+| Candidate                                              | Fate     | Reason                                                                                          |
+|--------------------------------------------------------+----------+-----------------------------------------------------------------------------------------------------|
+| Tangled =.desktop= in =~/.local/share/applications/=    | Chosen   | User-level XDG precedence beats the =/usr/local= entry without touching it, survives =emacs-rebuild=, and is tangled and diffable like everything else here |
+| Correct the Emacs build's =emacsclient.desktop= in place | Rejected | Owned by =make install=; the next rebuild reverts it, and the loss lands exactly when the machine is already disturbed |
+| A bookmarklet for the Firefox half                     | Chosen   | One line of JavaScript, no extension, no extension storage, nothing to keep updated. Uses only =location=, =document.title= and =getSelection= |
+| The org-capture browser extension                      | Rejected | A second tool for what one line does, with its configuration in extension storage — ADR-043's objection to Firefox Color, unchanged |
+| A new =org-protocol= handler script in =~/.local/bin/=  | Rejected | =emacsclient= already is that script. A wrapper would exist only to re-specify flags the =.desktop= file can carry |
+| Capture into a new =web.org=                            | Rejected | A new file is a new review problem. The GTD inbox and the =u= agenda view already exist for unfiled input, which is what a captured page is |
+
+** Evidence
+
+Checked on this machine, 2026-09-13:
+
+- Doom's =modules/lang/org/config.el= carries =+org--server-visit-files-a=, an
+  =:around= advice on =server-visit-files= whose comment reads "Wait until an
+  org-protocol link is opened via emacsclient to load =org-protocol=". Nothing
+  in =config.org= mentions org-protocol, and nothing needs to.
+- =xdg-mime query default x-scheme-handler/org-protocol= returned
+  =emacsclient.desktop= *before any change*. The file is at
+  =/usr/local/share/applications/emacsclient.desktop=, =/usr/local/share/= is on
+  =XDG_DATA_DIRS=, its =MimeType= ends =...;x-scheme-handler/org-protocol;= and
+  its =Exec= ends =sh %F=.
+- Capture keys =t=, =n=, =v= (ADR-017), =p=, =s=, =w= (GTD extensions) and =f=
+  (PARA) are taken. =c= is free.
+- *The full chain was exercised live*, against the running daemon, with a
+  throwaway template writing to a scratch file so no real org data was touched:
+  1. =emacsclient --no-wait "org-protocol://capture?template=Z&url=...&title=...&body=..."=
+     produced a heading carrying the title, an =[[url][title]]= link and the
+     selected text.
+  2. =xdg-open= with the same URL — the path a browser actually takes, through
+     =mimeapps.list= and the new =.desktop= entry — produced a second, identical
+     capture. This is the step that distinguishes "org-protocol works" from
+     "the browser can reach org-protocol", and it is the step the =%F= entry
+     would have failed.
+  The throwaway template was then removed and the scratch file deleted.
+- The =.desktop= file installed by hand for that test is *byte-identical* to
+  what the =config.org= block tangles, checked by tangling a copy of
+  =config.org= with the target path rewritten and diffing. So the first real
+  =doom sync= will not change it.
+- Incidental, and not acted on here: the running daemon holds only three capture
+  templates, i.e. it predates the GTD and PARA work already committed
+  upstream. It needs a restart for reasons that have nothing to do with this
+  ADR.
+
+** Decision
+
+- Tangle =~/.local/share/applications/org-protocol.desktop= from a new *Desktop
+  integration* section in =config.org=, with
+  =Exec=emacsclient --no-wait --alternate-editor= %u=. =%u= because the argument
+  is a URL; =--no-wait= so the browser is not left waiting on a capture buffer
+  in another application; =--alternate-editor== so a cold machine starts a
+  daemon rather than failing.
+- Register it as the default once, by hand, because the association is user
+  state in =~/.config/mimeapps.list= and not something a =.desktop= file can
+  assert:
+  =xdg-mime default org-protocol.desktop x-scheme-handler/org-protocol=.
+- Add capture template =c=, "Web capture (org-protocol)", filing into the
+  =todo.org= "Inbox" headline with the page title as the heading, the
+  =[[url][title]]= annotation on its own line, and the selection as body.
+- Set =network.protocol-handler.expose.org-protocol= to =false= in
+  =firefox/user.js=, so Firefox hands the scheme to the desktop instead of
+  trying to resolve it itself.
+- Document the bookmarklet in =config.org= as a source block marked
+  =:tangle no=. It is added to the bookmarks toolbar by hand; there is nowhere
+  to tangle a Firefox bookmark to, since they live in =places.sqlite=.
+
+** Consequences
+
+- The =/usr/local= =emacsclient.desktop= is left exactly as it is. It keeps
+  claiming the scheme and keeps being wrong about it; the user-level entry
+  simply wins. That is deliberate — editing it would be editing build output —
+  but it means =xdg-mime query= is the only honest way to tell which one is in
+  force, and a future reader who finds two handlers should not "tidy up" by
+  deleting ours.
+- Capture now depends on three things agreeing: the =.desktop= file, the
+  =mimeapps.list= association, and the template key in both the bookmarklet and
+  =org-capture-templates=. Renaming template =c= means editing the bookmarklet
+  in the browser, which no tangle reaches.
+- =~/.config/mimeapps.list= is untracked state that this configuration now
+  depends on — the same class of drift ADR-043's =--check= exists for, and the
+  same class the hand-installed fonts of ADR-044 introduced. It is one line and
+  it is documented, but it is a third instance of the pattern, which is worth
+  noticing rather than absorbing.
+- The bookmarklet sends the page *title, URL and selection* to Emacs, and
+  nothing else. It runs no network request of its own.
+
+** Rejected alternatives
+
+See the Candidates table above.
+
+** Validation
+
+Done, and described concretely in Evidence: capture verified through
+=emacsclient= directly and through =xdg-open=, the latter being the browser's
+own path; the tangled =.desktop= confirmed byte-identical to the installed one;
+the temporary test template and its scratch file removed afterwards.
+
+Outstanding:
+
+- Add the bookmarklet to the Firefox bookmarks toolbar by hand — the one step
+  that cannot be done from here.
+- Restart the Emacs daemon so template =c= exists, then click the bookmarklet on
+  a real page and confirm the entry lands under "Inbox" in =todo.org= and shows
+  up in the =u= agenda view.
+- Run =firefox-chrome-install= and restart Firefox so
+  =network.protocol-handler.expose.org-protocol= takes effect. Until then
+  Firefox may show its own "choose an application" dialog instead of going
+  straight to Emacs.
+
+** Rollback
+
+Delete =~/.local/share/applications/org-protocol.desktop= and its =config.org=
+block, remove the =c= template and the =network.protocol-handler= pref, and run
+=xdg-mime default emacsclient.desktop x-scheme-handler/org-protocol= (or edit
+the line out of =~/.config/mimeapps.list=). Delete the bookmark. Nothing else
+in the configuration depends on any of it.
+
+** Revisit when
+
+- A capture wants to land somewhere other than the GTD inbox — a literature note
+  via citar, or a vulpea note — at which point this becomes several templates
+  and several bookmarklets, and the template key stops being the only thing the
+  bookmarklet has to know.
+- The bookmarklet stops working because a site's Content-Security-Policy blocks
+  =javascript:= URLs, which some do. The fallback is the extension this ADR
+  rejected, and the rejection should be re-argued rather than assumed.
+- A third piece of untracked desktop state appears. Between
+  =~/.config/mimeapps.list= here, the hand-installed fonts of ADR-044 and the
+  Firefox profile of ADR-043, the case for one =desktop-install= script in the
+  shape of =firefox-chrome-install= — tangled, idempotent, with a =--check= —
+  becomes stronger than the case against it.

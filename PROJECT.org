@@ -580,13 +580,18 @@ Ordered by value. Each needs the [[id:docs-decisions][decisions.org]] treatment
 before implementation, and each must answer ADR-021's one-tool-per-
 responsibility question explicitly.
 
-- [ ] *=org-protocol= capture from Firefox.* There is no =org-protocol= handler
-  and no =.desktop= entry for one, while vulpea, citar, PARA and GTD all landed
-  upstream this week. Capturing a page into an org note is the missing half of
-  that work. Needs: a desktop entry registering the scheme, a capture template,
-  and either a bookmarklet or the capture extension. Acceptance: a page captured
-  from Firefox lands in the right org file with title and URL, from a cold
-  Emacs. Highest workflow value on this list.
+- [X] *=org-protocol= capture from Firefox.* Done as
+  [[id:adr-org-protocol-capture][ADR-045]]. *Both halves of the premise written
+  here were wrong, in opposite directions.* Doom's =:lang org= already loads
+  =org-protocol= lazily, so no flag, no =require= and no package were needed —
+  a capture template was the whole Emacs side. And a =.desktop= entry claiming
+  the scheme *did* exist: Emacs's own, installed to =/usr/local/share/= by
+  ADR-042's build, with =%F= (a file list) where a URL handler needs =%u=. That
+  is worse than nothing, because every diagnostic reports the scheme as
+  handled while the click does nothing. A tangled user-level entry now wins by
+  XDG precedence and survives =emacs-rebuild=. Verified live end to end,
+  including through =xdg-open= — the browser's own path. One manual step
+  remains: add the bookmarklet to the toolbar.
 - [ ] *Tridactyl.* Vim keys in the browser — the Evil-first rule applied to the
   one application that currently ignores it. No existing tool owns this
   responsibility, so ADR-021 permits it, but the ADR should say so rather than

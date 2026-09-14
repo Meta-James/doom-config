@@ -2076,6 +2076,44 @@ for CITEKEY."
                'append))
 #+end_src
 
+** Web capture: org-protocol
+:PROPERTIES:
+:ID:       literate-org-protocol
+:END:
+
+The Emacs half of capturing a web page into org. See
+[[id:adr-org-protocol-capture][ADR-045]]; the =.desktop= entry that makes the URL
+scheme reach Emacs is in the Desktop integration section below, and the Firefox
+half is a bookmarklet documented there too.
+
+Almost nothing is needed here, which was the finding that shaped the ADR:
+Doom's =:lang org= already loads =org-protocol= lazily, through an advice on
+=server-visit-files= that watches for a =org-protocol:/= argument. There is no
+module flag to set and no =require= to add — a capture template is the whole of
+it.
+
+=c= for "capture", the only sensible free letter: =t=, =n=, =v=, =p=, =s=, =w=
+and =f= are all taken by [[id:adr-org-agenda-capture-basics][ADR-017]], the GTD
+extensions and the PARA scheme. It lands in the same =todo.org= Inbox as the
+plain "Note" template, because an unfiled thing from the web is exactly what
+that inbox and the =u= agenda view are for — not a new file with its own
+review problem.
+
+#+begin_src emacs-lisp :tangle config.el
+(after! org
+  (add-to-list 'org-capture-templates
+               `("c" "Web capture (org-protocol)" entry
+                 (file+headline ,(expand-file-name "todo.org" org-directory) "Inbox")
+                 ;; `%:description' is the page title and `%:annotation' the
+                 ;; [[url][title]] link, both set by `org-protocol-capture';
+                 ;; `%i' is whatever was selected in the page. Title as the
+                 ;; heading keeps it searchable, the link on its own line keeps
+                 ;; it clickable, and `%?' puts point after the title so a note
+                 ;; can be typed immediately.
+                 "* %:description%?\n%U\n%:annotation\n\n%i" :empty-lines 1)
+               'append))
+#+end_src
+
 ** org-roam-ui and org-fc
 :PROPERTIES:
 :ID:       roam-ui-org-fc-anchor
@@ -3501,6 +3539,12 @@ user_pref("userchrome.navbar-tabs-oneliner.tabs-on-right.enabled", true);
 user_pref("userchrome.autohide-bookmarks.enabled", true);
 user_pref("userchrome.autohide-toolbox.enabled", true);
 
+// Hand org-protocol: URLs to the desktop instead of trying to resolve them
+// internally, which is what makes the capture bookmarklet reach Emacs at all.
+// See docs/decisions.org ADR-045; the handler itself is tangled to
+// ~/.local/share/applications/org-protocol.desktop.
+user_pref("network.protocol-handler.expose.org-protocol", false);
+
 // Compact density is a Firefox feature that is hidden rather than absent: this
 // pref only makes "Compact" appear in Customize's density menu, which still
 // has to be picked once by hand. It pins nothing -- the density itself stays a
@@ -4654,3 +4698,84 @@ look before writing a selector: the revamped sidebar and native vertical tabs
 are shipped UI since 136, =browser.uidensity= gives compact mode, the built-in
 Dark theme is what makes the =--lwt-*= variables above apply at all, and
 toolbar layout is drag-and-drop in Customize. CSS is for what is left over.
+
+* Desktop integration
+:PROPERTIES:
+:ID:       literate-desktop-integration
+:END:
+
+The fourth thing this file owns, after Emacs, the shell and Firefox: the
+=.desktop= entries that let the rest of the desktop hand work to Emacs. Today
+that is one entry, for =org-protocol=. See
+[[id:adr-org-protocol-capture][ADR-045]].
+
+** ~/.local/share/applications/org-protocol.desktop
+
+Registers the =org-protocol:= URL scheme so a browser can hand a page to a
+running Emacs.
+
+*An entry claiming this scheme already existed, and that is the reason this one
+is written rather than reused.* Emacs's own =emacsclient.desktop=, installed to
+=/usr/local/share/applications/= by the =make install= of
+[[id:adr-emacs-build-flags][ADR-042]]'s build, lists
+=x-scheme-handler/org-protocol= in its =MimeType=, and =xdg-mime query default=
+duly names it. Two things are wrong with leaning on it:
+
+- Its =Exec= line ends in =%F=, the field code for a *file list*. A URL scheme
+  handler is passed a URL and wants =%u=. The entry is a text-editor launcher
+  that happens to have the MIME type appended, not an org-protocol handler.
+- It belongs to the Emacs build. The next run of =emacs-rebuild= rewrites it,
+  so any correction made there is lost exactly when the machine is most
+  disturbed — which is the same argument [[id:adr-literate-config][ADR-035]]
+  makes about =~/.bashrc= and ADR-043 makes about the Firefox profile.
+
+A user-level entry in =~/.local/share/applications/= wins over
+=/usr/local/share/= by XDG precedence, is tangled from here, and survives a
+rebuild.
+
+=--no-wait= matters: without it =emacsclient= blocks until the capture buffer is
+finished, which leaves the browser waiting on a window in another application.
+=--alternate-editor== (empty value) starts a daemon if none is running, so a
+capture from a cold machine works instead of failing silently.
+
+Being listed is not the same as being *default*. The association is user state
+in =~/.config/mimeapps.list=, not something a =.desktop= file can assert, so it
+is set once by hand:
+
+: xdg-mime default org-protocol.desktop x-scheme-handler/org-protocol
+: update-desktop-database ~/.local/share/applications
+
+#+begin_src conf-desktop :tangle ~/.local/share/applications/org-protocol.desktop :mkdirp yes
+# Generated from ~/.config/doom/config.org -- edit there, not here.
+# Any change made directly to this file is lost on the next tangle.
+# See docs/decisions.org ADR-045.
+[Desktop Entry]
+Type=Application
+Name=org-protocol
+Comment=Hand org-protocol: URLs to Emacs
+Exec=emacsclient --no-wait --alternate-editor= %u
+Terminal=false
+NoDisplay=true
+MimeType=x-scheme-handler/org-protocol;
+#+end_src
+
+** The Firefox half: a bookmarklet
+
+Nothing is installed for this. Firefox's own capture extensions are a second
+tool for a job one line of JavaScript does, and an extension's configuration
+lives in extension storage rather than in a file — the same objection ADR-043
+raised against Firefox Color.
+
+Add a bookmark by hand, in the bookmarks toolbar, whose *location* is the line
+below. Clicking it captures the current page, its title, and whatever is
+selected.
+
+#+begin_src js :tangle no
+javascript:location.href='org-protocol://capture?template=c'+'&url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)+'&body='+encodeURIComponent(window.getSelection().toString());
+#+end_src
+
+=template=c= is the capture template registered in the Web capture section
+above. Firefox will not hand an unknown scheme to the desktop while it believes
+it should expose it itself, which is what the
+=network.protocol-handler.expose.org-protocol= pref in =firefox/user.js=
+settles.
