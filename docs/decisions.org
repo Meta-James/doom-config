@@ -8356,8 +8356,15 @@ in the configuration depends on any of it.
 - The bookmarklet stops working because a site's Content-Security-Policy blocks
   =javascript:= URLs, which some do. The fallback is the extension this ADR
   rejected, and the rejection should be re-argued rather than assumed.
-- A third piece of untracked desktop state appears. Between
+- ~~A third piece of untracked desktop state appears. Between
   =~/.config/mimeapps.list= here, the hand-installed fonts of ADR-044 and the
   Firefox profile of ADR-043, the case for one =desktop-install= script in the
   shape of =firefox-chrome-install= — tangled, idempotent, with a =--check= —
-  becomes stronger than the case against it.
+  becomes stronger than the case against it.~~ *Met the same day.* Looking for
+  the third instance found two further ones that predate all of this —
+  =~/.local/bin/emacs-magnet= and its =.desktop=, hand-written and never
+  tangled despite [[id:adr-torrent-transmission][ADR-030]] verifying the chain
+  they form — and one live defect, three =mimeapps.list= associations pointing
+  at a =brave-browser.desktop= that is not installed anywhere on this machine.
+  Planned as [[id:project-desktop-state][Desktop state]] in =PROJECT.org=; the
+  installer itself needs its own ADR.

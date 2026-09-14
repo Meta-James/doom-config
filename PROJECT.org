@@ -627,6 +627,119 @@ responsibility question explicitly.
   when something wanted genuinely cannot be expressed in CSS, and nothing in
   this plan is that.
 
+** TODO Desktop state — what this configuration depends on but does not own
+:PROPERTIES:
+:ID:       project-desktop-state
+:EFFORT:   4h
+:END:
+
+Proposed 2026-09-13, out of the browser-integration work. Three separate ADRs
+in three days each ended with the same footnote — that they had added a piece of
+state living outside the repository, with nothing watching it — and the third
+([[id:adr-org-protocol-capture][ADR-045]]) said a fourth instance should trigger
+this entry rather than a fourth ad-hoc fix. Surveying for that fourth instance
+found two *existing* ones and a live defect, so the trigger is already met.
+
+The point is not tidiness. Every item below fails the same way when it drifts:
+silently, with the symptom appearing in an application that is not the one at
+fault. ADR-045's =%F= handler is the type specimen — the scheme was registered,
+every diagnostic said so, and clicking did nothing.
+
+*** What is actually out there
+
+| Item                                                  | Tracked?                  | How it fails                                                            |
+|-------------------------------------------------------+---------------------------+------------------------------------------------------------------------------|
+| Firefox profile copies of the chrome layer            | Yes — tangled, =--check=, startup warning | Solved, and the model for everything below ([[id:adr-firefox-chrome-layer][ADR-043]]) |
+| =~/.config/mimeapps.list= associations                 | No                        | A scheme resolves to the wrong handler, or to a file that is not there       |
+| =~/.local/bin/emacs-magnet= and its =.desktop=         | *No* — hand-written       | [[id:adr-torrent-transmission][ADR-030]] verified the magnet chain end to end but never brought the two files into =config.org=, while its three sibling scripts are all tangled. Lose =$HOME= and the torrent workflow goes with it |
+| Hand-installed fonts (=literata=, =jetbrains-mono-nerd=) | No                      | [[id:adr-font-roles][ADR-044]]'s lists silently fall through to their second entry |
+| Font =apt= packages                                    | No                        | Same, on a new machine, with nothing naming what to install                  |
+| =about=, =mailto=, =webcal= → =brave-browser.desktop=  | No, *and broken today*    | Brave is not installed anywhere on this machine. Three dangling associations, right now |
+| =/usr/local/share/applications/emacsclient.desktop=    | Not ours                  | Build output from ADR-042's =make install=; claims =org-protocol= with =%F=. A landmine to document, never to edit |
+
+*** Stage 1 — see it, and fix what is already broken
+:PROPERTIES:
+:EFFORT:   30m
+:END:
+
+- [ ] Record the table above in =docs/inventory.org=, which is meant to be the
+  verified-current-state document and currently says nothing about any of it.
+- [ ] Repoint or remove the three dangling =brave-browser.desktop=
+  associations. =mailto= is a real decision, not a cleanup: mu4e is configured
+  here, so the candidates are a mu4e handler, Firefox, or nothing. Acceptance:
+  =xdg-mime query default= for every scheme this configuration cares about
+  names a =.desktop= file that exists.
+
+*** Stage 2 — bring the orphans in
+:PROPERTIES:
+:EFFORT:   1h
+:END:
+
+- [ ] Tangle =~/.local/bin/emacs-magnet= and
+  =~/.local/share/applications/emacs-magnet.desktop= from =config.org=, into the
+  Desktop integration section next to =org-protocol.desktop=, and amend ADR-030
+  to say so. Acceptance: the first tangle is byte-identical to what is on disk
+  now, and deleting the script then re-syncing restores it — the same proof
+  ADR-035 used for the shell layer.
+- [ ] Same treatment for anything Stage 1 turns up that this configuration
+  actually owns. Not the game or wine entries.
+
+*** Stage 3 — one installer, one =--check=
+:PROPERTIES:
+:EFFORT:   2h
+:END:
+
+Needs its own ADR: it is a new component, and it has to answer the
+one-tool-per-responsibility question against =firefox-chrome-install=, which
+already does this shape of work for one specific target.
+
+- [ ] =~/.local/bin/desktop-install=, tangled, idempotent, printing every path
+  it resolved, in the shape =firefox-chrome-install= already established.
+  Covers: fetching the declared non-=apt= fonts and running =fc-cache=;
+  reporting missing =apt= packages without trying to install them, since that
+  needs a password; asserting each declared =xdg-mime= association; running
+  =update-desktop-database=.
+- [ ] Declare font *sources* next to =+my/font-families= — family name to =apt=
+  package or URL — and generate the installer's list from it rather than
+  restating the families a fourth time. The palette and =font.name-list=
+  generators are the precedent.
+- [ ] =--check= that changes nothing and exits non-zero per drift class.
+  Acceptance: on a fresh =$HOME=, one command makes fonts and associations
+  correct; =--check= catches a deleted font, a missing package and a repointed
+  association, and exits 0 when all three are right.
+
+*** Stage 4 — make it a rule instead of a habit
+:PROPERTIES:
+:EFFORT:   30m
+:END:
+
+- [ ] Fold the two checks into one startup warning: extend
+  =+my/firefox-chrome-check-h= into a single =+my/external-state-check-h= that
+  runs both scripts and warns once, naming everything that drifted. Two
+  independent warnings on one startup is the beginning of a habit of ignoring
+  them.
+- [ ] Propose a =docs/standards.org= rule, which is the actual deliverable of
+  this entry: *state outside the repository that the configuration depends on
+  gets four things — a declaration in =config.org=, an idempotent installer, a
+  =--check= that changes nothing, and a line in the startup check.* Acceptance:
+  the fifth instance has an obvious place to go, and this entry never needs to
+  be written again.
+
+*** Out of scope, deliberately
+
+Recorded so the next pass does not re-litigate them:
+
+- Firefox =places.sqlite= — the ADR-045 bookmarklet lives there. There is
+  nowhere to tangle a bookmark to, and touching the database is not worth it.
+- =browser.uiCustomization.state= — ADR-043 leaves it out on purpose; pinning it
+  makes Customize permanently ineffective.
+- Compact density and reader mode's font-type toggle — ADR-043 and ADR-044 both
+  chose to leave these as UI taste rather than pin them. Tracking them would
+  reverse a decision, not implement one.
+- =/usr/local/share/applications/emacsclient.desktop= — build output. Document,
+  never edit.
+- Game and wine =.desktop= entries — not this configuration's business.
+
 ** TODO Phase 7 — Capability activation: use what is already installed
 :PROPERTIES:
 :ID:       project-phase-7
