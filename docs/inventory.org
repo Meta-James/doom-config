@@ -613,6 +613,12 @@ binary *is* present at =/usr/bin/mu=. So Doom's =:email mu4e= module is enabled
 and this host has no mu4e lisp to load — the elisp ships separately from the
 =mu= binary and was never installed.
 
+*This is known and expected, not a discovery.* Email on the desktop is an open
+TODO for this machine, confirmed by the user 2026-09-14; it is recorded here
+because the =mailto= handler of [[id:adr-mailto-emacs][ADR-047]] reasons about
+=mail-user-agent= and a later reader should not have to re-derive why it
+currently resolves to =message-user-agent=.
+
 This extends, rather than contradicts,
 [[id:inv-homedir-state-loss][the credential and mail section above]]: mail
 was never set up here, and the module flag has been masking it. Nothing in the

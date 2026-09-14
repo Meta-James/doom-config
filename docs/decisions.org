@@ -8402,6 +8402,173 @@ in the configuration depends on any of it.
   Planned as [[id:project-desktop-state][Desktop state]] in =PROJECT.org=; the
   installer itself needs its own ADR.
 
+* ADR-046: =desktop-install= — one idempotent installer with a =--check= for the state outside the repository
+:PROPERTIES:
+:ID:       adr-desktop-install
+:STATUS:   Implemented; both paths exercised against a scratch directory, the drift and clean cases both verified, and the generator's tangle-time guard proven to fire
+:DATE:     2026-09-14
+:END:
+
+** Context
+
+Stage 3 of [[id:project-desktop-state][PROJECT.org's Desktop state entry]], and
+the one the earlier stages kept pointing at.
+[[id:adr-firefox-chrome-layer][ADR-043]], [[id:adr-font-roles][ADR-044]] and
+[[id:adr-org-protocol-capture][ADR-045]] each ended by noting they had added
+state living outside this repository with nothing watching it, and ADR-045 set
+the trigger: a further instance should produce a plan rather than a fourth
+ad-hoc fix. The survey that followed found two *older* instances and a live
+defect, so by the time the plan existed the count was well past the trigger.
+
+The inventory is in [[id:inv-desktop-state][inventory.org]]. What the items have
+in common is not their subject matter — fonts and URL schemes have nothing to do
+with each other — but their failure mode. Both fail *silently*, and both fail
+somewhere other than where the cause is. A font that is not installed does not
+error: the ordered list in =+my/font-families= falls through to its next entry
+and the screen merely looks slightly unlike what the configuration says. An
+association that has been taken over does not error either; the click simply
+goes elsewhere. Neither is visible without asking, and nothing was asking.
+
+** Decision drivers
+
+- One tool per responsibility ([[id:adr-corfu-migration][ADR-021]]), which here
+  is a genuine question rather than a formality: =firefox-chrome-install=
+  already exists and already does this *shape* of work. See the Consequences
+  section for why it is not extended.
+- [[id:adr-literate-config][ADR-035]]: what the configuration depends on is
+  tangled from =config.org=, not hand-made state that reverts.
+- An agent session has no passwordless =sudo= (=sudo -n true= fails), so
+  anything needing a password must be *reported*, never attempted. A script that
+  sometimes stops to ask for a password is worse than one that never does.
+- ADR-044 already declares the font families once, and generates Firefox's
+  =font.name-list.*= prefs and nov.el's serif list from that declaration. A
+  fourth restatement of the same names in shell would be the exact duplication
+  that ADR made a generator to avoid.
+
+** Candidates
+
+| Candidate                                                | Fate     | Reason                                                                                          |
+|----------------------------------------------------------+----------+-----------------------------------------------------------------------------------------------------|
+| A second tangled installer, =desktop-install=             | Chosen   | Same shape and conventions as =firefox-chrome-install=, different subject. The shared thing is the *rule*, not the script — see Consequences |
+| Extend =firefox-chrome-install= to cover fonts and schemes | Rejected | Its hard part is a Firefox profile resolver that is meaningless on a machine without Firefox, and its =--check= is a file-by-file copy comparison that does not describe a font or an association. It is also live-verified and working; absorbing unrelated duties into it risks the one piece of this that already runs |
+| A script per concern (=font-install=, =mime-install=)     | Rejected | Two scripts, two =--check= calls, two chances to forget one. The subjects differ but the *failure mode* is identical, and that is what the tool is built around |
+| =stow=, =chezmoi= or another dotfile manager              | Rejected | A second configuration system alongside the literate tangle, against ADR-021 and against ADR-035's whole premise. It would also not solve the actual problem: neither manages =xdg-mime= associations or fetches a font release |
+| An Emacs function instead of a shell script               | Rejected | It has to run on a machine whose Emacs has not started yet, and the operations are =curl=, =tar=, =fc-cache= and =xdg-mime=. Shell is the honest language for it |
+| Hand-write the font tables in the script                  | Rejected | Restates the families a fourth time, in a fourth language, with nothing keeping them in step. See the Decision for what generation buys beyond formatting |
+
+** Evidence
+
+Verified on this host, 2026-09-14, by tangling to a sandbox rather than to
+=$HOME=:
+
+- =--check= against the live system reports all fourteen families present and
+  all three associations in sync, and exits 0.
+- Pointed at an empty =DESKTOP_INSTALL_FONT_DIR=, =--check= reports Literata and
+  the Nerd build missing, changes nothing, and exits 1.
+- The install path against that same empty directory fetched both Literata
+  files — with the names correctly percent-decoded to =Literata[opsz,wght].ttf=
+  and =Literata-Italic[opsz,wght].ttf= — unpacked all 98 files of the Nerd
+  release, and rebuilt the font cache. Both fetched files are =md5=-identical to
+  the ones installed by hand for ADR-044.
+- Re-running it immediately fetched and unpacked *nothing*, reported all
+  fourteen present, and exited 0.
+- The generator's guard was proven by planting an unobtainable family in
+  =+my/font-families= in a copy of =config.org= and tangling it. The tangle
+  fails with =Font family "Nonexistent Display" is in `+my/font-families' with
+  no `+my/font-sources' entry=.
+- *The naive font check was wrong, and testing is the only reason it is not
+  still wrong.* =fc-match= always answers with something — ask for a family that
+  is not installed and it hands back a substitute — so the test has to be
+  whether the requested family is among the families it answered with. The
+  subtler half is that =family= is multi-valued: EB Garamond answers
+  =EB Garamond,EB Garamond 08=, and a string equality reported a font sitting
+  right there as missing, printing an =apt install= line for a package already
+  installed. Caught on the first real run.
+
+** Decision
+
+- Tangle =~/.local/bin/desktop-install=, idempotent, with a =--check= that
+  changes nothing and exits non-zero on drift, printing every directory it
+  resolved — the conventions =firefox-chrome-install= established.
+- Declare *sources* in =config.org= next to ADR-044's families:
+  =+my/font-sources= maps each family to =apt= (report only), =files= (one URL
+  per file) or =tarball= (a release to unpack), and =+my/scheme-handlers= maps
+  each claimed URL scheme to the tangled =.desktop= entry that should own it.
+- Generate the script's shell tables from both by noweb at tangle time, the
+  technique of the =zenburn-palette= and =firefox-font-prefs= blocks.
+
+Generation earns its place here by doing something a hand-written list cannot:
+it *fails the tangle* when a family named in =+my/font-families= has no source.
+A family preferred but unobtainable is precisely the hole ADR-044 left when it
+installed five families by hand and left nothing naming them, and catching it
+when the configuration is written beats discovering it as a font that silently
+is not there.
+
+Never installs an =apt= package; reports the missing ones with the exact command
+to run. Never deletes a font, for the reason =firefox-chrome-install --prune=
+never deletes a profile file: what legitimately lives in a font directory is not
+knowable from inside the script.
+
+** Consequences
+
+- *Two installers now exist, and that is the intended end state rather than a
+  step toward merging them.* The single responsibility being honoured is not
+  "install things" — it is the rule Stage 4 will write down: external state gets
+  a declaration, an installer, a =--check=, and a line in the startup check.
+  =firefox-chrome-install= and =desktop-install= are two instances of that one
+  rule, each owning a coherent subject. A third instance should be a third
+  script, not a third branch inside one of these.
+- Nothing yet *runs* =desktop-install --check=. Until Stage 4 folds it into the
+  Emacs startup warning alongside =firefox-chrome-install --check=, this is a
+  tool the user has to remember, which is the same category of failure it was
+  built to end. Stage 4 is the half that closes the loop.
+- =apt= packages remain outside what any of this can do. The script names them
+  and stops.
+- The scheme table is now the single place claiming a URL scheme. Adding a
+  fourth handler is one line there plus the tangled =.desktop= entry.
+
+** Rejected alternatives
+
+See the Candidates table above.
+
+** Validation
+
+Everything in Evidence was run, not reasoned. Specifically exercised: the clean
+path (exit 0), the drift path (exit 1, nothing changed), the install path
+against a scratch directory, idempotence on immediate re-run, byte-identity of
+the fetched fonts against the hand-installed ones, and the generator's guard.
+
+Not exercised: the =apt=-missing branch was only seen by accident, through the
+=fc-match= bug — no package was actually removed to test it, and removing one to
+watch a script print a sentence is not worth the disturbance. The association
+repair branch was likewise not exercised against a real takeover, because the
+three associations were already correct; only its in-sync and missing-entry
+paths ran.
+
+** Rollback
+
+Delete the =desktop-install= block, the =desktop-install-tables= generator and
+the two declarations from =config.org=, then =doom sync= and remove
+=~/.local/bin/desktop-install=. Nothing else depends on it: the fonts and
+associations it asserts were all put in place by hand before it existed and
+remain valid without it.
+
+** Revisit when
+
+- Stage 4 lands and folds =--check= into the startup warning. At that point this
+  entry's main consequence is discharged and its status can move to
+  live-verified.
+- A third subject of external state appears that fits neither existing installer
+  — a GNOME keybinding, a systemd user unit — at which point the question is
+  whether it is a third script under the same rule or a sign the rule wants a
+  common runner.
+- =apt= gains a usable non-interactive path on this machine, or the font set
+  stops needing packages at all, at which point the report-only compromise can
+  be revisited.
+- Any font source URL breaks. The two hard-coded upstreams are a =google/fonts=
+  raw path and a =ryanoasis= "latest" release; the second in particular will
+  keep working right up until it does not.
+
 * ADR-047: =mailto:= composes in Emacs, through a tangled handler that follows =mail-user-agent=
 :PROPERTIES:
 :ID:       adr-mailto-emacs

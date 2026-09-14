@@ -17,9 +17,9 @@ Firefox chrome layer does the same: `firefox/user.js`,
 **Edit `config.org`, never the tangled files.** A change written directly to
 `config.el` (or `init.el`, `packages.el`, any of those three dotfiles, anything
 under `firefox/`, the `~/.local/bin/` scripts `pass-backup`,
-`emacs-rebuild`, `firefox-chrome-install`, `emacs-magnet`, or the
-`~/.local/share/applications/` entries `org-protocol.desktop` and
-`emacs-magnet.desktop`) is overwritten by the next tangle, which happens on
+`emacs-rebuild`, `firefox-chrome-install`, `emacs-magnet`, `desktop-install`, or
+the `~/.local/share/applications/` entries `org-protocol.desktop`,
+`emacs-magnet.desktop` and `emacs-mailto.desktop`) is overwritten by the next tangle, which happens on
 every `doom sync` and on every save of `config.org`. Edits to the `init.el` block take effect one sync late —
 Doom loads `init.el` before it tangles.
 

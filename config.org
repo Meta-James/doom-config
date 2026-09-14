@@ -373,6 +373,47 @@ re-ask later.
 See `+my/font-family'. Changing a list here changes Emacs and Firefox
 together -- see docs/decisions.org ADR-044.")
 
+;; Where each of those families comes from. `+my/font-families' says what to
+;; prefer; this says how to get it, which is the half that was missing when
+;; ADR-044 installed five families by hand and left nothing naming them.
+;; `desktop-install' is generated from both, and the generator fails the tangle
+;; if a family is listed above with no source here -- that mismatch is exactly
+;; the drift this table exists to prevent. Not used at runtime; it is
+;; declaration, read at tangle time.
+(defvar +my/font-sources
+  '(("JetBrainsMono Nerd Font" tarball "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz" "jetbrains-mono-nerd")
+    ("Literata"       files "literata"
+     "https://raw.githubusercontent.com/google/fonts/main/ofl/literata/Literata%5Bopsz,wght%5D.ttf"
+     "https://raw.githubusercontent.com/google/fonts/main/ofl/literata/Literata-Italic%5Bopsz,wght%5D.ttf")
+    ("JetBrains Mono" apt "fonts-jetbrains-mono")
+    ("IBM Plex Mono"  apt "fonts-ibm-plex")
+    ("IBM Plex Sans"  apt "fonts-ibm-plex")
+    ("IBM Plex Serif" apt "fonts-ibm-plex")
+    ("EB Garamond"    apt "fonts-ebgaramond")
+    ("Vollkorn"       apt "fonts-vollkorn")
+    ("Charis SIL"     apt "fonts-sil-charis")
+    ("Ubuntu"         apt "fonts-ubuntu")
+    ("Noto Sans"      apt "fonts-noto-core")
+    ("Noto Serif"     apt "fonts-noto-core")
+    ("DejaVu Sans"    apt "fonts-dejavu-core")
+    ("DejaVu Sans Mono" apt "fonts-dejavu-core"))
+  "How to obtain each family named in `+my/font-families'.
+Each entry is (FAMILY METHOD . ARGS). `apt' takes a package name and is only
+ever *reported*, never installed -- that needs a password. `files' takes a
+subdirectory of ~/.local/share/fonts and then one URL per file. `tarball'
+takes a URL and a subdirectory to unpack into. See docs/decisions.org ADR-046.")
+
+;; The URL schemes this configuration claims, and the tangled .desktop entry
+;; that should own each. Being listed in a .desktop file is not the same as
+;; being the default: the association is user state in ~/.config/mimeapps.list,
+;; which no tangle reaches. `desktop-install' asserts these; `--check' reports
+;; when one has been taken over.
+(defvar +my/scheme-handlers
+  '(("x-scheme-handler/org-protocol" . "org-protocol.desktop")
+    ("x-scheme-handler/magnet"       . "emacs-magnet.desktop")
+    ("x-scheme-handler/mailto"       . "emacs-mailto.desktop"))
+  "Scheme to owning .desktop entry. See docs/decisions.org ADR-046.")
+
 (defun +my/font-family (role)
   "Return the first installed family for ROLE in `+my/font-families'.
 Falls back to the head of the list when no display is available to ask --
@@ -4947,4 +4988,293 @@ Exec=emacsclient --alternate-editor= --eval "(browse-url-mail (pop server-eval-a
 Terminal=false
 NoDisplay=true
 MimeType=x-scheme-handler/mailto;
+#+end_src
+
+** The desktop-install tables, generated
+:PROPERTIES:
+:ID:       literate-desktop-install-tables
+:END:
+
+Turns =+my/font-sources= and =+my/scheme-handlers= into the shell arrays
+=desktop-install= reads, so the families are named once in this file and never
+restated in another language. Same technique as the =zenburn-palette= and
+=firefox-font-prefs= blocks, and the same justification beyond formatting: the
+generator also *checks*, failing the tangle when a family is preferred with no
+way to obtain it.
+
+#+name: desktop-install-tables
+#+begin_src emacs-lisp :tangle no :results value
+(let* ((read-decl
+        (lambda (name)
+          (save-excursion
+            (goto-char (point-min))
+            (unless (re-search-forward (format "^(defvar %s\\b" (regexp-quote name)) nil t)
+              (error "No `%s' defvar found in config.org" name))
+            (unless (re-search-forward "'(" nil t)
+              (error "`%s' has no quoted list" name))
+            (goto-char (1- (match-end 0)))
+            (read (current-buffer)))))
+       (families (funcall read-decl "+my/font-families"))
+       (sources  (funcall read-decl "+my/font-sources"))
+       (handlers (funcall read-decl "+my/scheme-handlers"))
+       (wanted (delete-dups (apply #'append (mapcar #'cdr families))))
+       (sh (lambda (s) (format "'%s'" (replace-regexp-in-string "'" "'\\\\''" s))))
+       lines)
+  ;; The check that earns the generator: a family preferred but unobtainable is
+  ;; the exact hole ADR-044 left, so it fails the tangle rather than the install.
+  (dolist (family wanted)
+    (unless (assoc family sources)
+      (error "Font family %S is in `+my/font-families' with no `+my/font-sources' entry"
+             family)))
+  (push "# Generated from +my/font-sources in config.org -- edit there." lines)
+  (push "declare -a FONT_APT=() FONT_FILES=() FONT_TARBALL=()" lines)
+  (dolist (family wanted)
+    (let* ((entry (assoc family sources))
+           (method (nth 1 entry))
+           (args (nthcdr 2 entry)))
+      (push (pcase method
+              ;; family<TAB>package
+              ('apt (format "FONT_APT+=(%s)"
+                            (funcall sh (format "%s\t%s" family (car args)))))
+              ;; family<TAB>subdir<TAB>url...
+              ('files (format "FONT_FILES+=(%s)"
+                              (funcall sh (mapconcat #'identity (cons family args) "\t"))))
+              ;; family<TAB>url<TAB>subdir
+              ('tarball (format "FONT_TARBALL+=(%s)"
+                                (funcall sh (mapconcat #'identity (cons family args) "\t"))))
+              (_ (error "Unknown font source method %S for %S" method family)))
+            lines)))
+  (push "declare -a SCHEMES=()" lines)
+  (dolist (pair handlers)
+    (push (format "SCHEMES+=(%s)"
+                  (funcall sh (format "%s\t%s" (car pair) (cdr pair))))
+          lines))
+  (mapconcat #'identity (nreverse lines) "\n"))
+#+end_src
+
+** ~/.local/bin/desktop-install
+:PROPERTIES:
+:ID:       literate-desktop-install
+:END:
+
+Makes the state this configuration depends on but does not own actually true,
+and tells you when it is not. See [[id:adr-desktop-install][ADR-046]]; the
+inventory of what that state *is* lives in
+[[id:inv-desktop-state][inventory.org]].
+
+Two kinds of thing, for one reason. Fonts and scheme associations look
+unrelated, and they are, except in the way that matters here: both are files or
+settings outside the repository that something inside it depends on, and both
+fail silently. A font that is not installed does not error — the ordered list in
+=+my/font-families= quietly falls through to its next entry, and the only symptom
+is that the screen looks slightly different from what the configuration says.
+An association that has been taken over does not error either; the click just
+goes somewhere else. Neither is visible without asking.
+
+*What it deliberately does not do.* It never installs an =apt= package. That
+needs a password, an agent session does not have one, and a script that
+sometimes prompts for a password halfway through is worse than one that never
+does — so missing packages are *reported*, with the exact command to run. It
+never deletes a font, for the reason =firefox-chrome-install --prune= never
+deletes a profile file: the set of things that legitimately live in a font
+directory is not knowable from in here.
+
+The tables are generated from =+my/font-sources= and =+my/scheme-handlers= by
+the =desktop-install-tables= block, so the families are named once in
+=config.org= and not restated in shell. The generator does one thing beyond
+formatting, and it is the reason it exists rather than a hand-written list: it
+fails the tangle if a family named in =+my/font-families= has no source entry.
+That mismatch — a family preferred but unobtainable — is precisely the hole
+ADR-044 left when it installed five families by hand and left nothing naming
+them, and it is better caught at tangle time than as a font that silently is not
+there.
+
+=DESKTOP_INSTALL_FONT_DIR= and =DESKTOP_INSTALL_APP_DIR= override the two
+directories, the same courtesy =FIREFOX_CHROME_SRC= and =FIREFOX_PROFILE= offer,
+and the same reason: so the install path can be exercised against a scratch
+directory instead of only ever being tested in the one place it is meant to
+write.
+
+: desktop-install            # make it so; safe to re-run
+: desktop-install --check    # report only, non-zero if anything drifted
+
+#+begin_src sh :tangle ~/.local/bin/desktop-install :shebang "#!/usr/bin/env bash" :tangle-mode (identity #o700) :noweb yes
+# Generated from ~/.config/doom/config.org -- edit there, not here.
+# Any change made directly to this file is lost on the next tangle.
+# See docs/decisions.org ADR-046.
+
+set -euo pipefail
+
+FONT_DIR="${DESKTOP_INSTALL_FONT_DIR:-$HOME/.local/share/fonts}"
+APP_DIR="${DESKTOP_INSTALL_APP_DIR:-$HOME/.local/share/applications}"
+CHECK=0
+
+die() { echo "desktop-install: $*" >&2; exit 1; }
+
+usage() {
+    cat <<'USAGE'
+Usage: desktop-install [--check]
+
+Installs the fonts this configuration prefers and asserts the URL scheme
+associations it claims. Safe to re-run; changes nothing that is already right.
+
+  --check   report what is missing or wrong and change nothing; exits
+            non-zero if anything drifted
+
+apt-provided fonts are only ever reported, never installed -- that needs a
+password. Nothing is ever deleted.
+
+Environment: DESKTOP_INSTALL_FONT_DIR, DESKTOP_INSTALL_APP_DIR
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --check)   CHECK=1 ;;
+        -h|--help) usage; exit 0 ;;
+        *)         usage >&2; die "unknown argument: $1" ;;
+    esac
+    shift
+done
+
+command -v fc-match >/dev/null 2>&1 || die "fc-match not found -- install fontconfig"
+
+<<desktop-install-tables()>>
+
+echo "fonts   : $FONT_DIR"
+echo "apps    : $APP_DIR"
+
+status=0
+changed=0
+
+# fc-match always answers with *something* -- ask it for a family that is not
+# installed and it hands back its best substitute -- so "is this installed"
+# means "is the family I asked for among the families it answered with".
+#
+# Both halves of that matter. Comparing against a substitute is the obvious
+# bug; the subtler one is that `family' is *multi-valued*. EB Garamond answers
+# `EB Garamond,EB Garamond 08', so a plain string equality reports a font that
+# is sitting right there as missing, and sends you off to apt to install it
+# again. This was written the naive way first and did exactly that.
+font_installed() {
+    fc-match -f '%{family}\n' "$1" 2>/dev/null | tr ',' '\n' | grep -Fxq "$1"
+}
+
+# --- fonts fetched file by file ------------------------------------------
+# One directory per family, so what came from where stays legible and a family
+# can be removed by removing a directory.
+for entry in ${FONT_FILES[@]+"${FONT_FILES[@]}"}; do
+    IFS=$'\t' read -r family subdir urls <<< "$entry"
+    IFS=$'\t' read -r -a url_list <<< "$urls"
+    dest="$FONT_DIR/$subdir"
+    missing=0
+    for url in "${url_list[@]}"; do
+        [ -s "$dest/$(basename "${url%%\?*}" | sed 's/%5B/[/g; s/%5D/]/g; s/%2C/,/g')" ] || missing=1
+    done
+    if [ "$missing" -eq 0 ]; then
+        echo "  present      $family"
+        continue
+    fi
+    if [ "$CHECK" -eq 1 ]; then
+        echo "  MISSING      $family -> $dest"
+        status=1
+        continue
+    fi
+    mkdir -p "$dest"
+    for url in "${url_list[@]}"; do
+        name=$(basename "${url%%\?*}" | sed 's/%5B/[/g; s/%5D/]/g; s/%2C/,/g')
+        [ -s "$dest/$name" ] && continue
+        curl -fsSL --max-time 120 -o "$dest/$name" "$url" \
+            || die "could not fetch $url"
+        echo "  fetched      $dest/$name"
+        changed=1
+    done
+done
+
+# --- fonts that arrive as a tarball --------------------------------------
+for entry in ${FONT_TARBALL[@]+"${FONT_TARBALL[@]}"}; do
+    IFS=$'\t' read -r family url subdir <<< "$entry"
+    dest="$FONT_DIR/$subdir"
+    # A non-empty directory is the test: the release carries many files and
+    # their names are not this script's business.
+    if [ -d "$dest" ] && [ -n "$(ls -A "$dest" 2>/dev/null)" ]; then
+        echo "  present      $family"
+        continue
+    fi
+    if [ "$CHECK" -eq 1 ]; then
+        echo "  MISSING      $family -> $dest"
+        status=1
+        continue
+    fi
+    mkdir -p "$dest"
+    tmp=$(mktemp) || die "could not make a temporary file"
+    # shellcheck disable=SC2064
+    trap "rm -f '$tmp'" EXIT
+    curl -fsSL --max-time 300 -o "$tmp" "$url" || die "could not fetch $url"
+    tar -xf "$tmp" -C "$dest" || die "could not unpack $url"
+    rm -f "$tmp"
+    trap - EXIT
+    echo "  unpacked     $family -> $dest"
+    changed=1
+done
+
+# --- fonts that are apt's business, not ours -----------------------------
+missing_pkgs=()
+for entry in ${FONT_APT[@]+"${FONT_APT[@]}"}; do
+    IFS=$'\t' read -r family package <<< "$entry"
+    if font_installed "$family"; then
+        echo "  present      $family"
+    else
+        echo "  NOT INSTALLED $family (apt: $package)"
+        missing_pkgs+=("$package")
+        status=1
+    fi
+done
+
+if [ "${#missing_pkgs[@]}" -gt 0 ]; then
+    # shellcheck disable=SC2207
+    uniq_pkgs=($(printf '%s\n' "${missing_pkgs[@]}" | sort -u))
+    echo
+    echo "  install the missing ones with:"
+    echo "    sudo apt install ${uniq_pkgs[*]}"
+    echo
+fi
+
+if [ "$changed" -eq 1 ]; then
+    fc-cache -f >/dev/null 2>&1 || true
+    echo "  rebuilt      font cache"
+fi
+
+# --- URL scheme associations ---------------------------------------------
+# The .desktop files themselves are tangled straight into $APP_DIR by `doom
+# sync', so a missing one means the tangle has not run rather than that this
+# script has anything to install.
+for entry in ${SCHEMES[@]+"${SCHEMES[@]}"}; do
+    IFS=$'\t' read -r scheme desktop <<< "$entry"
+    if [ ! -f "$APP_DIR/$desktop" ]; then
+        echo "  NO ENTRY     $desktop -- run 'doom sync' to tangle it"
+        status=1
+        continue
+    fi
+    current=$(xdg-mime query default "$scheme" 2>/dev/null || true)
+    if [ "$current" = "$desktop" ]; then
+        echo "  in sync      $scheme"
+        continue
+    fi
+    if [ "$CHECK" -eq 1 ]; then
+        echo "  DIFFERS      $scheme -> ${current:-(none)}, want $desktop"
+        status=1
+        continue
+    fi
+    xdg-mime default "$desktop" "$scheme"
+    echo "  associated   $scheme -> $desktop"
+    changed=1
+done
+
+if [ "$CHECK" -eq 0 ] && [ "$changed" -eq 1 ]; then
+    update-desktop-database "$APP_DIR" 2>/dev/null || true
+    echo "  rebuilt      desktop database"
+fi
+
+exit "$status"
 #+end_src
