@@ -32,6 +32,36 @@
   .fake-textbox{ color: var(--zb-bg-plus3) !important }
 }
 
+/* Reader mode, set to the reading column ADR-040 settled for nov.el: the same
+   measure and the same line height, so a reader-mode page and an EPUB are the
+   same reading surface rather than two opinions about one.
+
+   These are the two custom properties aboutReader.css declares on .container
+   and labels, in its own comment, as the ones meant for user customization --
+   not `max-width' and `line-height' directly. That matters beyond tidiness:
+   the floating toolbar centres itself with
+   calc((100% - var(--content-width)) / 2 ...), so overriding the width
+   property alone would have left the toolbar centred on the old column. The
+   cost is that reader mode's width and line-spacing sliders no longer move
+   anything, which is the point -- the column is a decision here, not a slider.
+
+   Text size is untouched and stays the reader's own +/- control: it reads a
+   separate variable, and how large the type is on one page is a per-page
+   judgement. The body family comes from font.name-list.serif in user.js --
+   nov's `+nov-serif-fonts' list in nov's order -- and reaching it needs Serif
+   picked once in the reader's font menu.
+
+   33em, not 66ch: `ch' is the width of a zero, which in a proportional serif
+   is wider than its average character, so 66ch overshoots the 66-character
+   measure by a third. Half an em per character is the usual approximation.
+   Firefox's own default is 22em. */
+@-moz-document url-prefix("about:reader"){
+  .container{
+    --content-width: 33em !important;
+    --line-height: 1.3em !important;
+  }
+}
+
 /* Thin zenburn scrollbars everywhere, including on sites that set their own --
    that is the trade, and it is the reason this one is global where the rest of
    the file is scoped to about: pages.

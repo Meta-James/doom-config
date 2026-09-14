@@ -353,8 +353,37 @@ re-ask later.
 ;; what `nerd-icons.el' pairs with any regular font as a fallback) covers
 ;; that via Emacs's normal fontset fallback. `M-x describe-font' confirms
 ;; this actually took effect.
-(setq doom-font (font-spec :family "JetBrains Mono" :size 13)
-      doom-variable-pitch-font (font-spec :family "JetBrains Mono" :size 13))
+;;
+;; `doom-variable-pitch-font' was JetBrains Mono too until ADR-044, which is to
+;; say the variable-pitch face was monospace and `mixed-pitch-mode' switched
+;; from a font to itself.
+;;
+;; One ordered list per role, best first, first installed wins -- so a family
+;; that is not installed costs a fallback rather than a broken face, and
+;; installing one later switches to it with no edit here. This is the *single
+;; source* for fonts in this repository: `+nov-serif-fonts' below takes the
+;; serif list from it, and the `font.name-list.*' prefs in firefox/user.js are
+;; generated from it at tangle time. Roles are named for Firefox's generic
+;; families so the two ends cannot drift apart in vocabulary either.
+(defvar +my/font-families
+  '((monospace  "JetBrainsMono Nerd Font" "JetBrains Mono" "IBM Plex Mono" "DejaVu Sans Mono")
+    (sans-serif "Ubuntu" "IBM Plex Sans" "Noto Sans" "DejaVu Sans")
+    (serif      "Literata" "IBM Plex Serif" "EB Garamond" "Vollkorn" "Charis SIL" "Noto Serif"))
+  "Font families per role, best first; the first installed one wins.
+See `+my/font-family'. Changing a list here changes Emacs and Firefox
+together -- see docs/decisions.org ADR-044.")
+
+(defun +my/font-family (role)
+  "Return the first installed family for ROLE in `+my/font-families'.
+Falls back to the head of the list when no display is available to ask --
+a daemon started before any frame exists -- rather than to nothing."
+  (let ((families (cdr (assq role +my/font-families)))
+        (installed (font-family-list)))
+    (or (seq-find (lambda (family) (member family installed)) families)
+        (car families))))
+
+(setq doom-font (font-spec :family (+my/font-family 'monospace) :size 13)
+      doom-variable-pitch-font (font-spec :family (+my/font-family 'sans-serif) :size 13))
 
 ;; Smooth, sub-line scrolling. Global rather than a `nov-mode' hook because
 ;; `pixel-scroll-precision-mode' has no buffer-local form -- it is one global
@@ -1102,13 +1131,15 @@ Errors for any account not listed in `+mu4e-spam-accounts'."
 
 ;;; Typography
 
-  (defcustom +nov-serif-fonts '("Literata" "Charis SIL" "Noto Serif")
+  (defcustom +nov-serif-fonts (cdr (assq 'serif +my/font-families))
     "Body faces for `nov-mode', best first; the first installed one wins.
-Literata was drawn for Google Play Books. Charis SIL is Bitstream Charter
-redrawn with real OpenType data -- the plain \"Bitstream Charter\" installed
-here is a Type1 from `texlive-fonts-recommended' that `font-info' reports as
-`(opentype nil)', i.e. no kerning, which is why it is not in this list. Noto
-Serif is the always-present fallback."
+Taken from `+my/font-families' since ADR-044, so a book and a reader-mode page
+in Firefox are set in the same family rather than in two lists that happen to
+agree. Literata was drawn for Google Play Books. Charis SIL is Bitstream
+Charter redrawn with real OpenType data -- the plain \"Bitstream Charter\"
+installed here is a Type1 from `texlive-fonts-recommended' that `font-info'
+reports as `(opentype nil)', i.e. no kerning, which is why it is not in the
+list. Noto Serif is the always-present fallback."
     :type '(repeat string)
     :group 'nov)
 
@@ -1153,10 +1184,13 @@ hardcoding: the answer moves with `doom-font', with the chosen serif, and with
                   ;; A full-width cover plate pushes the first page off screen;
                   ;; nov honours this in `nov-insert-image'.
                   shr-max-image-proportion 0.6)
-      ;; A text face rather than the UI font -- `doom-variable-pitch-font' is
-      ;; JetBrains Mono here, i.e. monospace (ADR-022), so `nov-variable-pitch'
-      ;; was switching from one monospace face to the same one. `shr-text'
-      ;; inherits `variable-pitch', so remapping the one covers body text.
+      ;; A book face rather than the UI font. This remap was originally a
+      ;; workaround: `doom-variable-pitch-font' was JetBrains Mono, i.e.
+      ;; monospace, so `nov-variable-pitch' switched from one monospace face to
+      ;; the same one. Since ADR-044 it is Ubuntu, a real proportional face --
+      ;; the remap stays anyway, now for its own sake, because a book should be
+      ;; set in a serif and not in the UI's sans. `shr-text' inherits
+      ;; `variable-pitch', so remapping the one covers body text.
       (face-remap-add-relative 'variable-pitch :family family :height +nov-serif-height)
       ;; Headings do *not* inherit `variable-pitch': shrface's faces inherit
       ;; `org-level-N', which inherit `outline-N', which leave the family
@@ -3417,7 +3451,36 @@ Taste-level prefs belong in the UI, not here. In particular
 =browser.uiCustomization.state= is deliberately absent: pinning it would make
 the Customize window permanently ineffective.
 
-#+begin_src js :tangle firefox/user.js :mkdirp yes
+The font lists added in [[id:adr-font-roles][ADR-044]] are the one apparent exception, and are not
+really one. A font role shared with Emacs is not a preference discovered by
+fiddling with Firefox; it is a decision made once, in this repository, that
+both applications then have to hold. Pinning it is the whole point. The prefs
+that *would* be taste -- reader mode's font-type toggle and its text size,
+Customize's density -- are all deliberately left out, which is why
+=browser.compactmode.show= only reveals the Compact option instead of choosing
+it.
+
+#+name: firefox-font-prefs
+#+begin_src emacs-lisp :tangle no :results value
+(let ((families (save-excursion
+                  (goto-char (point-min))
+                  (unless (re-search-forward "^(defvar \\+my/font-families\\b" nil t)
+                    (error "No `+my/font-families' defvar found in config.org"))
+                  (unless (re-search-forward "'(" nil t)
+                    (error "`+my/font-families' has no quoted list"))
+                  (goto-char (1- (match-end 0)))
+                  (read (current-buffer)))))
+  (mapconcat
+   (lambda (role)
+     (let ((names (cdr (assq role families))))
+       (unless names
+         (error "`+my/font-families' names no `%s' role" role))
+       (format "user_pref(\"font.name-list.%s.x-western\", \"%s\");"
+               role (mapconcat #'identity names ", "))))
+   '(serif sans-serif monospace) "\n"))
+#+end_src
+
+#+begin_src js :tangle firefox/user.js :mkdirp yes :noweb yes
 // Generated from ~/.config/doom/config.org -- edit there, not here.
 // Any change made directly to this file is lost on the next tangle.
 // Installed into the active Firefox profile by ~/.local/bin/firefox-chrome-install.
@@ -3437,6 +3500,21 @@ user_pref("userchrome.navbar-tabs-oneliner.tabs-on-right.enabled", true);
 // here is permanent; flipping it at about:config lasts until the next startup.
 user_pref("userchrome.autohide-bookmarks.enabled", true);
 user_pref("userchrome.autohide-toolbox.enabled", true);
+
+// Compact density is a Firefox feature that is hidden rather than absent: this
+// pref only makes "Compact" appear in Customize's density menu, which still
+// has to be picked once by hand. It pins nothing -- the density itself stays a
+// UI choice -- which is why it belongs here and the density does not.
+user_pref("browser.compactmode.show", true);
+
+// One ordered list per role, shared with Emacs. `font.name-list.*' is a
+// priority list -- the first installed family wins -- which is the same rule
+// `+my/font-family' applies on the Emacs side, so the two ends agree by
+// construction rather than by being kept in step. These three lines are
+// generated from `+my/font-families' in config.org; edit the list there.
+// Pinned, because the whole point is that both applications agree, which a
+// setting fiddled with in one of them does not survive.
+<<firefox-font-prefs()>>
 
 // Nothing else. A pref set here cannot be changed from Firefox's own settings
 // UI in any lasting way -- the next startup overwrites it. Add a line only for
@@ -4197,6 +4275,36 @@ arbitrary web content, and that line is worth holding.
 @-moz-document url("about:privatebrowsing"){
   .search-handoff-button{ background-color: rgba(255,255,255,0.06) !important; }
   .fake-textbox{ color: var(--zb-bg-plus3) !important }
+}
+
+/* Reader mode, set to the reading column ADR-040 settled for nov.el: the same
+   measure and the same line height, so a reader-mode page and an EPUB are the
+   same reading surface rather than two opinions about one.
+
+   These are the two custom properties aboutReader.css declares on .container
+   and labels, in its own comment, as the ones meant for user customization --
+   not `max-width' and `line-height' directly. That matters beyond tidiness:
+   the floating toolbar centres itself with
+   calc((100% - var(--content-width)) / 2 ...), so overriding the width
+   property alone would have left the toolbar centred on the old column. The
+   cost is that reader mode's width and line-spacing sliders no longer move
+   anything, which is the point -- the column is a decision here, not a slider.
+
+   Text size is untouched and stays the reader's own +/- control: it reads a
+   separate variable, and how large the type is on one page is a per-page
+   judgement. The body family comes from font.name-list.serif in user.js --
+   nov's `+nov-serif-fonts' list in nov's order -- and reaching it needs Serif
+   picked once in the reader's font menu.
+
+   33em, not 66ch: `ch' is the width of a zero, which in a proportional serif
+   is wider than its average character, so 66ch overshoots the 66-character
+   measure by a third. Half an em per character is the usual approximation.
+   Firefox's own default is 22em. */
+@-moz-document url-prefix("about:reader"){
+  .container{
+    --content-width: 33em !important;
+    --line-height: 1.3em !important;
+  }
 }
 
 /* Thin zenburn scrollbars everywhere, including on sites that set their own --

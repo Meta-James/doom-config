@@ -531,23 +531,42 @@ check catches both.
   Acceptance: an out-of-sync profile produces a visible non-zero exit somewhere
   the user actually looks. Today drift is silent until something looks wrong.
 
-*** Stage 2 — native settings, before any more CSS
+*** DONE Stage 2 — native settings, before any more CSS
+CLOSED: [2026-09-13]
 :PROPERTIES:
 :EFFORT:   45m
 :END:
 
-- [ ] =browser.compactmode.show= true, then Compact in Customize. Acceptance:
+Written up as ADR-043's third update of 2026-09-13 (compact mode, reader mode)
+and [[id:adr-font-roles][ADR-044]] (the font roles, which change Emacs too).
+Two one-time clicks remain for the user, both deliberately left as choices
+rather than pinned: Compact in Customize, and Serif in reader mode's font menu.
+Nothing here has been seen rendered yet — it needs =firefox-chrome-install= and
+a restart of both applications.
+
+Fonts were taken further than the stage asked. Literata and the Nerd-patched
+JetBrains Mono are installed to =~/.local/share/fonts/=; EB Garamond, Vollkorn
+and the IBM Plex superfamily came from =apt=. All five resolve, and installing
+them changed nothing about what wins — they sit behind the intended defaults in
+=+my/font-families=, which is what an ordered list is for.
+
+- [X] =browser.compactmode.show= true, then Compact in Customize. Acceptance:
   if this delivers what shelf rank 7 (=compact_proton.css=) would, record rank 7
   as permanently rejected in ADR-043's menu rather than merely unchosen — a
   native setting beating 200 lines of selectors against internal markup is
   exactly the shape that table exists to capture.
-- [ ] Settle the font question across Emacs and Firefox together. =doom-font= is
-  still commented out, so Emacs runs Doom's default while Firefox runs Ubuntu
-  11 — two faces on one screen. Set =doom-font= and Firefox's serif/sans/mono
-  content defaults from one decision. Acceptance: one named family per role,
-  recorded, both applications using it. Likely the largest perceived-coherence
-  win left, and it is not a Firefox task alone.
-- [ ] Tune =about:reader= to the reading column [[id:adr-nov-typography][ADR-040]]
+- [X] Settle the font question across Emacs and Firefox together. *The premise
+  written here was wrong*: =doom-font= is not commented out, it is set to
+  JetBrains Mono 13 at =config.org= line 356 and has been since ADR-022 — what
+  is commented out is Doom's stock example block a few hundred lines earlier.
+  Checking that first narrowed the task to the one role genuinely unsettled,
+  the sans, where =doom-variable-pitch-font= was also JetBrains Mono, i.e. a
+  monospace standing in for a proportional face. Settled as
+  [[id:adr-font-roles][ADR-044]]: JetBrains Mono, Charis SIL and Ubuntu own
+  mono, serif and sans in both applications, expressed as Firefox
+  =font.name-list.*= priority lists so the serif keeps ADR-040's
+  first-installed-wins order rather than being flattened to one name.
+- [X] Tune =about:reader= to the reading column [[id:adr-nov-typography][ADR-040]]
   already settled for nov.el. Same numbers, one =@-moz-document= in
   =userContent.css=. Acceptance: a reader-mode page and an EPUB in nov look like
   the same reading surface.

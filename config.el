@@ -302,8 +302,37 @@ ordinary tangling of the primary checkout is unaffected."
 ;; what `nerd-icons.el' pairs with any regular font as a fallback) covers
 ;; that via Emacs's normal fontset fallback. `M-x describe-font' confirms
 ;; this actually took effect.
-(setq doom-font (font-spec :family "JetBrains Mono" :size 13)
-      doom-variable-pitch-font (font-spec :family "JetBrains Mono" :size 13))
+;;
+;; `doom-variable-pitch-font' was JetBrains Mono too until ADR-044, which is to
+;; say the variable-pitch face was monospace and `mixed-pitch-mode' switched
+;; from a font to itself.
+;;
+;; One ordered list per role, best first, first installed wins -- so a family
+;; that is not installed costs a fallback rather than a broken face, and
+;; installing one later switches to it with no edit here. This is the *single
+;; source* for fonts in this repository: `+nov-serif-fonts' below takes the
+;; serif list from it, and the `font.name-list.*' prefs in firefox/user.js are
+;; generated from it at tangle time. Roles are named for Firefox's generic
+;; families so the two ends cannot drift apart in vocabulary either.
+(defvar +my/font-families
+  '((monospace  "JetBrainsMono Nerd Font" "JetBrains Mono" "IBM Plex Mono" "DejaVu Sans Mono")
+    (sans-serif "Ubuntu" "IBM Plex Sans" "Noto Sans" "DejaVu Sans")
+    (serif      "Literata" "IBM Plex Serif" "EB Garamond" "Vollkorn" "Charis SIL" "Noto Serif"))
+  "Font families per role, best first; the first installed one wins.
+See `+my/font-family'. Changing a list here changes Emacs and Firefox
+together -- see docs/decisions.org ADR-044.")
+
+(defun +my/font-family (role)
+  "Return the first installed family for ROLE in `+my/font-families'.
+Falls back to the head of the list when no display is available to ask --
+a daemon started before any frame exists -- rather than to nothing."
+  (let ((families (cdr (assq role +my/font-families)))
+        (installed (font-family-list)))
+    (or (seq-find (lambda (family) (member family installed)) families)
+        (car families))))
+
+(setq doom-font (font-spec :family (+my/font-family 'monospace) :size 13)
+      doom-variable-pitch-font (font-spec :family (+my/font-family 'sans-serif) :size 13))
 
 ;; Smooth, sub-line scrolling. Global rather than a `nov-mode' hook because
 ;; `pixel-scroll-precision-mode' has no buffer-local form -- it is one global
@@ -1015,13 +1044,15 @@ Errors for any account not listed in `+mu4e-spam-accounts'."
 
 ;;; Typography
 
-  (defcustom +nov-serif-fonts '("Literata" "Charis SIL" "Noto Serif")
+  (defcustom +nov-serif-fonts (cdr (assq 'serif +my/font-families))
     "Body faces for `nov-mode', best first; the first installed one wins.
-Literata was drawn for Google Play Books. Charis SIL is Bitstream Charter
-redrawn with real OpenType data -- the plain \"Bitstream Charter\" installed
-here is a Type1 from `texlive-fonts-recommended' that `font-info' reports as
-`(opentype nil)', i.e. no kerning, which is why it is not in this list. Noto
-Serif is the always-present fallback."
+Taken from `+my/font-families' since ADR-044, so a book and a reader-mode page
+in Firefox are set in the same family rather than in two lists that happen to
+agree. Literata was drawn for Google Play Books. Charis SIL is Bitstream
+Charter redrawn with real OpenType data -- the plain \"Bitstream Charter\"
+installed here is a Type1 from `texlive-fonts-recommended' that `font-info'
+reports as `(opentype nil)', i.e. no kerning, which is why it is not in the
+list. Noto Serif is the always-present fallback."
     :type '(repeat string)
     :group 'nov)
 
@@ -1066,10 +1097,13 @@ hardcoding: the answer moves with `doom-font', with the chosen serif, and with
                   ;; A full-width cover plate pushes the first page off screen;
                   ;; nov honours this in `nov-insert-image'.
                   shr-max-image-proportion 0.6)
-      ;; A text face rather than the UI font -- `doom-variable-pitch-font' is
-      ;; JetBrains Mono here, i.e. monospace (ADR-022), so `nov-variable-pitch'
-      ;; was switching from one monospace face to the same one. `shr-text'
-      ;; inherits `variable-pitch', so remapping the one covers body text.
+      ;; A book face rather than the UI font. This remap was originally a
+      ;; workaround: `doom-variable-pitch-font' was JetBrains Mono, i.e.
+      ;; monospace, so `nov-variable-pitch' switched from one monospace face to
+      ;; the same one. Since ADR-044 it is Ubuntu, a real proportional face --
+      ;; the remap stays anyway, now for its own sake, because a book should be
+      ;; set in a serif and not in the UI's sans. `shr-text' inherits
+      ;; `variable-pitch', so remapping the one covers body text.
       (face-remap-add-relative 'variable-pitch :family family :height +nov-serif-height)
       ;; Headings do *not* inherit `variable-pitch': shrface's faces inherit
       ;; `org-level-N', which inherit `outline-N', which leave the family

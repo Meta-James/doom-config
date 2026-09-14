@@ -2992,6 +2992,17 @@ would still be independently true even under Company).
 - State "Live-verified" from "Implemented"  [2026-08-23 Sun] — user confirmed
   transparency, pulsar, and zen mode visually after a reload; centaur-tabs
   confirmed separately via [[id:adr-tabs-new-tab-dashboard][ADR-024]]. Only the minimap went unexercised.
+- Revisit condition met, font decisions superseded  [2026-09-13 Sun] — the
+  GitHub reachability this entry's first revisit condition waited on is no
+  longer a constraint: =github.com=, =api.github.com= and the =ryanoasis=
+  release all answer from an agent session now. The Nerd-patched build is
+  installed and =doom-font= resolves to "JetBrainsMono Nerd Font", the family
+  name read off the shipped files rather than assumed, as that condition
+  required. =doom-variable-pitch-font= is no longer JetBrains Mono at all —
+  see [[id:adr-font-roles][ADR-044]], which takes over both font variables and
+  expresses them as ordered per-role lists. The =Symbols Nerd Font Mono=
+  fallback is now redundant but harmless and is left in place; it is what keeps
+  this working on a machine without the patched build.
 :END:
 
 ** Context
@@ -3219,11 +3230,12 @@ See Candidates table above.
   =sudo apt remove=.
 
 ** Revisit when
-- The agent's sandbox (or a future environment) can actually reach
+- ~~The agent's sandbox (or a future environment) can actually reach
   =github.com=/=api.github.com= — install the real Nerd-patched
   "JetBrainsMono Nerd Font" and swap =doom-font=/=doom-variable-pitch-font=
   to it, matching the family name actually shipped by that release rather
-  than assuming one.
+  than assuming one.~~ *Met 2026-09-13; see the logbook and
+  [[id:adr-font-roles][ADR-044]]. Font choices now live there, not here.*
 - The user actually uses this config for a while and finds transparency,
   the pulsar pulse, or zen =+focus= dimming distracting rather than
   pleasant — each is an independent, easily-reverted =setq=/module-flag, not
@@ -6852,9 +6864,11 @@ so paragraphs arrived as single long lines that wrapped at the frame edge —
 full width, and broken mid-word rather than at spaces.
 
 Three further defaults worked against readability once that was seen:
-=doom-variable-pitch-font= is JetBrains Mono ([[id:adr-rice-pass][ADR-022]]),
-i.e. =nov-variable-pitch= switches from one monospace face to the same
-monospace face; =line-spacing= is nil, giving the code-editing leading; and
+=doom-variable-pitch-font= was JetBrains Mono ([[id:adr-ui-rice-pass][ADR-022]];
+it is Ubuntu since [[id:adr-font-roles][ADR-044]], and the link here read
+=adr-rice-pass=, an id that does not exist), i.e. =nov-variable-pitch=
+switched from one monospace face to the same monospace face; =line-spacing= is
+nil, giving the code-editing leading; and
 Doom's =global-hl-line-modes= includes =special-mode=, so a highlight band
 tracked point across the page.
 
@@ -7808,6 +7822,16 @@ missing theme file or a missing colour signals an error and fails the tangle,
 which is the intended behaviour — an empty palette tangled silently would
 leave Firefox's chrome unreadable with nothing to point at.
 
+This is a Babel block that *does* execute automatically, which
+=.claude/rules/documentation.md= otherwise tells this repository not to allow.
+The exception is deliberate and bounded: the block takes no input but
+=config.org= itself and a theme file shipped by =doom-themes=, reads both,
+touches nothing, runs no subprocess, and returns a string of ten CSS
+declarations. There is no secret within reach of it, which is the risk that
+rule exists to keep away from Babel results. A tangle-time generator cannot
+work any other way, and the alternative it replaces — two hand-copied lists —
+was the defect.
+
 The tangled output is identical in every value and differs from the
 hand-written files only in alignment: eight of the ten comments gain a single
 space before their closing =*/=. The hand-written list had been aligned in two
@@ -7841,3 +7865,313 @@ theme-swap acceptance was checked by tangling a copy of =config.org= with
 files. =--check= exits 0 against the installed profile and 1 with
 =FIREFOX_CHROME_SRC= pointed at the changed tree, which is the condition the
 startup warning fires on.
+
+
+** Update 2026-09-13: stage 2, native settings before any more CSS
+
+The second half of the browser-integration plan's ordering rule — try the
+platform feature before writing a selector — applied to two things. The font
+half of the same stage became its own entry,
+[[id:adr-font-roles][ADR-044]], because it changes Emacs as well.
+
+*Compact density.* =browser.compactmode.show= is now set in =user.js=. The pref
+does not choose compact density; it only makes "Compact" appear in Customize's
+density menu, which Firefox hides rather than removes. Choosing it is still one
+click, and deliberately stays one — the pref is pinned because the *option*
+must exist on every machine, while which density is in use is exactly the kind
+of taste this file keeps out of itself.
+
+This is the case shelf rank 7 (=compact_proton.css=) was on the shelf for. If
+compact density delivers what those ~200 lines of selectors against internal
+markup would have, rank 7 should be recorded as permanently rejected rather
+than merely unchosen: a native setting beating a stylesheet is the outcome that
+menu exists to capture. That judgement needs the density actually selected and
+lived with, so it is left open here rather than pre-empted.
+
+*Reader mode.* =userContent.css= gains one =@-moz-document= block giving
+=about:reader= the reading column [[id:adr-nov-typography][ADR-040]] settled for
+nov.el — the same measure, the same line height — so a reader-mode page and an
+EPUB are one reading surface rather than two opinions about one.
+
+The block sets two *custom properties* on =.container=, not =max-width= and
+=line-height= directly, and the difference is not cosmetic. Reading this
+build's own =chrome/toolkit/skin/classic/global/aboutReader.css= out of
+=omni.ja= shows =.container= declaring =--content-width= and =--line-height=
+under the comment "Variables in .container are for user customization and
+should not be replaced with design tokens", and shows the floating toolbar
+positioning itself with
+=width: max(var(--body-padding), calc((100% - var(--content-width)) / 2 + var(--body-padding)))=.
+Overriding =max-width= alone would therefore have moved the column and left the
+toolbar centred on the old one. The first draft of this change did exactly
+that; reading the stylesheet rather than guessing at selectors is what caught
+it.
+
+The value is =33em=, not =66ch=. =ch= is the width of a zero, which in a
+proportional serif runs wider than the average character, so =66ch= overshoots
+a 66-character measure by something like a third; half an em per character is
+the usual approximation. Firefox's own default is =22em=.
+
+The cost is that reader mode's width and line-spacing sliders stop moving
+anything. That is the intent — the column is a decision here, not a slider —
+and it is the narrowest version of it: text size reads a different variable and
+is untouched, so the reader's =+=/=-= control still works, and the body family
+comes from =font.name-list.serif= rather than from this block, so the reader's
+font menu still chooses between serif and sans. Reaching ADR-040's surface
+needs Serif picked there once.
+
+*Validation, 2026-09-13.* Tangled through the real batch path; =userContent.css=
+balances at 15 braces each way. The pref names and the reader stylesheet's
+structure were both read out of this machine's
+=/snap/firefox/current/usr/lib/firefox/omni.ja= rather than assumed. *Neither
+change has been seen rendered* — Firefox has not been restarted against the new
+=user.js=, so compact density has not been chosen and no reader-mode page has
+been looked at. Both need a =firefox-chrome-install= and a restart first.
+* ADR-044: One named family per role, shared by Emacs and Firefox
+:PROPERTIES:
+:ID:       adr-font-roles
+:STATUS:   Decided; tangled, generated from one source, and every family in all three lists installed and resolving. *Nothing has been seen rendered* — neither application has been restarted. See Validation
+:DATE:     2026-09-13
+:END:
+:LOGBOOK:
+- Amended before first commit [2026-09-13 Sun] — the user chose to install five
+  further families, which grew the lists and gave them a third reader. That
+  fired both halves of this entry's own revisit condition within the hour, so
+  the generator this ADR had deferred was built instead of logged, and the
+  Decision section was rewritten around =+my/font-families= rather than around
+  three hardcoded lines.
+:END:
+
+** Context
+
+Stage 2 of the browser-integration plan in =PROJECT.org= asked to "settle the
+font question across Emacs and Firefox together", on the grounds that
+=doom-font= was still commented out and so Emacs ran Doom's default while
+Firefox ran Ubuntu.
+
+*That premise was wrong.* =doom-font= has been set since
+[[id:adr-ui-rice-pass][ADR-022]] and is JetBrains Mono 13; what is commented out
+at =config.org= line 107 is Doom's own stock example block, a few hundred lines
+above the real setting. Checking it first turned a vague "settle the fonts"
+task into one specific question, which is the only part that was genuinely
+unsettled: *which family owns the sans role*.
+
+It was unsettled in an unusually concrete way. ADR-022 set
+=doom-variable-pitch-font= to JetBrains Mono as well — a monospace family
+standing in for a proportional one — so =mixed-pitch-mode= switched from a font
+to itself, and [[id:adr-nov-typography][ADR-040]] had already had to work around
+it: its =+nov-typography-h= remaps =variable-pitch= to a real serif precisely
+because =nov-variable-pitch= otherwise "was switching from one monospace face to
+the same one". Firefox, meanwhile, had no font prefs set at all and fell through
+to fontconfig's Ubuntu.
+
+** Decision drivers
+
+- The one-tool-per-responsibility rule of [[id:adr-corfu-migration][ADR-021]],
+  read across applications rather than within one: a *role* should have one
+  answer, not one answer per program.
+- Stage 2's own ordering rule — prefer a native setting to a stylesheet — which
+  applies to how the choice is expressed, not only to whether it is made.
+- =user.js= is deliberately minimal and, by
+  [[id:adr-firefox-chrome-layer][ADR-043]], anything pinned there stops being
+  changeable from Firefox's UI. Taste belongs in the UI; a cross-application
+  decision does not.
+- ADR-040 already fixed the serif question for reading, with an ordered
+  first-installed-wins list rather than a single family. Whatever is done for
+  Firefox should not contradict or duplicate that list.
+
+** Candidates
+
+| Role  | Candidate                                    | Fate     | Reason                                                                                              |
+|-------+----------------------------------------------+----------+---------------------------------------------------------------------------------------------------------|
+| mono  | JetBrains Mono                               | Chosen   | Already =doom-font= per ADR-022; no reason to reopen it. Firefox is brought to it, not the other way round |
+| serif | =Literata, Charis SIL, Noto Serif=           | Chosen   | ADR-040's =+nov-serif-fonts=, in ADR-040's order. Firefox's =font.name-list.*= is itself a priority list, so the same rule expresses directly rather than being restated as one hardcoded name |
+| sans  | Ubuntu                                       | Chosen   | The desktop's own UI face and what Firefox already rendered, so the choice moves Emacs to the machine rather than the machine to Emacs. Gives =mixed-pitch-mode= and =:ui zen= a real proportional face for the first time |
+| sans  | Noto Sans                                    | Rejected | A reasonable neutral grotesque, and the better pick if Charis SIL is ever dropped for Noto Serif, but nothing on this desktop already uses it |
+| sans  | DejaVu Sans                                  | Rejected | Widest coverage of the three and the most conservative, but heavier and wider on screen and the least distinctive |
+| sans  | Leave Emacs on JetBrains Mono                | Rejected | Preserves ADR-022 untouched at the cost of leaving the exact disagreement this stage exists to end, and leaves =mixed-pitch-mode= switching from a font to itself |
+
+How the choice is expressed:
+
+| Candidate                                            | Fate     | Reason                                                                                          |
+|------------------------------------------------------+----------+-----------------------------------------------------------------------------------------------------|
+| =font.name-list.<generic>.x-western= in =user.js=     | Chosen   | A priority list, so it encodes ADR-040's first-installed-wins rule directly, degrades on a machine missing a family, and is tangled and diffable like the rest of the layer |
+| =font.name.<generic>.x-western= in =user.js=          | Rejected | Takes exactly one family, so nov's ordered list would have to be flattened to whichever family happens to be installed *here* — a value that silently becomes wrong on another machine |
+| Setting the families by hand in Firefox's Fonts pane  | Rejected | Untracked, unversioned, per-profile, and exactly the drift [[id:adr-firefox-chrome-layer][ADR-043]] exists to prevent |
+| A =font-family= stack in =userContent.css=            | Rejected | Restyles arbitrary web content, which that file deliberately does not do, and would lose to any site that sets its own fonts anyway |
+
+** Evidence
+
+Checked on this machine, 2026-09-13:
+
+- =doom-font= is set at =config.org= line 356 —
+  =(setq doom-font (font-spec :family "JetBrains Mono" :size 13) doom-variable-pitch-font (font-spec :family "JetBrains Mono" :size 13))=.
+  The commented example the plan mistook for the live setting is at line 107.
+- Literata *was* not installed when this was written, so ADR-040's list resolved
+  to Charis SIL — the concrete reason Firefox gets the list rather than the
+  name, since pinning "Charis SIL" would have quietly disagreed with Emacs the
+  day Literata arrived. It arrived the same day: installed to
+  =~/.local/share/fonts/literata/= as the roman and italic variable files
+  (~1.8 MB) from =google/fonts=, after which =fc-match Literata= returns
+  =Literata[opsz,wght].ttf=. Both applications moved to it *with no edit*, which
+  is the design working rather than a coincidence.
+- The Nerd-patched JetBrains Mono is installed to
+  =~/.local/share/fonts/jetbrains-mono-nerd/= (98 files from the =ryanoasis=
+  release); =fc-match "JetBrainsMono Nerd Font"= returns
+  =JetBrainsMonoNerdFont-Regular.ttf=. This closes the revisit condition
+  ADR-022 left open — see its logbook.
+- =apt-cache search= confirms =fonts-ebgaramond=, =fonts-vollkorn= and
+  =fonts-ibm-plex= exist in this machine's archive, and that Literata, Iosevka,
+  Source Serif and Spectral do *not* — which is why two families were fetched by
+  hand and three are left to =apt=.
+- =sudo -n true= fails, so the three apt packages could not be installed from an
+  agent session; the user ran =apt= themselves the same day. =fc-match= now
+  returns real files for all five added families — =EBGaramond08-Regular.otf=,
+  =Vollkorn-Regular.ttf=, =IBMPlexSerif-Regular.ttf=,
+  =IBMPlexSans-Regular.ttf=, =IBMPlexMono-Regular.ttf=.
+- *Installing five families changed nothing about what resolves*, which is the
+  result worth recording: the roles still resolve to
+  =JetBrainsMono Nerd Font=, =Ubuntu= and =Literata=, because the new entries
+  were placed behind the intended winners rather than in front of them. An
+  ordered list expresses "these are the options and this is the default" in one
+  structure; that is the whole reason the lists are ordered rather than a set.
+- =fc-match Ubuntu= returns =Ubuntu[wdth,wght].ttf=, i.e. a real variable font,
+  not a fontconfig substitution.
+- The pref names are real in *this* build, not assumed from documentation:
+  unpacking =/snap/firefox/current/usr/lib/firefox/omni.ja= and grepping it
+  yields =font.name-list.serif.x-western=,
+  =font.name-list.sans-serif.x-western=, =font.name-list.monospace.x-western=
+  and =font.name-list.cursive.x-western=.
+- Both tangled stylesheets still balance (15 =}= against 15 ={= in
+  =userContent.css=, 105 against 105 in =userChrome.css=) after the change.
+
+Not checked, and not claimed: nothing has been *seen*. Emacs has not been
+restarted with Ubuntu as its variable-pitch face, and Firefox has not been
+restarted against the new =user.js=.
+
+** Decision
+
+- =+my/font-families= in =config.org= is the single source: one ordered list per
+  role, best first, first installed wins.
+
+  | Role         | List, best first                                                                  |
+  |--------------+-----------------------------------------------------------------------------------|
+  | =monospace=  | JetBrainsMono Nerd Font, JetBrains Mono, IBM Plex Mono, DejaVu Sans Mono           |
+  | =sans-serif= | Ubuntu, IBM Plex Sans, Noto Sans, DejaVu Sans                                      |
+  | =serif=      | Literata, IBM Plex Serif, EB Garamond, Vollkorn, Charis SIL, Noto Serif            |
+
+- =+my/font-family= resolves a role to the first installed family, falling back
+  to the head of the list when there is no display to ask — a daemon started
+  before any frame exists — rather than to nothing. =doom-font= and
+  =doom-variable-pitch-font= are set through it, so neither names a family
+  directly any more.
+- =+nov-serif-fonts= takes the serif list from the same defvar, replacing
+  ADR-040's separately-written copy of it.
+- =firefox/user.js='s three =font.name-list.*.x-western= prefs are generated
+  from that defvar at tangle time by the =firefox-font-prefs= block.
+- =doom-variable-pitch-font= consequently moves off JetBrains Mono, amending
+  ADR-022's choice for that one variable, and =doom-font= moves onto the
+  Nerd-patched build — see the ADR-022 logbook entry of the same date.
+
+The ordering within each list is the decision proper. Literata leads the serifs
+because ADR-040 chose it for long-form screen reading and it carries a real
+optical-size axis. Ubuntu leads the sans because it is the desktop's own UI face
+and what Firefox already rendered. The Nerd-patched JetBrains Mono leads the
+monospaces with plain JetBrains Mono immediately behind it, so a machine without
+the patched build is a fallback rather than a defect. IBM Plex sits second in
+all three: installed, coherent across roles, and one reordering away from owning
+the whole system if that is ever wanted.
+
+** Consequences
+
+- =mixed-pitch-mode= and =:ui zen= get a genuinely proportional face for the
+  first time. Anything in Emacs that inherits =variable-pitch= will change
+  appearance, which is a wider blast radius than the Firefox half of this ADR
+  and the reason it was put to the user rather than assumed.
+- ADR-040's workaround is no longer load-bearing but is still correct: it remaps
+  =variable-pitch= to the serif because a *book* should be set in a serif, not
+  because the variable-pitch face was secretly monospace. Nothing there needs to
+  change.
+- Firefox's Fonts pane becomes display-only for the three Western generics. That
+  is intended, and is the narrowest form of the pin: other language groups, the
+  cursive generic, and minimum font size are all still live.
+- *The lists are generated, not duplicated.* The first draft of this ADR left
+  the serif list written out twice — =+nov-serif-fonts= in the Emacs block and
+  =font.name-list.serif.x-western= in the =user.js= block — and deferred the fix
+  on the grounds that three names are cheap to keep in step. That deferral
+  lasted about an hour: the user chose to install five more families, which
+  grew the lists to four, four and six entries and gave them a third reader
+  (=doom-font= itself). Both halves of the stated revisit condition fired at
+  once, so the generator was built rather than the debt logged.
+
+  =+my/font-families= is now the single source. =doom-font= and
+  =doom-variable-pitch-font= resolve through =+my/font-family=,
+  =+nov-serif-fonts= takes the serif list directly from it, and a named
+  =emacs-lisp= block, =firefox-font-prefs=, emits the three =font.name-list.*=
+  lines into =user.js= at tangle time by reading the defvar back out of
+  =config.org= — the same technique the =--zb-*= palette generator uses, for the
+  same reason. Roles are named =monospace=, =sans-serif= and =serif= to match
+  Firefox's own generic families, so the two ends cannot drift in vocabulary
+  either.
+
+** Rejected alternatives
+
+See the two Candidates tables above.
+
+** Validation
+
+Done:
+
+- =config.org= tangles all three languages cleanly through the real batch path
+  (=emacs --batch= loading early-init and org, as =+literate-tangle= does).
+- The tangled =firefox/user.js= carries the three generated lists, and
+  =config.el= carries =+my/font-families=, =+my/font-family= and the two
+  =font-spec= calls that go through it.
+- =+my/font-family= has a runnable check covering the three behaviours that
+  could plausibly break: that the first *installed* family wins rather than the
+  first listed, that list order beats the order fontconfig happens to report,
+  and that an empty font list falls back to the head instead of nil. It passes,
+  and against this machine's real font set resolves to
+  =JetBrainsMono Nerd Font=, =Ubuntu= and =Literata=.
+- The pref names exist in this Firefox build's =omni.ja=.
+
+Outstanding, and the reason the status is "Decided" rather than "Implemented":
+
+- Restart Emacs and confirm =M-x describe-font= reports
+  =JetBrainsMono Nerd Font= for the default face and Ubuntu in a
+  =mixed-pitch-mode= buffer, that the modeline, dashboard and Org buffers still
+  look right with a proportional variable-pitch face, and that nerd-icons glyphs
+  still render (they should, from the primary font now rather than the
+  =Symbols Nerd Font Mono= fallback).
+- Open an EPUB and confirm nov.el sets it in Literata rather than Charis SIL.
+- Run =firefox-chrome-install=, restart Firefox, and confirm at =about:config=
+  that the three =font.name-list.*= prefs are user-set, and on a plain page that
+  a =serif=/=sans-serif=/=monospace= element renders in the expected family.
+
+** Rollback
+
+Reorder or trim =+my/font-families= in =config.org= and retangle; every consumer
+follows, because there is only the one list. To undo the whole entry, restore
+the two =font-spec= calls to literal families, restore =+nov-serif-fonts= to its
+ADR-040 literal, and delete the =firefox-font-prefs= block and its noweb
+reference, then =doom sync= and =firefox-chrome-install=. Firefox reverts to
+fontconfig defaults on the next startup; nothing persists, because =user.js= is
+re-applied from scratch each time. The installed font files are independent of
+all of this and can be left or deleted from
+=~/.local/share/fonts/{literata,jetbrains-mono-nerd}/=.
+
+** Revisit when
+
+- The three apt families land, at which point IBM Plex Serif — currently second
+  in the serif list — starts winning over EB Garamond and Vollkorn as the
+  fallback behind Literata. If the Plex superfamily is wanted outright, moving
+  its three entries to the head of all three lists is the whole change.
+- Fonts installed by hand drift, because =~/.local/share/fonts= is not tracked
+  by anything here. Literata and the Nerd build were fetched with two =curl=
+  calls that exist only in this conversation. If a third hand-installed family
+  appears, that is the point to tangle a =fonts-install= script in the shape of
+  =firefox-chrome-install= rather than keep doing it by hand.
+- Any role's list stops being read by all three consumers, which would mean the
+  generator is carrying weight it no longer earns.
+- Any additional language group needs the same treatment — the current prefs are
+  =x-western= only, which is correct for this machine and would not be on one
+  reading CJK.
