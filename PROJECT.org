@@ -1184,6 +1184,35 @@ same exposure either way.
 - [ ] Restoring the mail layer itself is Phase 2 work, not Phase 7's.
 
 *** 7.7 Rebuild the =pass= credential store
+
+*SUPERSEDED 2026-09-14 — the store is gone and everything below it is history.*
+The passphrase for =4F6F02436717EE9B823369EAE2F99AE2D3BDF9E1= was lost, so every
+entry the checkboxes below record as inserted is permanently unreadable. The
+=[X]= marks stay because they are an accurate record of what was done on
+2026-08-30; they are not a description of the machine today. The dead store is
+archived at =~/.password-store.dead-2026-09-14= and the dead key is still in the
+keyring, both until the rebuild is confirmed.
+
+Root cause, and the only part worth carrying forward: =pass-backup= existed for
+exactly this and had never been run — =/data/backups/pass/= does not exist. The
+unchecked restore-rehearsal box in §7.6 was the warning. See
+[[id:adr-credential-backup-enforced][ADR-048]].
+
+Live plan: [[file:docs/pass-rebuild.md][docs/pass-rebuild.md]]. Its step 0 must run
+first — it is not established whether the lost passphrase was the desktop key's
+or the laptop's, and the answer decides whether the three credentials can be
+carried across from the laptop or must be re-issued and revoked.
+
+- [ ] Run =docs/pass-rebuild.md= step 0 — determine which key's passphrase is
+  gone, before re-issuing anything.
+- [ ] Rebuild per that document: new key, =pass init=, three entries,
+  =pass-backup= *in the same sitting*, then the restore rehearsal.
+- [ ] Implement the [[id:adr-credential-backup-enforced][ADR-048]] guard in
+  =config.org= so an unbacked store warns at startup instead of going unnoticed
+  for two weeks.
+- [ ] Once the new store reads: delete the archived dead store and the dead key,
+  and shred the USB tarball. Irreversible — only after the replacement works.
+
 Found 2026-08-30 while auditing external binaries. =:tools pass +auth= is
 enabled and =docs/ai/providers.org= records =api/anthropic= and =api/openai= as
 "Live — verified", but nothing backing that survived *on this desktop*: no
@@ -1246,13 +1275,13 @@ which may pass through an agent or appear in any command output.
 - [X] =pass ls= to confirm the structure. Structure only — never print a value.
   Run 2026-08-30 and again 2026-09-04: =api/anthropic=, =api/openai=,
   =mail/oaut2-google-client=.
-- [ ] *Defect 1 — entry-name typo.* =pass mv mail/oaut2-google-client
+- [ ] *Defect 1 — entry-name typo.* /MOOT 2026-09-14 — died with the store, not to be actioned./ =pass mv mail/oaut2-google-client
   mail/oauth2-google-client=. =config.org= asks for the =oauth2= spelling at its
   three =+pass-get-field= call sites and in =my/pass-check-store='s expected
   list, so today the startup guard warns and org-gcal never finds a client. A
   rename decrypts and prints nothing. Skip if the USB transfer lands first — the
   transferred store already uses the right name.
-- [ ] *Defect 2 — no =client_id= line.* =pass edit mail/oauth2-google-client=
+- [ ] *Defect 2 — no =client_id= line.* /MOOT 2026-09-14 — died with the store, not to be actioned./ =pass edit mail/oauth2-google-client=
   and add =client_id: <id>.apps.googleusercontent.com= as line 2. The entry is
   currently one line, the secret only, and =+pass-get-field= reads a client id
   from the later lines. Same "skip if transferred" caveat.
@@ -1264,7 +1293,11 @@ which may pass through an agent or appear in any command output.
   defects and the pending transfer.
 - [ ] Re-verify gptel against both backends once the entries resolve.
 
-**** Transfer the credentials from the laptop by USB — planned, laptop half still to run
+**** Transfer the credentials from the laptop by USB — CANCELLED 2026-09-14
+/Superseded by/ [[file:docs/pass-rebuild.md][docs/pass-rebuild.md]]. /It assumed a working desktop key to
+name as a second recipient and a desktop store worth replacing; neither exists.
+Kept as history — its LUKS reasoning is still sound if a store ever travels on
+removable media again./
 Found 2026-08-30: the =pass= store, the GPG key and the whole mail stack were
 never on this desktop (=PsychedPC=). They live on the laptop, which is where the
 2026-07/08 Phase 3 credential work actually happened. Evidence on this machine:
@@ -1290,7 +1323,7 @@ needs nothing written; the LUKS route reformats the stick, and keeps the store
 browsable rather than sealed.
 
 ***** Procedure
-The step-by-step lives in [[file:docs/pass-usb-transfer.md][docs/pass-usb-transfer.md]] — written on the
+The step-by-step lives in [[file:docs/pass-rebuild.md][docs/pass-rebuild.md]] — written on the
 laptop 2026-09-04, reconciled with this section the same day so there is one
 record rather than two. It covers both carriers (a LUKS-formatted stick with a
 plain copy, or the =pass-backup= archive, which needs no LUKS because it is

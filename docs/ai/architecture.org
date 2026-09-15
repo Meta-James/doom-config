@@ -89,3 +89,14 @@ No secondary agentic-coding frontend — see [[id:adr-agent-shell-rejected][ADR-
 - *Credentials*: two-tier — the CLI agent uses its own subscription login;
   gptel/API-based tools use per-provider tokens from =pass= via Doom's =:tools
   pass=, never hardcoded. See [[id:ai-providers][providers.org]].
+
+  Unlike the git-permission layer above, this one is *currently only half
+  technical*, and the missing half has already failed once. Detection is
+  enforced — =my/pass-check-store= warns at startup when an expected entry is
+  absent. Recovery is not: =pass-backup= is a manual step that was documented,
+  tracked as a checkbox, and never run, and on 2026-09-14 the store was lost
+  with no archive behind it. [[id:adr-credential-backup-enforced][ADR-048]]
+  moves the backup half onto the same startup guard so it stops depending on
+  anyone remembering. Until that lands, treat the credential layer as the
+  worked example of why this document distinguishes technical from
+  instructional enforcement at all.

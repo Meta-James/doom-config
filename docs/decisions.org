@@ -6532,8 +6532,16 @@ undoing beyond the removal itself.
 * ADR-038: Guard the credential state that cannot be tangled — startup detection plus an off-disk encrypted backup
 :PROPERTIES:
 :ID:       adr-credential-state-guard
-:STATUS:   Implemented; detection live-verified in batch, backup script not yet run end-to-end (needs the user's own terminal for two passphrase prompts)
+:STATUS:   Partially implemented — detection live-verified in batch; the backup half was never run, and on 2026-09-14 that cost the store. See the LOGBOOK and [[id:adr-credential-backup-enforced][ADR-048]]
 :DATE:     2026-08-30
+:END:
+:LOGBOOK:
+- 2026-09-14 Implemented -> Partially implemented. The recovery half of this
+  entry (=pass-backup=) was never run: =/data/backups/pass/= does not exist.
+  The desktop key's passphrase was lost the same day and the store became
+  unrecoverable. The gap this entry itself recorded in its original =:STATUS:=
+  is the gap that bit. [[id:adr-credential-backup-enforced][ADR-048]] makes the
+  recovery half enforced at startup rather than instructional.
 :END:
 
 ** Context
@@ -8748,3 +8756,152 @@ them.
   with it.
 - A browser that owns =about= or =webcal= is installed, at which point those two
   lines want repointing rather than leaving absent.
+
+* ADR-048: A credential backup that omits its key is not a backup — make the ADR-038 recovery half enforced, not instructional
+:PROPERTIES:
+:ID:       adr-credential-backup-enforced
+:STATUS:   Accepted (not yet implemented) — the failure below is real and measured; the guard change it prescribes has not been written
+:DATE:     2026-09-14
+:END:
+
+** Context
+
+On 2026-09-14 the desktop =pass= store became permanently unreadable: the
+passphrase for the GPG key it was encrypted to
+(=4F6F02436717EE9B823369EAE2F99AE2D3BDF9E1=, generated 2026-08-30) was lost.
+All three entries — =api/anthropic=, =api/openai=,
+=mail/oauth2-google-client= — are unrecoverable. No key material can open
+them; there is no reset path for a GPG private key whose passphrase is gone.
+
+[[id:adr-credential-state-guard][ADR-038]] anticipated exactly this class of
+loss and built both halves of the answer: a startup *detection* half
+(=my/pass-check-store=) and a *recovery* half (=~/.local/bin/pass-backup=,
+which tars the store together with the exported secret key and encrypts the
+whole thing symmetrically). The recovery half is the one that matters here,
+and it had never been run. Its own documentation in =config.org= says "an
+archive you cannot open is not a backup" — the sharper lesson is that an
+archive that was never written is not a backup either.
+
+What did exist was a hand-made =password-store-2026-09-08.tar= on a USB
+stick: the store only, no key. That is the precise shape of the failure this
+entry is named for. It is not a partial backup; it is zero backup, because
+the half it omits is the half that decrypts.
+
+** Decision drivers
+
+- =standards.org='s credential rules forbid committing key material, so the
+  store cannot be a tangle target the way =~/.bashrc= is
+  ([[id:adr-literate-config][ADR-035]]). Backup is the only available guard.
+- This repository's stated preference for *technical* over *instructional*
+  enforcement (=docs/ai/architecture.org=). ADR-038's detection half is
+  technical; its recovery half was a checkbox in =PROJECT.org= §7.6, and a
+  checkbox is instructional.
+- The failure is silent and unbounded in time. Nothing degraded, nothing
+  warned, and the gap ran from 2026-08-30 to 2026-09-14 unnoticed.
+- Laziness in the right place: the detection half already runs on every
+  startup and already knows where the store is. Extending it costs a few
+  lines, not a new mechanism.
+
+** Candidates
+
+| Candidate | Fate |
+|-----------+------|
+| Leave =pass-backup= as a documented manual step | *Rejected.* This is the status quo that just failed. It was documented, tracked, and never run |
+| Warn at startup when no recent =pass-backup= archive exists | *Chosen.* Reuses the existing =emacs-startup-hook= guard; no new daemon, timer, or file |
+| Run =pass-backup= on a timer | *Rejected.* It needs two interactive passphrase prompts, as =config.org= already notes; no unattended job can satisfy it |
+| Escrow the passphrase somewhere recoverable | *Rejected here, deferred to the user.* Out of the repository's scope — it is a personal-practice decision, not a configuration one |
+| Drop =pass= for provider keys in plain files mode 600 | *Rejected.* Trades a recoverable-loss problem for a permanent-exposure one, against =standards.org= |
+
+** Evidence
+
+- =/data/backups/pass/= does not exist; =find /data /data2 -name 'pass-*.tar.gpg'=
+  returns nothing. =pass-backup= has never produced an archive on this host.
+- ADR-038's own =:STATUS:= says so in as many words: "backup script not yet
+  run end-to-end (needs the user's own terminal for two passphrase prompts)".
+  The gap was recorded at the time and stayed open.
+- =PROJECT.org= §7.6 carries an unchecked box — "Run =pass-backup= once after
+  the 7.7 inserts, then restore it into a scratch =$GNUPGHOME= to prove the
+  recipe. Until a restore is exercised, the recovery half is untested in the
+  only way that counts." That box is now the post-mortem.
+- The USB archive's entries list as encrypted to keyid =A924E57AE949428B=
+  (laptop key =859AF991C9EA4396=), checked with =gpg --list-packets=; the
+  desktop keyring holds only =E2F99AE2D3BDF9E1=. Confirmed the USB copy is
+  not a substitute for the lost key on this host.
+- =my/pass-check-store= (=config.org=, "Credential store guard") checks
+  =file-exists-p= per entry and nothing about backups. Read in full; the
+  extension point is the =missing= list it already builds.
+
+** Decision
+
+Extend =my/pass-check-store= to treat *an unbacked store* as a reportable
+condition alongside a missing one. Concretely, in =config.org=:
+
+- Add =my/pass-backup-dir= (defaulting to =PASS_BACKUP_DIR= or
+  =/data/backups/pass=, matching =pass-backup='s own resolution order).
+- After the existing entry loop, warn when that directory holds no
+  =pass-*.tar.gpg=, or when the newest one is older than the newest =.gpg=
+  file in the store — the second case is what catches "rotated a key, never
+  re-backed-up".
+- Keep the existing no-decrypt property. This is a =file-attributes= mtime
+  comparison; it must not prompt for a passphrase.
+
+The check names the archive =pass-backup= writes specifically, rather than
+any tarball, because that archive contains the exported secret key by
+construction. That is the rule this entry encodes: *the backup is the pair,
+or it is nothing.*
+
+Exercising a restore into a scratch =$GNUPGHOME= stays required before the
+recovery half counts as working — =PROJECT.org= §7.6 keeps that box, now
+with an ADR behind it.
+
+** Consequences
+
+- The warning fires from the next startup after implementation until a
+  backup exists, which is correct: today the store has no backup and no
+  contents either.
+- A new failure mode is accepted deliberately: =/data= unmounted makes the
+  check warn spuriously. That is the right bias — a false warning about
+  backups costs a glance, a missing one costs the store.
+- =docs/pass-rebuild.md= supersedes =docs/pass-usb-transfer.md=. The transfer
+  that document described is no longer the live plan, because the store it
+  would have replaced is gone and the desktop key with it.
+- The two defects =docs/ai/providers.org= tracked in the rebuilt store (the
+  =oaut2= entry-name typo, the missing =client_id= line) are now moot. They
+  die with the store rather than being fixed.
+- Nothing here recovers the lost credentials. The three entries must be
+  re-issued at their providers; the old values should be revoked, since they
+  can no longer be read to confirm they are unused.
+
+** Rejected alternatives
+
+See the Candidates table above, which carries the fate and reason for each.
+
+** Validation
+
+Not yet performed — this entry is =Accepted (not yet implemented)=. When the
+guard is written, validation is:
+
+- With no archive present, start Emacs and confirm the =pass= warning names
+  the missing backup. This is testable immediately, since that is the
+  current state of the machine.
+- Run =pass-backup=, restart, and confirm the warning clears.
+- Touch an entry so the store is newer than the archive, restart, and
+  confirm the staleness branch fires.
+- Confirm no pinentry prompt appears in any of the three cases.
+
+** Revisit when
+
+- The restore rehearsal in =PROJECT.org= §7.6 is actually run. If restoring
+  into a scratch =$GNUPGHOME= reveals the recipe is wrong, this entry's
+  premise — that =pass-backup='s archive is sufficient — needs re-testing,
+  not just re-reading.
+- A second host joins the store. The staleness comparison assumes one writer;
+  two machines inserting entries independently would need per-host archives
+  or a shared recipient list, which is
+  [[id:adr-multi-host-posture][ADR-039]]'s territory.
+- =/data= stops being a separate physical disk from =$HOME=. The whole
+  premise of ADR-038's off-disk placement is that =sda= survives an =sdc=
+  wipe.
+- Key rotation becomes routine rather than exceptional, at which point the
+  mtime heuristic is too weak and the check should compare =.gpg-id= against
+  the archive's recipient instead.

@@ -19,70 +19,69 @@ never storing the value in a variable. See [[id:adr-gptel-rework][ADR-006]].
 | Tool          | Credential source                          | Entry (pass path) | Status |
 |---------------+----------------------------------------------+----------------------+--------|
 | claude-code-ide.el (Phase 6) | Claude CLI's own subscription login | N/A — not a pass entry | Pending |
-| gptel (Anthropic, default)   | =:tools pass= =+pass-get-secret= | =api/anthropic= | *Entry present, unverified* — re-inserted into the store rebuilt 2026-08-30; not yet exercised through gptel. Was live before that (108-char string, verified without printing it) |
-| gptel (OpenAI, secondary)    | =:tools pass= =+pass-get-secret= | =api/openai= | *Entry present, unverified* — re-inserted into the store rebuilt 2026-08-30; not yet exercised through gptel. Was live before that (164-char string, verified without printing it) |
+| gptel (Anthropic, default)   | =:tools pass= =+pass-get-secret= | =api/anthropic= | *Lost 2026-09-14* — store unreadable, key passphrase gone; entry must be rebuilt. See Store status below |
+| gptel (OpenAI, secondary)    | =:tools pass= =+pass-get-secret= | =api/openai= | *Lost 2026-09-14* — store unreadable, key passphrase gone; entry must be rebuilt. See Store status below |
 | gptel (Gemini)               | N/A | =api/gemini= | Explicitly skipped per user request — see [[id:adr-gptel-rework][ADR-006]] |
 | copilot.el (Phase 5)         | GitHub's own device-code login flow (unrelated to =pass=) | N/A | Unchanged |
 
-* Store status — absent on this host, rebuilt 2026-08-30
+* Store status — lost 2026-09-14, rebuild pending
 :PROPERTIES:
 :ID:       providers-store-status
 :END:
 
-The Phase 7 audit recorded the password store this document describes as
-*gone* — no =pass= binary, no =~/.password-store=, =PASSWORD_STORE_DIR= unset,
-and an empty =~/.gnupg/private-keys-v1.d/= dated 2020-06-06. Two corrections
-have landed on that reading since, and both matter more than the original
-finding.
+*The store on this host is gone and cannot be recovered.* On 2026-09-14 the
+passphrase for the desktop GPG key =4F6F02436717EE9B823369EAE2F99AE2D3BDF9E1=
+(generated 2026-08-30) was lost. All three entries were encrypted to that key
+alone. A GPG private key without its passphrase has no reset path, so
+=api/anthropic=, =api/openai= and the Google OAuth client entry are
+unreadable — not misconfigured, not misnamed, unreadable.
 
-*It was never on this host.* Nothing was lost. The Phase 3 credential work
-happened on James's laptop, where the store, the GPG key and the mail stack
-still live; this desktop (=PsychedPC=) simply never had them. The real defect
-was documentation that described one host while being read on another — see
-[[id:adr-multi-host-posture][ADR-039]] for the multi-host posture that came out
-of it, and =docs/inventory.org='s =inv-homedir-state-loss= section.
+=~/.local/bin/pass-backup= existed to prevent exactly this and had never been
+run: =/data/backups/pass/= does not exist. The only backup that did exist was a
+hand-made =password-store-2026-09-08.tar= on a USB stick holding the encrypted
+store and no key, which is no backup at all. See
+[[id:adr-credential-backup-enforced][ADR-048]] for the decision that came out
+of it, and =docs/pass-rebuild.md= for the step-by-step rebuild.
 
-*A store now exists here, rebuilt rather than transferred.* On 2026-08-30 a new
-GPG key was generated on this desktop (ed25519 primary with a cv25519 encryption
-subkey, fingerprint =4F6F02436717EE9B823369EAE2F99AE2D3BDF9E1=), =pass init= run
-against it, and all three entries re-entered from their provider dashboards.
-=~/.password-store= holds =api/anthropic=, =api/openai= and the Google OAuth
-client entry. The store is encrypted to the desktop key alone — the laptop key is
-not a recipient.
+Current disposition, all deliberate and all pending the rebuild:
 
-Two defects in the rebuilt store, outstanding as of 2026-09-04 and James's own to
-fix (an agent never handles the values):
+- The dead store is archived at =~/.password-store.dead-2026-09-14=.
+  =~/.password-store= no longer exists, so =my/pass-check-store= warns at every
+  startup and gptel's two backends resolve against nothing.
+- The dead key is still in the keyring. It shares a UID with whatever key
+  replaces it, so every command in the rebuild takes an explicit fingerprint
+  rather than matching on =mrniceguyjames@gmail.com=.
+- Neither is recoverable; both are kept only until the replacement is confirmed
+  working.
 
-1. *Entry-name typo.* The store holds =mail/oaut2-google-client=; =config.org=
-   asks for =mail/oauth2-google-client=, both at its three =+pass-get-field= call
-   sites and in =my/pass-check-store='s expected-entry list. So the startup guard
-   warns and org-gcal never finds a client. The fix is =pass mv= — a rename, with
-   no value decrypted or printed.
-2. *That entry has no =client_id= line.* It is a single line, the secret only.
-   =+pass-get-field= needs =client_id: <id>.apps.googleusercontent.com= as line 2
-   before it can resolve a client id. The fix is =pass edit=.
+*Which passphrase was lost is not established.* If it was the desktop key's,
+the laptop store is intact and its key (=859AF991C9EA4396=) still opens the USB
+tarball — the values can be carried across by hand with no re-issuing. If it
+was the laptop key's, the values are gone and all three credentials must be
+re-issued and the old ones revoked. =docs/pass-rebuild.md= step 0 is the check
+that settles it, and it must be run before anything is re-issued.
 
-Unverified beyond those two: both =api/*= entries are two lines and shorter than
-these providers' keys normally run, which is the shape of a paste that wrapped.
-Confirming that means one request per provider reporting *HTTP status only*,
-never the value, and it needs James's say-so first, because it puts a live key on
-the network.
+*The two defects this section used to track are moot.* The rebuilt store's
+=mail/oaut2-google-client= typo and its missing =client_id= line died with the
+store. They are recorded here only so a future reader does not go looking for
+them: the rebuild creates =mail/oauth2-google-client= correctly from the start,
+per the shape below.
 
-*A transfer is still pending, and supersedes the rebuild.* PROJECT.org §7.7
-records moving the laptop's store here on an encrypted USB archive; James intends
-to run its laptop half. The transferred store carries the entry names and fields
-Phase 3 actually used, so it may resolve both defects above on its own — check
-them against the transferred store rather than fixing the store twice.
+*The pending laptop-to-desktop USB transfer is cancelled.* It assumed a working
+desktop key to name as a second recipient and a desktop store worth replacing;
+neither exists. =docs/pass-usb-transfer.md= has been replaced by
+=docs/pass-rebuild.md=.
 
-One question this closes for good: the client-id *field name* is =client_id=,
-settled from =auth-source-pass= source rather than guessed. =+pass-get-field= is
-a =defalias= onto =auth-source-pass-parse-entry=, which treats line 1 of an entry
+One question that survives the loss, because it was settled from source rather
+than guessed: the client-id *field name* is =client_id=. =+pass-get-field= is a
+=defalias= onto =auth-source-pass-parse-entry=, which treats line 1 of an entry
 as the secret and splits every later line at its first colon into a trimmed
 =key: value= pair. =config.org= tries =client_id= / =client-id= / =login= /
 =user= in order, so any of the four resolves.
 
-Update the Status column above when the entries are exercised through gptel, not
-merely when they are present.
+Update the Status column above when the entries are rebuilt, and again when
+they are exercised through gptel — not merely when they are present.
+
 
 Requirements carried over from [[id:std-credentials][standards.org]]: no secret values in git, in Org
 Babel results, in command transcripts, or in =CLAUDE.md=/=AGENTS.md=/prompts/logs.
