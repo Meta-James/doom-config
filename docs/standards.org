@@ -149,8 +149,9 @@ and one repository shared between them. See
 
 - Everything tangled from =config.org= is expected *identical* on every host:
   =init.el=, =packages.el=, =config.el=, =~/.bashrc=, =~/.inputrc=,
-  =~/.gitconfig=, =~/.local/bin/pass-backup=, =~/.local/bin/emacs-rebuild=,
-  =~/.local/bin/firefox-chrome-install= and =firefox/{user.js,userChrome.css,userContent.css}=. No
+  =~/.gitconfig=, =~/.local/bin/{pass-backup,emacs-rebuild,firefox-chrome-install,emacs-magnet,desktop-install}=,
+  =~/.local/share/applications/{org-protocol,emacs-magnet,emacs-mailto}.desktop=
+  and =firefox/{user.js,userChrome.css,userContent.css}=. No
   =system-name= branching, no per-host config file, no per-host branch.
 - Where a tangled file's *destination* is host-dependent — the Firefox profile
   path, [[id:adr-firefox-chrome-layer][ADR-043]] — the file itself stays identical and a tangled resolver
@@ -169,3 +170,71 @@ The rule exists because its absence produced a wrong diagnosis: absent
 credentials on the desktop were recorded as state that had *vanished*, when they
 had only ever existed on the laptop. See
 [[id:inv-homedir-state-loss][inventory.org]] for that correction.
+
+* State outside the repository
+:PROPERTIES:
+:ID:       std-external-state
+:END:
+
+Some things this configuration depends on cannot live in it: a Firefox profile
+directory whose path differs per machine, a font file, a line in
+=~/.config/mimeapps.list=. They are legitimate, and each one is a liability of
+the same specific kind.
+
+*Anything outside this repository that the configuration depends on gets four
+things.* Not three:
+
+1. *A declaration in =config.org=.* What is wanted, named once, in the file that
+   is the source of truth for everything else. =+my/font-families= and
+   =+my/scheme-handlers= are the shape.
+2. *An idempotent installer* that makes the declaration true and is safe to
+   re-run. Tangled, like everything else. It prints every path it resolved, so
+   "which thing was this actually going to" is never a question answered by
+   guessing.
+3. *A =--check= mode* that changes nothing and exits non-zero when reality has
+   drifted from the declaration. Report-only, always: a checker that repairs
+   things cannot be run to find out whether repair is needed.
+4. *A line in the startup check*, =+my/external-state-checks=. A =--check= that
+   nobody runs is a tool to be remembered, which is the failure it was built to
+   end.
+
+Miss any one and the whole thing degrades. A declaration without an installer is
+a wish. An installer without a =--check= only works when you already suspect the
+problem. A =--check= nothing runs is a script you will rediscover, after the
+symptom, while looking for something else.
+
+The rule exists because the failure mode is *silence*, and silence in the wrong
+place. None of these things error when they drift. The Firefox profile goes
+stale and a customisation appears not to take. A font is missing and
+=+my/font-families= quietly falls through to its next entry, so the screen is
+merely a little unlike what the configuration says. A scheme association is
+taken over and the click simply goes somewhere else. In every case the symptom
+surfaces in an application that is not at fault, which is the most expensive
+possible place to start looking.
+
+Three worked examples, and the history is the argument. =firefox-chrome-install=
+([[id:adr-firefox-chrome-layer][ADR-043]]) came first and established the shape.
+[[id:adr-font-roles][ADR-044]] then installed five font families by hand and left
+nothing naming them; [[id:adr-org-protocol-capture][ADR-045]] added a scheme
+association the same way, and noted that a third instance should produce a rule
+rather than a fourth fix. Surveying for that third instance found two *older*
+ones nobody had noticed — a hand-written =emacs-magnet= script that
+[[id:adr-torrent-transmission][ADR-030]] depended on and never tangled, and four
+=mimeapps.list= associations pointing at a browser that has never been installed
+on this machine. =desktop-install= ([[id:adr-desktop-install][ADR-046]]) closed
+those, and this rule exists so the next one is noticed when it is created rather
+than two ADRs later.
+
+Two things the rule deliberately does *not* demand. An installer never acquires
+what needs a password — =apt= packages are *reported*, with the command to run,
+because a script that sometimes stops for a password is worse than one that
+never does. And an installer never deletes: what legitimately lives in a font
+directory or a browser profile is not knowable from inside a script.
+
+What is *not* covered, so this is not read as a mandate to track everything: state
+a person is meant to change by hand and this configuration has no opinion about.
+Firefox's toolbar layout, its compact-density choice, reader mode's font-type
+toggle, browser bookmarks. [[id:adr-firefox-chrome-layer][ADR-043]] and
+[[id:adr-font-roles][ADR-044]] both chose deliberately to leave those alone, and
+pinning them would reverse a decision rather than implement one. The test is
+whether the configuration *depends* on the value, not whether it could reach it.

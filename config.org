@@ -4687,47 +4687,88 @@ if pgrep -x firefox >/dev/null 2>&1; then
 fi
 #+end_src
 
-** Announcing profile drift
+** Announcing drift in the state outside this repository
 :PROPERTIES:
 :ID:       literate-firefox-drift-check
 :END:
 
-Because the layer copies rather than symlinks, the profile goes stale the
-moment =doom sync= retangles =firefox/*.css= and nothing runs
-=firefox-chrome-install= afterwards. Nothing said so: the symptom was a
-customisation that appeared not to take, and the diagnosis was remembering
-that this layer exists at all. This runs =--check= once per session and warns
-if the three files differ. =--check= changes nothing and exits non-zero on
-drift, which is the whole of the interface used here.
+Several things this configuration depends on live outside it and can go stale
+without saying so: the Firefox profile the chrome layer *copies* into
+([[id:adr-firefox-chrome-layer][ADR-043]]), the fonts
+[[id:adr-font-roles][ADR-044]]'s ordered lists prefer, and the URL scheme
+associations [[id:adr-org-protocol-capture][ADR-045]] and
+[[id:adr-mailto-emacs][ADR-047]] claim. The inventory of all of it is in
+[[id:inv-desktop-state][inventory.org]].
 
-Deliberately *not* wired into =doom sync=: drift also arrives without a sync
--- a different profile becomes the default, an extension rewrites =user.js= --
-and a check at Emacs startup catches all of it, including the sync case, since
-a sync is followed by a restart anyway.
+They share a failure mode, which is the only reason one function covers them.
+Each fails *silently*, and each fails somewhere other than where the cause is: a
+customisation that appears not to take, a page set in the wrong serif, a click
+that goes to the wrong application. None of them errors. Nothing was asking.
 
-This is an Emacs block inside the Firefox section; it tangles to =config.el=
-like the rest of the Emacs configuration and lands at the end of it.
+Each owning script answers =--check= by reporting and changing nothing, exiting
+non-zero on drift. That is the whole of the interface used here, and it is the
+contract [[id:std-external-state][standards.org]] now requires of anything in
+this position.
+
+*One warning, not one per script.* Two independent popups on a single startup is
+how a person learns to dismiss them without reading, so the checks run in
+parallel and the last one to finish raises a single warning naming everything
+that drifted. A script that is absent is skipped rather than reported — on a
+machine where it has not been tangled yet, its absence is not drift.
+
+Deliberately *not* wired into =doom sync=: drift also arrives without a sync — a
+different profile becomes the default, an extension rewrites =user.js=, a font
+is removed — and a check at Emacs startup catches all of it, including the sync
+case, since a sync is followed by a restart anyway.
+
+This is an Emacs block inside the Firefox section for historical reasons; it
+tangles to =config.el= like the rest of the Emacs configuration and lands at the
+end of it.
 
 #+begin_src emacs-lisp :tangle config.el
-(defun +my/firefox-chrome-check-h ()
-  "Warn when the Firefox profile has drifted from the tangled chrome layer.
-Runs `firefox-chrome-install --check', which reports and changes nothing."
-  (let ((script (expand-file-name "~/.local/bin/firefox-chrome-install")))
-    (when (file-executable-p script)
+(defvar +my/external-state-checks
+  '("firefox-chrome-install" "desktop-install")
+  "Scripts in ~/.local/bin run with `--check' by `+my/external-state-check-h'.
+Each must report without changing anything and exit non-zero on drift. See
+docs/standards.org and docs/decisions.org ADR-046.")
+
+(defun +my/external-state-check-h ()
+  "Warn once if any of `+my/external-state-checks' reports drift.
+Each script is run with `--check', which changes nothing. Scripts that are
+not present are skipped: on a host where one has never been tangled, its
+absence is not drift."
+  (let* ((scripts (seq-filter #'file-executable-p
+                              (mapcar (lambda (name)
+                                        (expand-file-name name "~/.local/bin/"))
+                                      +my/external-state-checks)))
+         (pending (length scripts))
+         (drifted nil))
+    (dolist (script scripts)
       (make-process
-       :name "firefox-chrome-check"
-       :buffer (generate-new-buffer " *firefox-chrome-check*")
+       :name (file-name-nondirectory script)
+       :buffer (generate-new-buffer " *external-state-check*")
        :noquery t
        :command (list script "--check")
        :sentinel
        (lambda (proc _event)
          (when (memq (process-status proc) '(exit signal))
            (unless (zerop (process-exit-status proc))
-             (warn "Firefox chrome layer has drifted from the profile:\n%s\nRun `firefox-chrome-install' to reinstall it."
-                   (with-current-buffer (process-buffer proc) (buffer-string))))
-           (kill-buffer (process-buffer proc))))))))
+             (push (cons (process-name proc)
+                         (with-current-buffer (process-buffer proc)
+                           (buffer-string)))
+                   drifted))
+           (kill-buffer (process-buffer proc))
+           ;; The last sentinel to run owns the warning, so however many
+           ;; scripts drifted the user sees exactly one popup.
+           (setq pending (1- pending))
+           (when (and (zerop pending) drifted)
+             (warn "External state has drifted from this configuration:\n\n%s\nRun the named script without `--check' to repair it."
+                   (mapconcat (lambda (report)
+                                (format "--- %s ---\n%s" (car report) (cdr report)))
+                              (nreverse drifted)
+                              "\n")))))))))
 
-(add-hook 'doom-first-file-hook #'+my/firefox-chrome-check-h)
+(add-hook 'doom-first-file-hook #'+my/external-state-check-h)
 #+end_src
 
 ** The menu: tweaks weighed and left out

@@ -7882,6 +7882,12 @@ and raises a warning naming the out-of-sync files if the script exits non-zero.
 =--check= reports and changes nothing, so the worst case is a spurious warning,
 never a surprise write into a browser profile.
 
+/Superseded 2026-09-14:/ that function is now =+my/external-state-check-h=,
+which runs this script and =desktop-install= together and raises *one* warning
+for both — see [[id:adr-desktop-install][ADR-046]] and the
+[[id:std-external-state][external-state rule]]. The behaviour described above is
+unchanged; only the name and the number of scripts are.
+
 It deliberately hangs off Emacs startup rather than =doom-after-sync-hook=.
 Drift also arrives without a sync — a different profile becomes the default, an
 extension rewrites =user.js= — and the startup check catches those too,
@@ -8518,10 +8524,13 @@ knowable from inside the script.
   =firefox-chrome-install= and =desktop-install= are two instances of that one
   rule, each owning a coherent subject. A third instance should be a third
   script, not a third branch inside one of these.
-- Nothing yet *runs* =desktop-install --check=. Until Stage 4 folds it into the
-  Emacs startup warning alongside =firefox-chrome-install --check=, this is a
-  tool the user has to remember, which is the same category of failure it was
-  built to end. Stage 4 is the half that closes the loop.
+- ~~Nothing yet *runs* =desktop-install --check=.~~ *Closed the same day by
+  Stage 4.* =+my/external-state-check-h= runs both scripts at startup and
+  raises a single warning naming everything that drifted, and
+  [[id:std-external-state][standards.org]] now requires that fourth thing — a
+  line in the startup check — of anything in this position. The consequence
+  this entry recorded lasted about an hour, which is the second time in this
+  workstream a deferral did not outlive the day it was written.
 - =apt= packages remain outside what any of this can do. The script names them
   and stops.
 - The scheme table is now the single place claiming a URL scheme. Adding a
