@@ -1180,3 +1180,110 @@ load" but "closures quietly misbehave at runtime, somewhere else, later".
 When moving any further file under the literate config, check its first line and
 its tail for file-local variables *before* converting the body, and re-check the
 tangled output afterwards.
+
+* RESOLVED: org-protocol capture did nothing, because the bookmarklet had whitespace inside two identifiers
+:PROPERTIES:
+:ID:       tshoot-bookmarklet-whitespace
+:DATE:     2026-09-14
+:END:
+
+** Symptom
+Clicking the "Capture to org" bookmark in Firefox did nothing at all. No capture
+buffer, no Emacs frame, no error dialog, no prompt to choose an application.
+Everything else in the [[id:adr-firefox-chrome-layer][ADR-043]] browser layer verified
+fine on the same pass, so this looked like a broken org-protocol chain.
+
+** Cause
+It was not the chain. It was the bookmark's own text. The copy saved in
+=places.sqlite= had three spaces jammed into the middle of two identifiers:
+
+#+begin_example
+location.hre   f)                        should be  location.href)
+window.getSelection().to   String()      should be  window.getSelection().toString()
+#+end_example
+
+=location.hre= is =undefined=, and the stray =f)= after it is a =SyntaxError=, so
+the whole bookmarklet aborts before it ever assigns =location.href=. Firefox
+reports nothing for a bookmarklet that fails to parse — hence the total silence.
+
+The corruption is a hand-copy artefact. The bookmarklet is added by hand (see
+the "The Firefox half" section of =config.org=), and it was evidently copied from
+somewhere that was rendering the long line justified or wrapped rather than from
+the source block itself.
+
+** Diagnosis shortcut
+Diff the saved bookmark against the source of truth rather than reading either
+one. A byte count is enough to catch it:
+
+#+begin_src sh
+P=~/snap/firefox/common/.mozilla/firefox/s5v1taq3.default-release
+cp "$P/places.sqlite" /tmp/p.sqlite
+sqlite3 /tmp/p.sqlite \
+  "select length(url) from moz_places where url like 'javascript:%org-protocol%';"
+sed -n '4957p' ~/.config/doom/config.org | tr -d '\n' | wc -c
+#+end_src
+
+The two numbers must match — 210 bytes at the time of writing. Note the line
+number drifts as =config.org= grows; grep for =org-protocol://capture= instead of
+trusting it.
+
+** Proving the rest of the chain before suspecting the bookmarklet
+Each half can be exercised on its own, which is what turned a vague "capture
+does not work" into a one-line fix:
+
+#+begin_src sh
+# Emacs half: does the template exist in the running daemon?
+emacsclient -e "(mapcar #'car org-capture-templates)"
+
+# Desktop half: does the URL scheme reach Emacs and open a capture buffer?
+xdg-open 'org-protocol://capture?template=c&url=https%3A%2F%2Fexample.org&title=test&body='
+emacsclient -e '(buffer-name (window-buffer (selected-window)))'
+#+end_src
+
+Run =emacsclient= through =rtk proxy= — see
+[[id:tshoot-rtk-swallows-emacsclient][the rtk entry]] for why its output is
+otherwise empty.
+
+If =xdg-open= opens =CAPTURE-todo.org=, then =mimeapps.list=,
+=org-protocol.desktop=, =network.protocol-handler.expose.org-protocol=, Doom's
+lazy =server-visit-files= advice and the capture template are all fine, and the
+fault is in the browser's copy of the bookmarklet.
+
+** Fix
+Replace the bookmark's location with the source block's text, either through
+Firefox's own bookmark editor (paste from =config.org=, not from a terminal
+render) or, with Firefox fully quit, by writing it into =places.sqlite=:
+
+#+begin_src sh
+P=~/snap/firefox/common/.mozilla/firefox/s5v1taq3.default-release
+cp "$P/places.sqlite" "$P/places.sqlite.bak-$(date +%Y%m%d)"
+sqlite3 "$P/places.sqlite" \
+  "update moz_places set url = cast(readfile('/path/to/bookmarklet.txt') as text)
+   where url like 'javascript:%org-protocol%';"
+rm -f "$P/places.sqlite-shm" "$P/places.sqlite-wal"
+#+end_src
+
+Two traps in that =update=. =readfile()= returns a *blob*, so without the
+=cast(... as text)= the row's =url= becomes a blob that no longer matches a
+=like= query and that Firefox will not treat as a URL. And the file must have no
+trailing newline — build it with =printf '%s' "$(sed -n ...)"=, not with a plain
+redirect.
+
+It also leaves =moz_places.url_hash= stale, because that column is computed by
+Firefox's own hash function and cannot be recomputed from =sqlite3=. For a
+=javascript:= bookmarklet this is harmless: bookmarks resolve through
+=moz_bookmarks.fk= to the row id, not through the hash, and bookmarklets are
+never entered into history. The worst case is that a later lookup by URL misses
+and inserts a duplicate =moz_places= row. Editing the bookmark in Firefox's UI
+instead avoids even that, at the cost of re-introducing the copy-by-hand risk
+this entry is about.
+
+** The general class
+A bookmarklet is code stored outside the repository, in a binary database, with
+no syntax check and no error reporting. The literate config can tangle the
+=.desktop= file, the =user.js= pref and the capture template, but
+[[id:adr-org-protocol-capture][ADR-045]]'s browser half stops at "add a bookmark
+by hand" — and that hand-copy step is the one link in the chain with no
+verification. When any part of an otherwise-tangled integration is transcribed
+manually, compare the installed copy against the source byte-for-byte before
+diagnosing anything downstream of it.

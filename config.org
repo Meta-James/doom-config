@@ -4963,6 +4963,24 @@ it should expose it itself, which is what the
 =network.protocol-handler.expose.org-protocol= pref in =firefox/user.js=
 settles.
 
+Copy that line from *this source block*, with =C-c '= or a region copy out of
+=config.org= — not from a rendered or wrapped view of it. This is the one link
+in the whole capture chain that is transcribed by hand, and a copy that picked
+up whitespace inside =location.href= cost a full re-diagnosis once already: a
+bookmarklet that fails to parse does nothing and reports nothing. After adding
+it, confirm the saved copy still matches:
+
+#+begin_src sh :tangle no
+P=~/snap/firefox/common/.mozilla/firefox/s5v1taq3.default-release
+cp "$P/places.sqlite" /tmp/p.sqlite
+sqlite3 /tmp/p.sqlite \
+  "select length(url) from moz_places where url like 'javascript:%org-protocol%';"
+#+end_src
+
+210 bytes, matching =grep -o "javascript:.*" config.org | tr -d '\n' | wc -c=.
+See [[id:tshoot-bookmarklet-whitespace][the troubleshooting entry]] for the
+diagnosis and for how to exercise each half of the chain separately.
+
 ** ~/.local/share/applications/emacs-mailto.desktop
 
 Registers the =mailto:= URL scheme so a mail link anywhere on the desktop
