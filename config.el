@@ -2251,22 +2251,46 @@ agenda is being drawn. Authorizing is a user-initiated act: do it once via
 
 ;; ;; Open Workspaces and start programs?
 
-(defun +my/firefox-chrome-check-h ()
-  "Warn when the Firefox profile has drifted from the tangled chrome layer.
-Runs `firefox-chrome-install --check', which reports and changes nothing."
-  (let ((script (expand-file-name "~/.local/bin/firefox-chrome-install")))
-    (when (file-executable-p script)
+(defvar +my/external-state-checks
+  '("firefox-chrome-install" "desktop-install")
+  "Scripts in ~/.local/bin run with `--check' by `+my/external-state-check-h'.
+Each must report without changing anything and exit non-zero on drift. See
+docs/standards.org and docs/decisions.org ADR-046.")
+
+(defun +my/external-state-check-h ()
+  "Warn once if any of `+my/external-state-checks' reports drift.
+Each script is run with `--check', which changes nothing. Scripts that are
+not present are skipped: on a host where one has never been tangled, its
+absence is not drift."
+  (let* ((scripts (seq-filter #'file-executable-p
+                              (mapcar (lambda (name)
+                                        (expand-file-name name "~/.local/bin/"))
+                                      +my/external-state-checks)))
+         (pending (length scripts))
+         (drifted nil))
+    (dolist (script scripts)
       (make-process
-       :name "firefox-chrome-check"
-       :buffer (generate-new-buffer " *firefox-chrome-check*")
+       :name (file-name-nondirectory script)
+       :buffer (generate-new-buffer " *external-state-check*")
        :noquery t
        :command (list script "--check")
        :sentinel
        (lambda (proc _event)
          (when (memq (process-status proc) '(exit signal))
            (unless (zerop (process-exit-status proc))
-             (warn "Firefox chrome layer has drifted from the profile:\n%s\nRun `firefox-chrome-install' to reinstall it."
-                   (with-current-buffer (process-buffer proc) (buffer-string))))
-           (kill-buffer (process-buffer proc))))))))
+             (push (cons (process-name proc)
+                         (with-current-buffer (process-buffer proc)
+                           (buffer-string)))
+                   drifted))
+           (kill-buffer (process-buffer proc))
+           ;; The last sentinel to run owns the warning, so however many
+           ;; scripts drifted the user sees exactly one popup.
+           (setq pending (1- pending))
+           (when (and (zerop pending) drifted)
+             (warn "External state has drifted from this configuration:\n\n%s\nRun the named script without `--check' to repair it."
+                   (mapconcat (lambda (report)
+                                (format "--- %s ---\n%s" (car report) (cdr report)))
+                              (nreverse drifted)
+                              "\n")))))))))
 
-(add-hook 'doom-first-file-hook #'+my/firefox-chrome-check-h)
+(add-hook 'doom-first-file-hook #'+my/external-state-check-h)
