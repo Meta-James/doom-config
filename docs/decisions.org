@@ -8253,7 +8253,7 @@ opposite directions:
   =xdg-mime query default x-scheme-handler/org-protocol= answered
   =emacsclient.desktop=, i.e. the scheme looked handled. It is Emacs's own entry,
   installed to =/usr/local/share/applications/= by the =make install= of
-  [[id:adr-emacs-build-flags][ADR-042]]'s build, and its =Exec= line ends in
+  [[id:adr-emacs-rebuild-flags][ADR-042]]'s build, and its =Exec= line ends in
   =%F= — the field code for a *file list*, not =%u= for a URL. A registration
   that resolves to a text-editor launcher fails in the least informative way
   available: the click does nothing, and every diagnostic says a handler is
@@ -8605,7 +8605,7 @@ installed on this machine. The first reading was "three dangling associations".
 The second reading is more interesting and is what this entry is really about:
 =mailto= was *not* broken. XDG fell through the dead line to
 =/usr/local/share/applications/emacs-mail.desktop=, installed by the =make
-install= of [[id:adr-emacs-build-flags][ADR-042]]'s Emacs build, and mail links
+install= of [[id:adr-emacs-rebuild-flags][ADR-042]]'s Emacs build, and mail links
 opened. Through build output, with =Exec=emacs -f message-mailto %u= — a whole
 new Emacs per click, ignoring the daemon that is already running, and rewritten
 by the next =emacs-rebuild=.
@@ -8926,3 +8926,253 @@ guard is written, validation is:
 - Key rotation becomes routine rather than exceptional, at which point the
   mtime heuristic is too weak and the check should compare =.gpg-id= against
   the archive's recipient instead.
+
+* ADR-049: Replace the Firefox snap with Mozilla's own deb, because confinement is what blocks the browser layer's remaining features
+:PROPERTIES:
+:ID:       adr-firefox-deb-not-snap
+:STATUS:   Implemented 2026-09-14 — Firefox 155.0.1~build1 from packages.mozilla.org, snap removed, profile migrated. One follow-up open: the APT pin is still repository-wide
+:LOGBOOK:
+- 2026-09-14 Implemented, and the migration went wrong in a way worth keeping.
+  Two facts below were learned the hard way and are now in
+  =docs/ai/troubleshooting.org::tshoot-firefox-desnap=: Ubuntu's transitional
+  package carries an *epoch*, so Mozilla's build reads as a downgrade and a
+  scripted =apt-get install -y= refuses it; and =snap remove= takes an
+  automatic snapshot, which is what made the removal recoverable after the
+  profile was deleted un-migrated.
+:END:
+:DATE:     2026-09-14
+:END:
+
+** Context
+
+[[id:adr-firefox-chrome-layer][ADR-043]] brought Firefox into the literate
+config: =user.js=, =userChrome.css= and =userContent.css= are tangled from
+=config.org= and copied into the active profile by
+=~/.local/bin/firefox-chrome-install=. [[id:adr-org-protocol-capture][ADR-045]]
+added web capture through =org-protocol=. Both work. The two browser items
+still open in =PROJECT.org= — Tridactyl and =passff= — were blocked on one
+shared unknown: whether *native messaging* functions under snap confinement.
+
+Firefox on this host is the Ubuntu snap, revision 8803. Its profile lives at
+=~/snap/firefox/common/.mozilla/firefox/s5v1taq3.default-release=, and inside
+the sandbox =$HOME= is remapped to =~/snap/firefox/common=. The earlier note in
+=PROJECT.org= recorded that the snap's AppArmor profile contains no literal
+=native-messaging= string and left "reading it properly" as the unfinished step.
+
+That step is now done, and the answer is more interesting than "blocked".
+
+** Decision drivers
+
+- *One tool per responsibility, configured from a file.* ADR-043 rejected the
+  Firefox Color extension because its state lives in extension storage rather
+  than in a tangleable file. Any browser addition has to clear that same bar.
+- *Evil-first.* Tridactyl is that rule applied to the one application that
+  ignores modal conventions, and [[id:adr-corfu-migration][ADR-021]]
+  permits it because nothing else owns keyboard-driven browsing.
+- *One credential path.* =passff= is attractive precisely because it reuses the
+  existing =pass= store instead of standing up a second one.
+- *Don't pay for confinement that buys nothing here.* The snap sandbox is
+  protecting the user from a browser that is already trusted with the whole
+  =pass= workflow by way of the user who drives it.
+
+** Evidence
+
+Measured 2026-09-14 by running probes inside real confinement with
+=snap run --shell firefox=, not by reasoning from the profile alone.
+
+The profile's =home= interface, at
+=/var/lib/snapd/apparmor/profiles/snap.firefox.firefox:2122=:
+
+#+begin_example
+owner @{HOME}/[^s.]**    rwklix,
+owner @{HOME}/s[^n]**    rwklix,
+owner @{HOME}/sn[^a]**   rwklix,
+owner @{HOME}/sna[^p]**  rwklix,
+owner @{HOME}/snap[^/]** rwklix,
+#+end_example
+
+=ix= is inherit-exec, so exec inside =$HOME= is *permitted*, excluding
+top-level hidden directories and =~/snap/=. There is no =native-messaging=
+string in the profile because there is no such rule to write — the generic file
+rules already cover it. The original hazard was therefore misdiagnosed.
+
+| Probe                                                        | Result                    |
+|--------------------------------------------------------------+---------------------------|
+| exec in =$SNAP_USER_COMMON=                                  | OK                        |
+| exec in =$SNAP_USER_COMMON/.mozilla/native-messaging-hosts/= | OK                        |
+| exec in non-hidden real =$HOME=                              | OK                        |
+| exec in =~/.local/bin/=                                      | DENIED                    |
+| read =~/.password-store=                                     | DENIED                    |
+| read =~/.gnupg=                                              | DENIED                    |
+| =/run/user/1000/emacs/server=                                | stat OK, *connect DENIED* |
+| unix socket under non-hidden =$HOME=                         | bind + connect OK         |
+| =/usr/local/bin/emacsclient= visible inside the snap         | No — host =/usr= unmounted |
+| a copied =emacsclient= run inside the snap                   | OK, =emacsclient 31.1=    |
+
+Read feature by feature:
+
+- *Native messaging itself works.* A Tridactyl messenger installed under
+  =~/snap/firefox/common/.mozilla/native-messaging-hosts/= would be found and
+  executed.
+- *A tangled =tridactylrc= works, at a different path.* The confined messenger
+  resolves =$HOME/.config/tridactyl/tridactylrc= against the snap's =$HOME=, so
+  the file would have to be tangled to
+  =~/snap/firefox/common/.config/tridactyl/tridactylrc=. Written and read back
+  successfully.
+- *=editorcmd= fails, for two independent reasons.* The Emacs server socket
+  sits under =/run/user/1000/=, outside the snap's permitted run directory, and
+  =emacsclient= is not reachable at all because the host's =/usr= is not
+  mounted inside the sandbox. Both are fixable — relocate the socket with
+  =server-socket-dir= and ship a copy of the binary — but the socket move
+  ripples into every =.desktop= entry and script that calls =emacsclient=,
+  which is the ADR-046 installer and the tangled dotfiles.
+- *=passff= cannot be made to work.* The helper can read neither
+  =~/.password-store= nor =~/.gnupg=, and the only way through is moving both
+  out of top-level hidden directories, which breaks GPG's own expectations.
+
+** Candidates
+
+1. *Stay on the snap, accept the narrowed feature set.* Tridactyl with its
+   messenger and a tangled rc at the snap-relative path; no =editorcmd=; no
+   =passff=.
+2. *Stay on the snap, relocate the Emacs socket.* As above plus =editorcmd=, at
+   the cost of an =EMACS_SOCKET_NAME= or =-s= change reaching every caller.
+3. *Replace the snap with Mozilla's own deb* from =packages.mozilla.org=,
+   unconfined.
+4. *Flatpak.* A different sandbox with the same class of problem.
+
+** Decision
+
+Candidate 3. Install Firefox from Mozilla's APT repository and remove the snap.
+
+Everything the browser layer wants works without contortion: native messaging
+needs no path translation, =tridactylrc= tangles to the ordinary
+=~/.config/tridactyl/tridactylrc=, =editorcmd= reaches the existing Emacs socket
+with no relocation, and =passff= becomes possible rather than impossible.
+
+Two smaller gains make this more than a feature unlock. It removes a trap that
+is worse than first recorded. =~/.mozilla/firefox/= holds *two* dead profiles:
+=pdc35998.default=, an 8K stub that =profiles.ini= still marks =Default=1=, and
+=s5v1taq3.default-release= — 433M, last written 2026-01-03, abandoned when the
+snap took over, and carrying *the same directory name as the live snap
+profile*. A stub merely misleads a grep, which it already did during the
+ADR-045 bookmarklet diagnosis. A stale same-named profile is worse: it is a
+plausible-looking 433M target that a careless migration would collide with, and
+a browser silently opening nine-month-old bookmarks looks like data loss rather
+than a wrong path. Naming the collision is now part of this ADR's migration
+steps. And it matches the
+precedent this repository already set for its most important tool — Emacs is
+built from source under [[id:adr-emacs-rebuild-flags][ADR-042]] rather than taken
+from a distribution sandbox, for the same reason.
+
+=firefox-chrome-install= needs no change. Its =candidate_roots= already probes
+=snap list firefox= and falls through to =$HOME/.mozilla/firefox= when the snap
+is absent.
+
+** Consequences
+
+- The profile must be migrated before the snap is removed. =snap remove= deletes
+  =~/snap/firefox= and every bookmark, cookie, extension and stored password
+  with it. The 19 installed extensions are re-fetched from the profile, not
+  reinstalled by hand, provided the profile directory is copied intact.
+- *The destination is occupied.* =~/.mozilla/firefox/s5v1taq3.default-release=
+  already exists, 433M of it, stale since 2026-01-03. The migration must move
+  it aside under a dated name rather than copy over it, and must not be run
+  while Firefox holds the source open — 880M of live profile including a
+  non-empty WAL.
+- A third-party APT repository joins the system's trust set. Mozilla's own,
+  signed with their key, which is the same trust already extended to the binary
+  the snap ships.
+- Ubuntu's =firefox= deb is a transitional package that reinstalls the snap, so
+  the Mozilla repository needs an APT pin to outrank it. Without the pin an
+  ordinary =apt upgrade= silently restores the snap and takes the browser layer
+  back to the state this ADR exists to leave.
+- =PROJECT.org='s Tridactyl acceptance criterion no longer needs splitting. The
+  textarea-in-Emacs half stops being contingent.
+- =passff= moves from "proven blocked" to "open, on its own merits" — it still
+  needs its own ADR, and the [[id:adr-credential-backup-enforced][ADR-048]]
+  rebuild has to finish before there is a store to put behind it.
+
+** Rejected alternatives
+
+- *Candidate 2, relocating the Emacs server socket.* It buys one feature and
+  spreads a change across the desktop layer, the tangled dotfiles and every
+  script that shells out to =emacsclient=, to work around a sandbox that is
+  about to be removed anyway. It also leaves =passff= dead.
+- *Candidate 4, Flatpak.* Trades one confinement story for another. Flatpak's
+  filesystem overrides could be widened until native messaging worked, but that
+  is the same argument as removing the sandbox, reached more slowly.
+- *Moving the =pass= store out of =~/.password-store=.* Would satisfy the
+  AppArmor rule and break GPG's and =pass='s own defaults for the sake of a
+  browser autofill feature. Backwards.
+
+** Validation
+
+- =firefox --version= reports a Mozilla build and =snap list firefox= reports
+  nothing installed.
+- The migrated profile opens with bookmarks, history and all 19 extensions
+  present, and the capture bookmarklet still measures 210 bytes.
+- =firefox-chrome-install --check= resolves =~/.mozilla/firefox/s5v1taq3.default-release=
+  and reports the three files in sync — and the profile it resolves is the
+  migrated one, checked by its =places.sqlite= mtime, not the 2026-01-03
+  original that shares its name.
+- =apt-cache policy firefox= shows the Mozilla repository outranking the Ubuntu
+  transitional package.
+- The ADR-045 capture path still works end to end from a real click.
+
+** Rollback
+
+=sudo snap install firefox=, then point =firefox-chrome-install --profile= at
+the snap profile root. The pre-migration profile copy is the safety net and
+should be kept until the deb build has been used for a week; nothing in this
+migration is destructive until =snap remove firefox= runs, so the rollback
+before that point is simply not proceeding.
+
+** Outcome
+
+Implemented 2026-09-14. =firefox 155.0.1~build1= from =packages.mozilla.org=,
+the snap removed, and the profile migrated to
+=~/.mozilla/firefox/s5v1taq3.default-release= — 854M, 19 extensions, and the
+ADR-045 capture bookmarklet still measuring its 210 bytes.
+=firefox-chrome-install= needed no change and resolved the new root by itself,
+reporting all three files in sync, exactly as predicted above.
+
+Three things this ADR did not anticipate, all now recorded:
+
+- *An epoch, not a version, is what outranks Mozilla's build.* Ubuntu's
+  transitional package is =1:1snap1-0ubuntu5=; the epoch =1:= beats any
+  unepoched version, so APT classes =155.0.1~build1= as a *downgrade* and
+  =apt-get install -y= refuses it without =--allow-downgrades=. A scripted
+  migration therefore fails at exactly the step that looks most routine. This
+  is also why the pin is load-bearing rather than belt-and-braces: priority
+  1000 is the level that means "install even if it is a downgrade", so a lower
+  priority would let an ordinary =apt upgrade= walk back to the snap shim.
+- *=snap remove= is recoverable.* It takes an automatic snapshot of user data
+  first (=snap saved=, retained 31 days), which is what rescued an 854M profile
+  that had been deleted before it was migrated. The Consequences section above
+  says the removal "deletes every bookmark, cookie, extension and stored
+  password" — true of the directory, wrong about the outcome, and the sequence
+  it prescribes should still be followed rather than relied on being undoable.
+- *The pin is wider than it needs to be.* It was written =Package: *=, which
+  gives that repository priority 1000 over *every* package on the system, not
+  just Firefox. Narrowing it to =Package: firefox* thunderbird*= is outstanding.
+
+** Follow-up: the APT layer is undeclared external state
+
+=/etc/apt/sources.list.d/mozilla.list=, =/etc/apt/preferences.d/mozilla= and
+=/etc/apt/keyrings/packages.mozilla.org.asc= are exactly what
+=std-external-state= in [[id:docs-standards][standards.org]] is about: state
+outside the repository that nothing declares, nothing installs and no
+=--check= verifies. Unlike every other case that rule covers, these are
+root-owned, so neither =desktop-install= nor =firefox-chrome-install= can take
+them — both are user-level by design. Deciding whether this repository grows a
+privileged installer, or whether root-owned state is simply out of scope and
+documented instead, is its own decision and deliberately not made here.
+
+** Revisit when
+
+Mozilla stops publishing the APT repository, or Ubuntu ships an unconfined deb
+of its own again. Also revisit if snapd's =home= interface gains a
+=native-messaging= accommodation that covers hidden directories — that would
+remove the =passff= objection, though not the reasons of precedent and profile
+clarity.

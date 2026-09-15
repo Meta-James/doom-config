@@ -590,8 +590,54 @@ responsibility question explicitly.
   is worse than nothing, because every diagnostic reports the scheme as
   handled while the click does nothing. A tangled user-level entry now wins by
   XDG precedence and survives =emacs-rebuild=. Verified live end to end,
-  including through =xdg-open= — the browser's own path. One manual step
-  remains: add the bookmarklet to the toolbar.
+  including through =xdg-open= — the browser's own path.
+
+  *Closed 2026-09-14.* The one manual step, adding the bookmarklet to the
+  toolbar, was done and then failed silently: the copy saved in
+  =places.sqlite= had picked up whitespace inside =location.href= and again
+  inside =.toString()=, making it a =SyntaxError= Firefox ran and discarded.
+  Corrected in place and verified working. See
+  =docs/ai/troubleshooting.org::tshoot-bookmarklet-whitespace= — the general
+  lesson is that the bookmarklet is the one link in an otherwise-tangled chain
+  that is transcribed by hand, so nothing checks it.
+- [X] *Replace the Firefox snap with Mozilla's deb* ([[id:adr-firefox-deb-not-snap][ADR-049]]).
+  *Done 2026-09-14.* =firefox 155.0.1~build1= from =packages.mozilla.org=, snap
+  removed, profile migrated to =~/.mozilla/firefox/s5v1taq3.default-release= —
+  854M, 19 extensions, the capture bookmarklet still 210 bytes, and
+  =firefox-chrome-install --check= reporting all three files in sync against a
+  root it resolved by itself. Both items below are unblocked.
+
+  *The migration went wrong on the way, and the write-up is the deliverable*:
+  =docs/ai/troubleshooting.org::tshoot-firefox-desnap=. Ubuntu's transitional
+  package carries an epoch (=1:1snap1-0ubuntu5=), so APT reads Mozilla's build
+  as a *downgrade* and =apt-get install -y= refuses it — a scripted migration
+  dies at its most routine-looking step. That left the install undone while the
+  snap was removed, deleting the live 854M profile un-migrated. Recovered in
+  full from the automatic snapshot =snap remove= takes before it deletes
+  anything (=snap saved=, 31-day retention). Two leftovers, deletable once the
+  deb has a week of use: =~/firefox-recovery/= and
+  =~/.mozilla/firefox/s5v1taq3.stale-20260914=.
+
+  *One follow-up open.* The APT pin is still =Package: *=, giving
+  =packages.mozilla.org= priority 1000 over every package on the system;
+  narrow it to =Package: firefox* thunderbird*=. And the three files under
+  =/etc= that this migration created are undeclared external state in the
+  =std-external-state= sense, but root-owned, so no existing installer can take
+  them — see ADR-049's follow-up section.
+
+  The pre-migration plan that got here is kept, because its acceptance criteria
+  are what the result above was checked against: the shared native-messaging
+  spike found that snap confinement was what cost this layer its remaining
+  features — =editorcmd= could not reach the Emacs server socket under
+  =/run/user/1000/= and could not see =emacsclient= at all, and a =passff=
+  helper could read neither =~/.password-store= nor =~/.gnupg=. Removing the
+  sandbox dissolved both rather than working around either. The one claim in
+  that plan that did not survive contact: "=snap remove firefox= deletes every
+  bookmark, cookie, extension and stored password with it" is true of the
+  directory but wrong about the outcome — snapd snapshots user data first. The
+  ordering it prescribed is still the right one, and is what should be followed
+  next time rather than relying on the snapshot.
+
 - [ ] *Tridactyl.* Vim keys in the browser — the Evil-first rule applied to the
   one application that currently ignores it. No existing tool owns this
   responsibility, so ADR-021 permits it, but the ADR should say so rather than
@@ -601,34 +647,55 @@ responsibility question explicitly.
   Acceptance: config tangled not hand-written, a zenburn colourscheme, and a
   textarea editing in Emacs.
 
-  *Chosen as the next browser item, 2026-09-14.* One correction to the bullet
-  above: =editorcmd= is not free. It needs Tridactyl's *native messenger*, a
-  helper binary plus a native-messaging host manifest Firefox must be able to
-  exec — which is the same spike the =passff= item below already insists on,
-  for the same snap-confinement reason. *Do that spike once, before either.*
-  Preliminary findings, on this host, 2026-09-14: Tridactyl is not installed
-  (19 extensions in the profile, none of them it), there is no
-  =~/.config/tridactyl=, and there is *no =native-messaging-hosts= directory
-  anywhere on the system* — not under =~/.mozilla=, not under =~/snap/firefox=,
-  not in =/usr/lib/mozilla= or =/usr/share/mozilla=. Nothing here has ever
-  exercised that path. The snap's AppArmor profile,
-  =/var/lib/snapd/apparmor/profiles/snap.firefox.firefox=, is world-readable
-  and contains no literal =native-messaging= string; reading it properly is the
-  unfinished step.
+  *Chosen as the next browser item, 2026-09-14, and the shared spike is now
+  done.* One correction to the bullet above: =editorcmd= is not free. It needs
+  Tridactyl's *native messenger*, a helper binary plus a native-messaging host
+  manifest Firefox must be able to exec. That was the blocker this item and
+  =passff= below shared, and the spike settled it — see
+  [[id:adr-firefox-deb-not-snap][ADR-049]] for the full probe table.
 
-  A negative result narrows this item rather than killing it: without the
-  native messenger every browsing keybinding still works, and only =editorcmd=
-  and the commands that shell out are lost. So the acceptance criterion above
-  should be split — the keybindings and the tangled config stand on their own,
-  and the textarea-in-Emacs half is contingent on the spike.
+  The headline result is that the hazard was misdiagnosed. Native messaging is
+  *not* blocked by snap confinement: the AppArmor =home= interface grants =ix=
+  (inherit-exec) across =$HOME= bar top-level hidden directories and =~/snap/=,
+  so a messenger installed under
+  =~/snap/firefox/common/.mozilla/native-messaging-hosts/= runs fine. The
+  profile carries no literal =native-messaging= string because there is no such
+  rule to write.
+
+  What *did* fail under the snap was =editorcmd=, for two independent reasons —
+  the Emacs server socket sits under =/run/user/1000/=, outside the snap's
+  permitted run directory (visible, but =connect= denied), and =emacsclient= is
+  not reachable at all because the host's =/usr= is not mounted inside the
+  sandbox. ADR-049 removes both by replacing the snap with Mozilla's deb rather
+  than working around them.
+
+  So the acceptance criterion above does *not* need splitting after all: once
+  ADR-049 lands, the keybindings, the tangled config at the ordinary
+  =~/.config/tridactyl/tridactylrc= and the textarea-in-Emacs half all stand
+  together. Tridactyl is still not installed (19 extensions in the profile,
+  none of them it) and there is still no =~/.config/tridactyl=. *ADR-049 landed
+  2026-09-14, so this is unblocked* — nothing further to investigate, and the
+  only gate left is its own ADR before implementation.
 - [ ] *passff*, putting the existing =pass= store behind Firefox autofill
-  instead of standing up a second credential path. *Spike the native-messaging
-  host under snap confinement before committing to this* — that is the usual
-  reason it silently fails, and finding out first costs an hour where finding
-  out last costs an evening. Acceptance for the spike: the host either responds
-  or is proven blocked, written up either way. *The spike is now shared with
-  Tridactyl above and should be done once, for both.* Its preliminary findings
-  are recorded there.
+  instead of standing up a second credential path. *The shared native-messaging
+  spike is done, 2026-09-14* — written up as
+  [[id:adr-firefox-deb-not-snap][ADR-049]], which is the acceptance this item
+  asked for ("the host either responds or is proven blocked, written up either
+  way").
+
+  Proven blocked, and for a reason distinct from the one expected. Native
+  messaging itself works under the snap; what fails is the *helper's* reach.
+  The confined messenger can read neither =~/.password-store= nor =~/.gnupg=,
+  because the AppArmor =home= interface excludes top-level hidden directories,
+  and the only way through would be moving both out of hidden directories —
+  which breaks GPG's and =pass='s own defaults for the sake of a browser
+  feature. Not worth it.
+
+  ADR-049 dissolved the blocker by removing the sandbox on 2026-09-14, so this
+  moves from "proven blocked" to "open, on its own merits". One gate left: the
+  [[id:adr-credential-backup-enforced][ADR-048]] rebuild has to finish, since
+  there is currently no readable store to put behind anything. It needs its own
+  ADR when it comes up.
 - [ ] *Zotero connector*, feeding the citar bibliography that just landed. Worth
   it only if papers are actually being collected; revisit when citar has real
   use rather than on principle.

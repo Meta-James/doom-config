@@ -1287,3 +1287,116 @@ by hand" — and that hand-copy step is the one link in the chain with no
 verification. When any part of an otherwise-tangled integration is transcribed
 manually, compare the installed copy against the source byte-for-byte before
 diagnosing anything downstream of it.
+
+* RESOLVED: migrating Firefox off the snap — an epoch that blocks the install, and a snapshot that saves the profile
+:PROPERTIES:
+:ID:       tshoot-firefox-desnap
+:DATE:     2026-09-14
+:END:
+
+Implementing [[id:adr-firefox-deb-not-snap][ADR-049]] hit two surprises. Both
+are the kind that make a scripted migration fail in the middle, which is the
+worst place for this particular migration to fail.
+
+** Symptom one: =apt-get install -y firefox= silently does nothing
+
+A migration script ran, reported no error the operator noticed, and left the
+system on the snap. =dpkg -l firefox= still showed
+=1:1snap1-0ubuntu5=, Ubuntu's *transitional* package, while
+=apt-cache madison firefox= correctly offered Mozilla's =155.0.1~build1= from a
+repository that was already configured and pinned.
+
+Run by hand, the reason appears:
+
+#+begin_example
+The following packages will be DOWNGRADED:
+  firefox
+E: Packages were downgraded and -y was used without --allow-downgrades.
+#+end_example
+
+** Cause
+
+An *epoch*. Ubuntu's transitional package is version =1:1snap1-0ubuntu5=, and
+the leading =1:= outranks any version with no epoch at all — so APT compares
+=155.0.1~build1= as *older*, and classes replacing it as a downgrade. =-y= on
+its own refuses downgrades.
+
+#+begin_src sh
+sudo apt-get install -y --allow-downgrades firefox
+#+end_src
+
+Two consequences worth carrying:
+
+- Under =set -e= a script dies here, and if the failing step is followed by
+  profile moves, the migration stops half-done while looking finished. Gate
+  anything destructive on a *read-back* of what was installed, not on the
+  install command's exit status:
+
+  #+begin_src sh
+  INSTALLED=$(dpkg-query -W -f='${Version}' firefox 2>/dev/null || echo none)
+  case "$INSTALLED" in *build*) ;; *) exit 1 ;; esac
+  #+end_src
+
+- The APT pin is load-bearing, not belt-and-braces. =Pin-Priority: 1000= is
+  specifically the level meaning "install even if it is a downgrade"; anything
+  lower lets a routine =apt upgrade= walk back to the epoched snap shim. Do
+  scope it to =Package: firefox* thunderbird*= rather than =Package: *=, which
+  hands that repository priority 1000 over every package on the system.
+
+** Symptom two: the profile was deleted before it was migrated
+
+=snap remove firefox= deleted =~/snap/firefox/= — and with it the live 854M
+profile, because the half-finished script above never reached its copy step.
+=~/.mozilla/firefox/s5v1taq3.default-release= still held a *stale* profile from
+2026-01-03 that shares the same directory name, so a superficial look said a
+profile was present.
+
+** Cause, and the recovery
+
+Not lost. =snap remove= takes an *automatic snapshot of user data first*,
+retained 31 days:
+
+#+begin_src sh
+snap saved
+# Set  Snap     Age    Version    Rev   Size    Notes
+#   5  firefox  4m50s  154.0.1-1  8803  1.40GB  auto
+#
+sudo snap export-snapshot 5 ~/firefox-recovery/snapshot-5.zip
+#+end_src
+
+Two traps when unpacking it:
+
+- The zip holds =archive.tgz= *and* =user/<username>.tgz=. =archive.tgz= is the
+  snap's system data and was only 261KB here; the profile is in the user
+  archive, 1.4GB. Extracting the wrong one looks like the snapshot is empty.
+- Paths inside the user archive are relative to =~/snap/<snap>/=, so the
+  profile is at =common/.mozilla/firefox/<profile>=, not at any absolute path.
+
+#+begin_src sh
+cd ~/firefox-recovery
+unzip -o snapshot-5.zip 'user/*.tgz'   # exit 1 on a harmless "extra bytes" warning
+tar xzf user/james.tgz common/.mozilla/firefox/s5v1taq3.default-release
+#+end_src
+
+=unzip= returns 1 for that warning, so =|| die= on it reports a failure that did
+not happen. Check for the extracted file instead of trusting the exit status.
+
+** Telling the two profiles apart
+
+They share a directory name, which is the whole hazard. The live one was 854M
+with a 50M =places.sqlite= and 19 extensions; the stale one 433M with 40M and a
+2026-01-03 mtime. The sharpest single check is the ADR-045 bookmarklet, which
+only the live profile has at its corrected length:
+
+#+begin_src sh
+sqlite3 "$PROFILE/places.sqlite" \
+  "select length(url) from moz_places where url like 'javascript:%org-protocol%';"
+# 210 on the live profile; no rows on the January one
+#+end_src
+
+** The general class
+A migration whose last step is irreversible must prove each earlier step
+*landed*, not merely that it exited zero — and the proof belongs in the script,
+between the install and anything that moves data. The snapshot is what turned
+this into an inconvenience rather than a loss, and it should be treated as the
+reason the ordering matters, not as a reason to skip it.
