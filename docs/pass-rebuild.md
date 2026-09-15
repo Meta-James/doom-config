@@ -4,6 +4,14 @@
 Supersedes the laptop-to-desktop USB transfer this file used to describe —
 see `docs/decisions.org` ADR-048 for why that plan is dead.
 
+**Both keys are lost, confirmed 2026-09-14.** The desktop key
+(`4F6F02436717EE9B823369EAE2F99AE2D3BDF9E1`) and the laptop key
+(`859AF991C9EA4396`) are both unopenable. There is no surviving copy of any
+credential on any host: the desktop store, the laptop store, and the
+`password-store-2026-09-08.tar` on the Kingston are all encrypted to one or
+the other. **Every credential must be re-issued at its provider.** Nothing can
+be carried across.
+
 ## What happened
 
 The passphrase for the desktop GPG key
@@ -11,38 +19,47 @@ The passphrase for the desktop GPG key
 2026-09-14. Every entry in `~/.password-store` was encrypted to it and none can
 be opened. There is no reset path for a GPG private key without its passphrase.
 
+The laptop key `859AF991C9EA4396` is lost as well, which removes the last
+fallback. That key encrypted both the laptop's own store and the Kingston
+tarball, so neither can be opened either.
+
 `~/.local/bin/pass-backup` exists precisely to prevent this and had never been
 run — `/data/backups/pass/` does not exist. The only backup that did exist was a
 hand-made `password-store-2026-09-08.tar` on the Kingston stick: the encrypted
-store, no key. Useless on its own.
+store, no key. Useless on its own, and now doubly so.
+
+**This is a two-host rebuild.** The laptop is in the same state as the desktop
+and needs its own new key and store. Do the desktop first, prove the backup and
+restore there, then repeat on the laptop rather than trying to share one key
+across both — per ADR-039's multi-host posture, a shared recipient list is a
+separate decision and should not be made in the middle of a recovery.
 
 The dead store is archived at `~/.password-store.dead-2026-09-14` and the dead
 key is still in the keyring. Both are kept deliberately until the rebuild is
 confirmed working; neither is recoverable, so neither blocks anything.
 
-## Step 0 — check the laptop first, before re-issuing anything
+## Step 0 — revoke first, then re-issue
 
-**Do not skip this.** It was never established which passphrase was lost. Two
-cases, and they cost very different amounts of work:
+Settled 2026-09-14: both keys are lost, so there is nothing to check on the
+laptop and nothing to carry across. The old credential values cannot be read,
+which means they cannot be confirmed unused — **treat all three as live and
+revoke them before issuing replacements.**
 
-- If the **desktop** key's passphrase is the lost one, the laptop's store is
-  untouched. Its key (`859AF991C9EA4396`) still opens the USB tarball, and the
-  three values can be read there and re-entered here — no re-issuing, no
-  revocation.
-- If the **laptop** key's passphrase is the lost one, the USB tarball is dead
-  too and the values are genuinely gone. Go to step 1.
+| Entry | Where | Action |
+|---|---|---|
+| `api/anthropic` | Anthropic console | Revoke the old key, issue a new one |
+| `api/openai` | OpenAI platform | Revoke the old key, issue a new one |
+| `mail/oauth2-google-client` | Google Cloud console, OAuth client | Reset the client secret; the client ID is readable there |
 
-On the laptop:
+The Google entry is the one with reach beyond gptel. It also backs the
+laptop's mu4e stack — `oama` uses it for the XOAUTH2 refresh cycle on both
+Gmail accounts (`docs/inventory.org`, the `oama` row). Existing tokens in
+`~/.local/state/oama/` on the laptop may keep working until they expire, but
+any re-authorization needs the client secret, which is now only obtainable by
+resetting it in the console. Expect to re-authorize both accounts there.
 
-```bash
-gpg --list-secret-keys --keyid-format LONG      # expect 859AF991C9EA4396
-pass show api/anthropic >/dev/null && echo "readable"
-```
-
-`>/dev/null` is deliberate — confirm it decrypts, never print the value
-(`.claude/rules/security.md`). If it reads clean, the laptop is the authority
-and the job is to carry its values across by hand, then run `pass-backup` on
-both machines.
+Nothing is permanently lost: all three credentials are re-issuable. What is
+lost is the values, not the accounts.
 
 ## Step 1 — new desktop key
 
@@ -93,10 +110,7 @@ client_id: <id>.apps.googleusercontent.com
 End with Ctrl-D. `client_id` is the settled field name — `config.org` also
 accepts `client-id`, `login` and `user`, but use `client_id`.
 
-If step 0 sent you to the providers instead, re-issue at the Anthropic console,
-the OpenAI platform and the Google Cloud OAuth client screen, and **revoke the
-old credentials while you are there** — they cannot be read to confirm they are
-unused, so treat them as live.
+These are the values from step 0's re-issue, not recovered ones.
 
 ## Step 4 — back up immediately, before anything else
 
@@ -169,11 +183,23 @@ If you ever put a secret-key export on the Kingston, it is protected only by its
 own passphrase. Keep the stick physically secure and shred the export off it
 once the target machine's keyring has the key.
 
+## Step 8 — repeat on the laptop
+
+The laptop's store is dead for the same reason and needs the same treatment:
+new key, `pass init`, its own entries, `pass-backup`, restore rehearsal. Its
+mail entries (`mail/oauth2-google-client`, and `mail/tricca` if it was ever
+created) matter there in a way they do not here, since that is where mu4e
+actually sends and syncs.
+
+Do not shortcut this by copying the desktop's new key to the laptop. Two keys
+with a shared recipient list is a real option, but it is an ADR-039 decision
+about multi-host posture, not a recovery step — make it deliberately, later.
+
 ## Why not the old USB-transfer procedure
 
 That plan copied the laptop store to the desktop and named both keys as
-recipients. It assumed a working desktop key to name as the second recipient.
-There isn't one, and the store it would have replaced no longer exists. The
+recipients. It assumed a working desktop key to name as the second recipient
+and a readable laptop store to copy. Neither exists — both keys are lost. The
 LUKS-container advice in it was sound and is worth reviving if a store ever
 travels on removable media again: entry *filenames* are not encrypted, so a
 plain stick leaks which services have accounts even when every value is safe.

@@ -8761,6 +8761,13 @@ them.
 :PROPERTIES:
 :ID:       adr-credential-backup-enforced
 :STATUS:   Accepted (not yet implemented) — the failure below is real and measured; the guard change it prescribes has not been written
+:LOGBOOK:
+- 2026-09-14 Scope widened. The laptop key =859AF991C9EA4396= is lost as well,
+  so the USB tarball and the laptop's own store are unreadable too. There is no
+  surviving copy of any credential on any host, and the rebuild is two-host.
+  This does not change the decision — it removes the last argument that a
+  single unbacked store was survivable because another machine held a copy.
+:END:
 :DATE:     2026-09-14
 :END:
 
@@ -8827,6 +8834,11 @@ the half it omits is the half that decrypts.
   (laptop key =859AF991C9EA4396=), checked with =gpg --list-packets=; the
   desktop keyring holds only =E2F99AE2D3BDF9E1=. Confirmed the USB copy is
   not a substitute for the lost key on this host.
+- The laptop key's passphrase is lost too (James, 2026-09-14). That closes the
+  last fallback: the tarball above and the laptop's own store are both
+  encrypted to it. Not independently verified on the laptop — recorded as
+  reported, and the rebuild does not depend on it being re-checked, since the
+  recovery path is identical either way.
 - =my/pass-check-store= (=config.org=, "Credential store guard") checks
   =file-exists-p= per entry and nothing about backups. Read in full; the
   extension point is the =missing= list it already builds.
@@ -8871,6 +8883,15 @@ with an ADR behind it.
 - Nothing here recovers the lost credentials. The three entries must be
   re-issued at their providers; the old values should be revoked, since they
   can no longer be read to confirm they are unused.
+- With both keys lost the blast radius is both hosts, not one. The laptop needs
+  the same rebuild, and =mail/oauth2-google-client= reaches past gptel into the
+  laptop's mu4e stack, where =oama= uses it for the XOAUTH2 refresh cycle on
+  two Gmail accounts. Existing tokens may outlive the credential; re-authorizing
+  will not.
+- The temptation this creates — one key shared by both machines, so a single
+  backup covers everything — is exactly the decision not to make while
+  recovering. It belongs to [[id:adr-multi-host-posture][ADR-039]], and a
+  shared key also means one lost passphrase costs both hosts again.
 
 ** Rejected alternatives
 

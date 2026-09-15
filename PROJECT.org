@@ -1198,13 +1198,18 @@ exactly this and had never been run — =/data/backups/pass/= does not exist. Th
 unchecked restore-rehearsal box in §7.6 was the warning. See
 [[id:adr-credential-backup-enforced][ADR-048]].
 
-Live plan: [[file:docs/pass-rebuild.md][docs/pass-rebuild.md]]. Its step 0 must run
-first — it is not established whether the lost passphrase was the desktop key's
-or the laptop's, and the answer decides whether the three credentials can be
-carried across from the laptop or must be re-issued and revoked.
+*Both keys are lost* (confirmed 2026-09-14): the desktop key and the laptop key
+=859AF991C9EA4396=. No readable copy of any credential survives on any host —
+the USB tarball was encrypted to the laptop key. All three credentials must be
+re-issued and the old ones revoked, and the rebuild is *two-host*.
 
-- [ ] Run =docs/pass-rebuild.md= step 0 — determine which key's passphrase is
-  gone, before re-issuing anything.
+Live plan: [[file:docs/pass-rebuild.md][docs/pass-rebuild.md]].
+
+- [X] Establish which key's passphrase was lost — both, answered 2026-09-14.
+  No carry-across path exists.
+- [ ] Revoke and re-issue all three at their providers (Anthropic console,
+  OpenAI platform, Google Cloud OAuth client). The old values cannot be read to
+  confirm they are unused, so treat them as live.
 - [ ] Rebuild per that document: new key, =pass init=, three entries,
   =pass-backup= *in the same sitting*, then the restore rehearsal.
 - [ ] Implement the [[id:adr-credential-backup-enforced][ADR-048]] guard in
@@ -1212,6 +1217,10 @@ carried across from the laptop or must be re-issued and revoked.
   for two weeks.
 - [ ] Once the new store reads: delete the archived dead store and the dead key,
   and shred the USB tarball. Irreversible — only after the replacement works.
+- [ ] *Laptop:* same rebuild there, and re-authorize both Gmail accounts through
+  =oama= — =mail/oauth2-google-client= backs that stack, so the mail layer is in
+  the blast radius too. Do *not* share one key across both hosts as a shortcut;
+  that is an [[id:adr-multi-host-posture][ADR-039]] decision.
 
 Found 2026-08-30 while auditing external binaries. =:tools pass +auth= is
 enabled and =docs/ai/providers.org= records =api/anthropic= and =api/openai= as

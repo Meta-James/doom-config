@@ -54,12 +54,28 @@ Current disposition, all deliberate and all pending the rebuild:
 - Neither is recoverable; both are kept only until the replacement is confirmed
   working.
 
-*Which passphrase was lost is not established.* If it was the desktop key's,
-the laptop store is intact and its key (=859AF991C9EA4396=) still opens the USB
-tarball — the values can be carried across by hand with no re-issuing. If it
-was the laptop key's, the values are gone and all three credentials must be
-re-issued and the old ones revoked. =docs/pass-rebuild.md= step 0 is the check
-that settles it, and it must be run before anything is re-issued.
+*Both keys are lost — settled 2026-09-14.* The desktop key and the laptop key
+(=859AF991C9EA4396=) are both unopenable, so there is no surviving readable
+copy of any credential anywhere: not the desktop store, not the laptop store,
+not the =password-store-2026-09-08.tar= on the Kingston, which was encrypted to
+the laptop key. All three credentials must be re-issued at their providers and
+the old ones revoked — they cannot be read to confirm they are unused, so treat
+them as live.
+
+Nothing is permanently lost in the sense that matters: the accounts are intact
+and every credential is re-issuable. What is gone is the values.
+
+*This is a two-host rebuild.* The laptop is in the same state and needs its own
+new key and store — see =docs/pass-rebuild.md= step 8. Do not paper over it by
+sharing one key across both hosts; a shared recipient list is an
+[[id:adr-multi-host-posture][ADR-039]] decision, not a recovery step.
+
+*Reach beyond gptel.* =mail/oauth2-google-client= also backs the laptop's mu4e
+stack — =oama= uses it for the XOAUTH2 refresh cycle on both Gmail accounts.
+Tokens already in =~/.local/state/oama/= there may keep working until they
+expire, but re-authorization needs the client secret, which now exists only as
+whatever the Google Cloud console is reset to. Expect to re-authorize both
+accounts.
 
 *The two defects this section used to track are moot.* The rebuilt store's
 =mail/oaut2-google-client= typo and its missing =client_id= line died with the
