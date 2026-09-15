@@ -600,12 +600,35 @@ responsibility question explicitly.
   layer, and =set editorcmd emacsclient= opens any textarea in Emacs.
   Acceptance: config tangled not hand-written, a zenburn colourscheme, and a
   textarea editing in Emacs.
+
+  *Chosen as the next browser item, 2026-09-14.* One correction to the bullet
+  above: =editorcmd= is not free. It needs Tridactyl's *native messenger*, a
+  helper binary plus a native-messaging host manifest Firefox must be able to
+  exec — which is the same spike the =passff= item below already insists on,
+  for the same snap-confinement reason. *Do that spike once, before either.*
+  Preliminary findings, on this host, 2026-09-14: Tridactyl is not installed
+  (19 extensions in the profile, none of them it), there is no
+  =~/.config/tridactyl=, and there is *no =native-messaging-hosts= directory
+  anywhere on the system* — not under =~/.mozilla=, not under =~/snap/firefox=,
+  not in =/usr/lib/mozilla= or =/usr/share/mozilla=. Nothing here has ever
+  exercised that path. The snap's AppArmor profile,
+  =/var/lib/snapd/apparmor/profiles/snap.firefox.firefox=, is world-readable
+  and contains no literal =native-messaging= string; reading it properly is the
+  unfinished step.
+
+  A negative result narrows this item rather than killing it: without the
+  native messenger every browsing keybinding still works, and only =editorcmd=
+  and the commands that shell out are lost. So the acceptance criterion above
+  should be split — the keybindings and the tangled config stand on their own,
+  and the textarea-in-Emacs half is contingent on the spike.
 - [ ] *passff*, putting the existing =pass= store behind Firefox autofill
   instead of standing up a second credential path. *Spike the native-messaging
   host under snap confinement before committing to this* — that is the usual
   reason it silently fails, and finding out first costs an hour where finding
   out last costs an evening. Acceptance for the spike: the host either responds
-  or is proven blocked, written up either way.
+  or is proven blocked, written up either way. *The spike is now shared with
+  Tridactyl above and should be done once, for both.* Its preliminary findings
+  are recorded there.
 - [ ] *Zotero connector*, feeding the citar bibliography that just landed. Worth
   it only if papers are actually being collected; revisit when citar has real
   use rather than on principle.
