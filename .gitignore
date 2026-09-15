@@ -10,3 +10,8 @@
 # Same fanout, but .github/ itself stays usable for real repo infrastructure
 # (workflows, issue templates — issues live on Meta-James/doom-config).
 /.github/copilot-instructions.md
+
+# Agent worktrees. EnterWorktree creates these inside the repo, so without this
+# every `git status` in the primary checkout shows them as untracked and they
+# are one `git add -A` away from being committed into it.
+/.claude/worktrees/
