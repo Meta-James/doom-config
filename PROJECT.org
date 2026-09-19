@@ -699,7 +699,16 @@ responsibility question explicitly.
   upstream's source turned up that this entry did not know: =:guiset= rewrites
   the profile's =chrome/userChrome.css=, the file
   [[id:adr-firefox-chrome-layer][ADR-043]] tangles, so the two layers collide on
-  one file — visibly, since =--check= diffs it. Implementation is what remains.
+  one file — visibly, since =--check= diffs it.
+
+  *Repository half implemented 2026-09-19.* =config.org= tangles
+  =~/.config/tridactyl/tridactylrc= and =~/.config/tridactyl/themes/zenburn.css=,
+  and =firefox-chrome-install --check= now reports the native messenger's
+  manifest and the binary it names. What is left is not code: install the
+  extension from the add-ons site, run the messenger installer =:nativeinstall=
+  prints, and check the three acceptance criteria live. Until that happens the
+  startup drift check warns, correctly — the messenger is declared state and it
+  is not there.
 - [ ] *passff*, putting the existing =pass= store behind Firefox autofill
   instead of standing up a second credential path. *The shared native-messaging
   spike is done, 2026-09-14* — written up as

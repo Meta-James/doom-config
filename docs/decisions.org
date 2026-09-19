@@ -9195,7 +9195,20 @@ clarity.
 * ADR-050: Tridactyl for modal browsing — a tangled =tridactylrc=, a generated zenburn theme, and the native messenger treated as external state
 :PROPERTIES:
 :ID:       adr-tridactyl
-:STATUS:   Accepted (not yet implemented)
+:STATUS:   Repository half implemented 2026-09-19; the extension, its native messenger and every live check below are still outstanding
+:LOGBOOK:
+- 2026-09-19 Implemented the half this repository owns. =config.org= gained a
+  Tridactyl section tangling =~/.config/tridactyl/tridactylrc= and
+  =~/.config/tridactyl/themes/zenburn.css= (the latter noweb-expanded from the
+  same =zenburn-palette= block as the two stylesheets), and
+  =firefox-chrome-install= gained =check_messenger=, which reports the
+  manifest, parses the binary path out of it and fails =--check= when either is
+  missing. Exercised against three fabricated manifests — present, malformed,
+  and naming a binary that is not there — and each branch reported correctly.
+  Against the real host it reports =NOT INSTALLED= and exits 1, which is
+  accurate: the extension is not installed yet, so the startup check now warns
+  until it is. Nothing in the Validation section below has been live-verified.
+:END:
 :DATE:     2026-09-18
 :END:
 

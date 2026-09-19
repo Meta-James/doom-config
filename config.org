@@ -4499,6 +4499,122 @@ arbitrary web content, and that line is worth holding.
 }
 #+end_src
 
+** Tridactyl
+:PROPERTIES:
+:ID:       literate-tridactyl
+:END:
+
+Vim keys in the browser -- the Evil-first rule reaching the one application
+that ignored it. See [[id:adr-tridactyl][ADR-050]] for why this extension and
+not one of the others, and [[id:adr-firefox-deb-not-snap][ADR-049]] for why it
+became possible: under the snap the =editorcmd= half could not work at all,
+because Emacs's server socket and =emacsclient= were both outside the sandbox.
+
+Three pieces, two of them here. The extension itself is installed by hand from
+the add-ons site, and its *native messenger* -- a helper binary Firefox execs
+through a manifest -- by upstream's installer, which =:nativeinstall= prints.
+Everything that is a configuration file is tangled below, and the messenger's
+two files are checked by =firefox-chrome-install= like the rest of the state
+outside this repository.
+
+*Nothing here uses =:guiset=.* That command rewrites the profile's
+=chrome/userChrome.css=, which is [[id:adr-firefox-chrome-layer][ADR-043]]'s
+file, generated from this one. Two writers on one file is a collision; it is a
+visible one, since the drift check diffs that file at startup, but the right
+number of writers is still one.
+
+*** ~/.config/tridactyl/tridactylrc
+
+Read at startup, provided the native messenger is installed -- it is the
+messenger that reads the file off disk. =:findrc= inside Firefox reports which
+file it actually found.
+
+The binds are deliberately few. Tridactyl's defaults *are* the Vim ones, so a
+long list here would mostly restate them; what belongs in this file is the
+handful that disagree with something else, added as they turn up.
+
+#+begin_src conf :tangle ~/.config/tridactyl/tridactylrc :mkdirp yes
+" Generated from ~/.config/doom/config.org -- edit there, not here.
+" Any change made directly to this file is lost on the next tangle.
+" See docs/decisions.org ADR-050.
+
+" Settings changed inside the browser persist in extension storage, where they
+" would quietly outrank this file. Clearing them first makes the file the only
+" source of truth, the same reason the chrome layer copies files into the
+" profile rather than trusting what is already there. Upstream notes that
+" persisted settings may still apply briefly at startup, before this runs.
+sanitise tridactyllocal tridactylsync
+
+" Edit any textarea in Emacs: ctrl-i from insert mode. The command has to stay
+" in the foreground for the whole editing session, which is exactly what
+" emacsclient without -n does -- it returns when the buffer is finished with
+" C-x #. %l and %c are the line and column the cursor was on in the page; %f
+" is the temporary file, and without it Tridactyl appends the name instead.
+set editorcmd emacsclient -c +%l:%c %f
+
+" The generated theme below.
+colourscheme zenburn
+
+" Never run :guiset. It writes the profile's chrome/userChrome.css, which this
+" repository generates and firefox-chrome-install copies in -- see ADR-050.
+" Nor :mktridactylrc: it would overwrite this generated file with a dump of
+" whatever the live settings happen to be.
+#+end_src
+
+*** ~/.config/tridactyl/themes/zenburn.css
+
+Tridactyl's own colours, from the same palette as Emacs, the terminal and the
+Firefox chrome. =colourscheme zenburn= loads it from disk by name, which is
+another thing that needs the native messenger.
+
+It sets variables only. Tridactyl's stylesheets consume
+=--tridactyl-cmdl-bg= and friends through =var()=, and a theme is injected
+after the built-in one, so overriding the semantic names is enough -- there is
+no need to restate any of the rules that use them.
+
+The =--zb-*= values come from the same =zenburn-palette= block the two
+stylesheets use, so this file tracks =doom-theme= rather than being a third
+colour list kept in step by hand.
+
+#+begin_src css :tangle ~/.config/tridactyl/themes/zenburn.css :mkdirp yes :noweb yes
+/* Generated from ~/.config/doom/config.org -- edit there, not here.
+   Any change made directly to this file is lost on the next tangle.
+   See docs/decisions.org ADR-050. */
+
+:root {
+<<zenburn-palette()>>
+
+  /* Tridactyl's own names, mapped onto the palette above. */
+  --tridactyl-bg:                var(--zb-bg);
+  --tridactyl-fg:                var(--zb-fg);
+  --tridactyl-scrollbar-color:   var(--zb-bg-plus3) var(--zb-bg);
+
+  /* The command line and its completions. */
+  --tridactyl-cmdl-bg:           var(--zb-bg-minus1);
+  --tridactyl-cmdl-fg:           var(--zb-fg-plus1);
+  --tridactyl-cmplt-border-top:  1px solid var(--zb-bg-plus2);
+  --tridactyl-header-first-bg:   var(--zb-bg-plus2);
+  --tridactyl-header-second-bg:  var(--zb-bg-plus1);
+  --tridactyl-header-third-bg:   var(--zb-bg);
+  --tridactyl-highlight-box-bg:  var(--zb-bg-plus1);
+  --tridactyl-highlight-box-fg:  var(--zb-fg-plus1);
+  --tridactyl-url-fg:            var(--zb-blue);
+  --tridactyl-url-bg:            var(--zb-bg);
+  --tridactyl-of-fg:             var(--zb-yellow);
+  --tridactyl-of-bg:             var(--zb-bg-minus05);
+
+  /* Hint labels. Yellow on dark is the one place this layer is loud, and
+     deliberately: a hint nobody can find is the whole feature failing. */
+  --tridactyl-hintspan-fg:       var(--zb-bg-minus1);
+  --tridactyl-hintspan-bg:       var(--zb-yellow);
+  --tridactyl-hint-bg:           var(--zb-bg-plus1);
+  --tridactyl-hint-outline:      1px solid var(--zb-yellow);
+  --tridactyl-hint-active-fg:    var(--zb-fg-plus1);
+  --tridactyl-hint-active-bg:    var(--zb-blue);
+  --tridactyl-hint-active-outline: 1px solid var(--zb-fg);
+}
+#+end_src
+
 ** ~/.local/bin/firefox-chrome-install
 
 Resolves the active Firefox profile and copies the three tangled files into it.
@@ -4542,7 +4658,9 @@ Usage: firefox-chrome-install [--check] [--profile DIR]
 Copies userChrome.css, userContent.css and user.js from the doom repository
 into the active Firefox profile.
 
-  --check         report resolved paths and sync state; change nothing
+  --check         report resolved paths and sync state; change nothing.
+                  Also reports whether Tridactyl's native messenger is
+                  installed (ADR-050); it is never installed from here
   --prune         list files in the profile's chrome/ that this layer does not
                   own; reports only, never deletes
   --profile DIR   use DIR as the profile instead of resolving one
@@ -4625,6 +4743,37 @@ echo "chrome  : $PROFILE/chrome"
 files_src=("$SRC/userChrome.css"  "$SRC/userContent.css"  "$SRC/user.js")
 files_dst=("$PROFILE/chrome/userChrome.css" "$PROFILE/chrome/userContent.css" "$PROFILE/user.js")
 
+# --- Tridactyl's native messenger (ADR-050) --------------------------------
+# Not something this repository can tangle: a downloaded binary, plus the
+# manifest Firefox execs it through. What can be owned is noticing its
+# absence, because without it tridactylrc is never read, the theme never
+# loads and editorcmd does nothing -- three silent failures from one missing
+# file.
+NM_MANIFEST="${TRIDACTYL_MANIFEST:-$HOME/.mozilla/native-messaging-hosts/tridactyl.json}"
+NM_INSTALL='curl -fsSl https://raw.githubusercontent.com/tridactyl/native_messenger/master/installers/install.sh | bash'
+
+check_messenger() {
+    local bin
+    if [ ! -f "$NM_MANIFEST" ]; then
+        echo "  NOT INSTALLED $NM_MANIFEST"
+        echo "                install with: $NM_INSTALL"
+        return 1
+    fi
+    # The manifest names the binary, so trust it rather than guessing the
+    # path upstream's installer used.
+    bin="$(sed -n 's/.*"path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$NM_MANIFEST" | head -n1)"
+    if [ -z "$bin" ]; then
+        echo "  MALFORMED    $NM_MANIFEST -- no \"path\" key"
+        return 1
+    fi
+    if [ ! -x "$bin" ]; then
+        echo "  MISSING      $bin -- named by $NM_MANIFEST, not executable"
+        return 1
+    fi
+    echo "  in sync      $NM_MANIFEST -> $bin"
+    return 0
+}
+
 # --- --prune: name what is in chrome/ that this layer did not put there -----
 # Reports only. Deleting a file out of someone's browser profile because a
 # script did not recognise it is not a thing to do unattended, and the set of
@@ -4659,6 +4808,7 @@ if [ "$CHECK" -eq 1 ]; then
         else                                 echo "  DIFFERS      $d";      status=1
         fi
     done
+    check_messenger || status=1
     exit "$status"
 fi
 
@@ -4680,6 +4830,10 @@ for i in "${!files_src[@]}"; do
     cp -f "$s" "$d"
     echo "  installed    $d"
 done
+
+# Reported, never installed: pulling a binary off the network is not something
+# this script should do behind a copy of three stylesheets.
+check_messenger || true
 
 if pgrep -x firefox >/dev/null 2>&1; then
     echo

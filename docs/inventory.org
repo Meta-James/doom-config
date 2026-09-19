@@ -568,6 +568,7 @@ an application that is not the one at fault.
 | =~/.local/share/fonts/literata/=                          | *No*                        | Two variable files fetched by hand 2026-09-13                               |
 | =~/.local/share/fonts/jetbrains-mono-nerd/=               | *No*                        | 98 files from the =ryanoasis= release, fetched by hand                      |
 | Font =apt= packages                                       | *No*                        | =fonts-ebgaramond=, =fonts-vollkorn=, =fonts-ibm-plex=, =fonts-jetbrains-mono=, =fonts-sil-charis= — installed, but nothing names them |
+| Tridactyl's native messenger and its manifest             | Yes, since 2026-09-19       | *Not installed.* =firefox-chrome-install --check= reports =NOT INSTALLED= for =~/.mozilla/native-messaging-hosts/tridactyl.json= and exits 1 — see [[id:adr-tridactyl][ADR-050]]. The binary is downloaded, so this is declared and checked, never installed from here |
 
 ** The scheme handlers, and the two that were dangling
 
