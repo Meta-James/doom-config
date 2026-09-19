@@ -8930,8 +8930,12 @@ guard is written, validation is:
 * ADR-049: Replace the Firefox snap with Mozilla's own deb, because confinement is what blocks the browser layer's remaining features
 :PROPERTIES:
 :ID:       adr-firefox-deb-not-snap
-:STATUS:   Implemented 2026-09-14 — Firefox 155.0.1~build1 from packages.mozilla.org, snap removed, profile migrated. One follow-up open: the APT pin is still repository-wide
+:STATUS:   Implemented 2026-09-14, reverted by unattended-upgrades 2026-09-16, being re-applied with a corrected pin — the decision stands, the enforcement needed a negative pin on Ubuntu's epoched package
 :LOGBOOK:
+- 2026-09-16 Reverted by =unattended-upgrades=, which reinstalled the epoched
+  Ubuntu package and the snap with it. The priority-1000 pin this ADR
+  prescribed is not sufficient on its own; Ubuntu's version has to be pinned
+  negative. The decision stands — only the enforcement was wrong.
 - 2026-09-14 Implemented, and the migration went wrong in a way worth keeping.
   Two facts below were learned the hard way and are now in
   =docs/ai/troubleshooting.org::tshoot-firefox-desnap=: Ubuntu's transitional
@@ -9153,9 +9157,15 @@ Three things this ADR did not anticipate, all now recorded:
   says the removal "deletes every bookmark, cookie, extension and stored
   password" — true of the directory, wrong about the outcome, and the sequence
   it prescribes should still be followed rather than relied on being undoable.
-- *The pin is wider than it needs to be.* It was written =Package: *=, which
-  gives that repository priority 1000 over *every* package on the system, not
-  just Firefox. Narrowing it to =Package: firefox* thunderbird*= is outstanding.
+- *The pin is wider than it needs to be, and was also too weak.* It was written
+  =Package: *=, which gives that repository priority 1000 over *every* package
+  on the system. Worse, priority 1000 did not hold: on 2026-09-16
+  =unattended-upgrades= reinstalled Ubuntu's transitional package and with it
+  the snap, because it does not consult APT's candidate — it takes any higher
+  version from an allowed origin, and the epoch makes Ubuntu's the higher one.
+  The pin needs a second stanza pinning Ubuntu's =firefox= to =-1= so it is
+  uninstallable rather than merely unpreferred. Recorded in
+  =docs/ai/troubleshooting.org::tshoot-firefox-desnap=.
 
 ** Follow-up: the APT layer is undeclared external state
 

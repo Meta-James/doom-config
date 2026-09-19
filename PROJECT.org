@@ -618,12 +618,23 @@ responsibility question explicitly.
   deb has a week of use: =~/firefox-recovery/= and
   =~/.mozilla/firefox/s5v1taq3.stale-20260914=.
 
-  *One follow-up open.* The APT pin is still =Package: *=, giving
-  =packages.mozilla.org= priority 1000 over every package on the system;
-  narrow it to =Package: firefox* thunderbird*=. And the three files under
-  =/etc= that this migration created are undeclared external state in the
-  =std-external-state= sense, but root-owned, so no existing installer can take
-  them — see ADR-049's follow-up section.
+  *Reverted 2026-09-16, and being re-applied.* =unattended-upgrades=
+  reinstalled Ubuntu's transitional package, and the snap with it — the
+  priority-1000 pin was not enough, because =unattended-upgrades= ignores APT's
+  candidate and takes any higher version from an allowed origin, which the
+  epoch makes Ubuntu's. The corrected pin adds a second stanza putting Ubuntu's
+  =firefox= at =-1=, and is also narrowed off =Package: *=. No data was at
+  risk: the snap never ran, so it never created a profile, and the =~/.mozilla=
+  one kept being used by the still-running Mozilla process. The dock favourite
+  did move to =firefox_firefox.desktop= and needs repointing at
+  =firefox.desktop= once the deb is back.
+
+  *Still open.* The three files under =/etc= that this migration created are
+  undeclared external state in the =std-external-state= sense, but root-owned,
+  so no existing installer can take them — see ADR-049's follow-up section.
+  This revert is the argument for closing that gap rather than documenting it:
+  nothing in the repository would have noticed the pin being wrong, or the
+  browser silently reverting, for two days.
 
   The pre-migration plan that got here is kept, because its acceptance criteria
   are what the result above was checked against: the shared native-messaging

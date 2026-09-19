@@ -1343,6 +1343,45 @@ Two consequences worth carrying:
   scope it to =Package: firefox* thunderbird*= rather than =Package: *=, which
   hands that repository priority 1000 over every package on the system.
 
+** Symptom three: two days later, the snap was back
+
+On 2026-09-16 =firefox= was =1:1snap1-0ubuntu5= again and
+=snap list firefox= showed rev 8929 installed, despite the priority-1000 pin.
+=/var/log/apt/history.log= names the culprit exactly:
+
+#+begin_example
+Start-Date: 2026-09-16  06:03:31
+Commandline: /usr/bin/unattended-upgrade
+Upgrade: firefox:amd64 (155.0.1~build1, 1:1snap1-0ubuntu5)
+#+end_example
+
+*=unattended-upgrades= does not consult APT's candidate.* It looks for any
+higher version in an allowed origin and takes it — and thanks to the epoch,
+Ubuntu's transitional package *is* the higher version, so it reads as a routine
+security upgrade. A priority-1000 pin makes Mozilla's build the candidate,
+which is enough for an interactive =apt upgrade= and not enough for this.
+
+The fix is a second stanza that makes Ubuntu's version uninstallable rather
+than merely unpreferred:
+
+#+begin_src conf
+Package: firefox* thunderbird*
+Pin: origin packages.mozilla.org
+Pin-Priority: 1000
+
+Package: firefox firefox-locale-* firefox-esr thunderbird
+Pin: release o=Ubuntu
+Pin-Priority: -1
+#+end_src
+
+A detail that makes this easy to miss for days: replacing the deb does not stop
+a *running* Firefox. dpkg deletes =/usr/lib/firefox/firefox= while the process
+holds its inodes, so the browser keeps working, keeps writing to the
+=~/.mozilla= profile, and only fails at the next launch — by which time
+=/usr/bin/firefox= is the snap shim and the only desktop entry is the snap's.
+Check =dpkg-query -W -f='${Version}\n' firefox= rather than trusting that the
+browser in front of you is the one you installed.
+
 ** Symptom two: the profile was deleted before it was migrated
 
 =snap remove firefox= deleted =~/snap/firefox/= — and with it the live 854M
