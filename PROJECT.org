@@ -618,12 +618,15 @@ responsibility question explicitly.
   deb has a week of use: =~/firefox-recovery/= and
   =~/.mozilla/firefox/s5v1taq3.stale-20260914=.
 
-  *Reverted 2026-09-16, and being re-applied.* =unattended-upgrades=
+  *Reverted 2026-09-16, re-applied and verified 2026-09-18.* =unattended-upgrades=
   reinstalled Ubuntu's transitional package, and the snap with it — the
   priority-1000 pin was not enough, because =unattended-upgrades= ignores APT's
   candidate and takes any higher version from an allowed origin, which the
   epoch makes Ubuntu's. The corrected pin adds a second stanza putting Ubuntu's
-  =firefox= at =-1=, and is also narrowed off =Package: *=. No data was at
+  =firefox= at =-1=, and is also narrowed off =Package: *=. Verified holding:
+  =apt-cache policy firefox= shows =156.0~build1= installed and Ubuntu's
+  =1:1snap1-0ubuntu5= at priority =-1=, and =apt-get -s install firefox=
+  proposes no change. Dock favourite repointed. No data was at
   risk: the snap never ran, so it never created a profile, and the =~/.mozilla=
   one kept being used by the still-running Mozilla process. The dock favourite
   did move to =firefox_firefox.desktop= and needs repointing at

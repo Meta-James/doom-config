@@ -8930,8 +8930,13 @@ guard is written, validation is:
 * ADR-049: Replace the Firefox snap with Mozilla's own deb, because confinement is what blocks the browser layer's remaining features
 :PROPERTIES:
 :ID:       adr-firefox-deb-not-snap
-:STATUS:   Implemented 2026-09-14, reverted by unattended-upgrades 2026-09-16, being re-applied with a corrected pin — the decision stands, the enforcement needed a negative pin on Ubuntu's epoched package
+:STATUS:   Implemented 2026-09-14, reverted by unattended-upgrades 2026-09-16, re-applied and verified 2026-09-18 with a corrected pin — the decision stood throughout, only the enforcement was wrong
 :LOGBOOK:
+- 2026-09-18 Re-applied and verified. =firefox 156.0~build1=, snap removed,
+  and =apt-cache policy= now shows Ubuntu's =1:1snap1-0ubuntu5= at priority
+  =-1= — the pin is visibly holding rather than merely configured. Dock
+  favourite repointed to =firefox.desktop=, chrome layer in sync, profile
+  untouched throughout.
 - 2026-09-16 Reverted by =unattended-upgrades=, which reinstalled the epoched
   Ubuntu package and the snap with it. The priority-1000 pin this ADR
   prescribed is not sufficient on its own; Ubuntu's version has to be pinned
