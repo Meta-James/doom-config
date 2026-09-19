@@ -9191,3 +9191,204 @@ of its own again. Also revisit if snapd's =home= interface gains a
 =native-messaging= accommodation that covers hidden directories — that would
 remove the =passff= objection, though not the reasons of precedent and profile
 clarity.
+
+* ADR-050: Tridactyl for modal browsing — a tangled =tridactylrc=, a generated zenburn theme, and the native messenger treated as external state
+:PROPERTIES:
+:ID:       adr-tridactyl
+:STATUS:   Accepted (not yet implemented)
+:DATE:     2026-09-18
+:END:
+
+** Context
+
+Firefox is the last application this configuration uses daily that ignores its
+modal conventions. Emacs is Evil-first, the shell layer is =vi= mode
+([[id:adr-terminal-layer-pass][ADR-033]]), and the browser is not.
+
+=PROJECT.org='s browser-integration entry has carried Tridactyl as the
+highest-value stage 3 item since 2026-09-13, behind one shared unknown: whether
+Firefox's *native messaging* worked under snap confinement.
+[[id:adr-firefox-deb-not-snap][ADR-049]] answered that — the confinement story
+was misdiagnosed, native messaging was never the blocked part, and the sandbox
+is gone anyway. Firefox on this host is now Mozilla's deb. So the remaining gate
+is this decision, not an investigation.
+
+Two things make Tridactyl fit this repository specifically rather than merely
+being a popular extension: its configuration is a plain file, so it can be
+tangled from =config.org= like the rest of the Firefox layer, and =editorcmd=
+routes any textarea into Emacs, which turns the browser into one more front end
+for the editor this configuration is built around.
+
+** Decision drivers
+
+- *Evil-first*, from [[id:docs-standards][standards.org]]. This is that rule
+  applied to the one application still outside it.
+- *One tool per responsibility*, [[id:adr-corfu-migration][ADR-021]]. Nothing in
+  this configuration owns keyboard-driven browsing today, so this is a new
+  responsibility rather than a second engine on an existing axis — but the ADR
+  has to say that rather than assume it.
+- *Configuration must live in a tangleable file.*
+  [[id:adr-firefox-chrome-layer][ADR-043]] rejected the Firefox Color extension
+  because its state lives only in extension storage. Any browser addition clears
+  the same bar or it does not go in.
+- *The [[id:std-external-state][external-state rule]] applies in full.* The
+  native messenger is a binary and a manifest outside this repository, which is
+  exactly the shape that rule exists for: declaration, idempotent installer,
+  =--check=, and a line in =+my/external-state-checks=.
+- *Do not fight the chrome layer.* ADR-043 owns the profile's
+  =chrome/userChrome.css=. Anything that also writes that file is a collision,
+  not a feature.
+
+** Candidates
+
+| Candidate                             | Config in a file?                          | Emacs integration            | Fate                                                               |
+|---------------------------------------+--------------------------------------------+------------------------------+--------------------------------------------------------------------|
+| *Tridactyl*                           | Yes — =~/.config/tridactyl/tridactylrc=, sourced at startup | Yes — =editorcmd=            | *Chosen*                                                           |
+| Vimium-FF                             | No — options live in extension storage; exportable JSON only by hand | No                           | Rejected: fails the ADR-043 bar the same way Firefox Color did     |
+| Surfingkeys                           | Partly — JS config, but pasted into the extension's own settings page rather than read from disk | No                           | Rejected: same objection, plus a larger surface for no extra gain  |
+| Firefox's own keyboard shortcuts + caret browsing (=F7=) | Native, nothing to install                 | No                           | Rejected: covers scrolling and focus, not link hinting, tab motions or a command line. The platform-first rule was tried and does not reach |
+| Replace Firefox with qutebrowser      | Yes                                        | Yes                          | Rejected: throws away ADR-043, ADR-045 and ADR-049 to solve a keybinding problem, and moves the whole browsing surface for it |
+| Do nothing                            | —                                          | —                            | Rejected: this is the item, and the blocker it waited on is gone   |
+
+** Evidence
+
+*The host is in the state ADR-049 left it*, re-checked 2026-09-18 before this
+was written, because that migration silently reverted once already:
+
+#+begin_example
+$ dpkg-query -W -f='${Version}\n' firefox
+156.0~build1
+$ snap list firefox
+error: no matching snaps installed
+$ gsettings get org.gnome.shell favorite-apps
+[... 'firefox.desktop' ...]
+#+end_example
+
+=/etc/apt/preferences.d/mozilla= carries both stanzas — =packages.mozilla.org=
+at 1000 and Ubuntu's =firefox= at =-1=.
+
+*Nothing is installed yet.* There is no =~/.config/tridactyl=, no
+=~/.mozilla/native-messaging-hosts=, and the profile's 19 extensions do not
+include Tridactyl. =emacsclient= is at =/usr/local/bin/emacsclient=, from
+[[id:adr-emacs-rebuild-flags][ADR-042]]'s build, and is on =$PATH=.
+
+*Upstream behaviour, read from source rather than assumed* (=tridactyl= and
+=native_messenger= at =master=, fetched 2026-09-18):
+
+| Claim                                                                                      | Where                            |
+|--------------------------------------------------------------------------------------------+----------------------------------|
+| =editorcmd= defaults to ="auto"=, and "has to be a command that stays in the foreground for the whole editing session" | =src/lib/config.ts:1099-1111=    |
+| =editorcmd= substitutes =%l= (line) and =%c= (column); if it contains no =%f=, the filename is *appended* | =src/lib/native.ts:309-323=      |
+| The messenger installs to =$XDG_DATA_HOME/tridactyl/native_main= and its manifest to =~/.mozilla/native-messaging-hosts/tridactyl.json=; no root needed | =native_messenger/installers/install.sh= |
+| A theme named =foo= is loaded from =~/.config/tridactyl/themes/foo.css=, and reading it needs the native messenger | =src/excmds.ts:535-541=          |
+| Built-in themes expose semantic custom properties — =--tridactyl-fg=, =--tridactyl-bg=, =--tridactyl-cmdl-*=, =--tridactyl-url-*=, =--tridactyl-hintspan-*=, =--tridactyl-hint-bg= | =src/static/themes/dark/dark.css:236-274= |
+| =:guiset= *rewrites the profile's =chrome/userChrome.css== , keeping its own =.orig.css= and =.tri.bak= beside it, and flips =toolkit.legacyUserProfileCustomizations.stylesheets= | =src/excmds.ts:425-493=          |
+| =sanitise tridactyllocal tridactylsync= clears stored configuration; upstream notes that "persisted settings may briefly apply at startup before the file is sourced" | =src/excmds.ts:5248-5259=        |
+
+The =:guiset= finding is the one that matters beyond implementation detail. It
+is a native-messenger feature that writes the exact file ADR-043 tangles, so the
+two layers overlap on one file and the browser extension is the one that would
+win at runtime. It is not silent, though: =firefox-chrome-install --check= diffs
+that file and already runs at startup, so the collision surfaces as drift rather
+than as a mystery.
+
+** Decision
+
+Adopt Tridactyl, installed from AMO, configured entirely from =config.org=.
+
+1. *A new =config.org= section under the Firefox layer* tangling
+   =~/.config/tridactyl/tridactylrc=. It opens with
+   =sanitise tridactyllocal tridactylsync= so the file is authoritative and
+   settings changed in the browser cannot quietly shadow it — the same reason
+   ADR-043 copies files into the profile rather than trusting what is there.
+2. *A generated zenburn theme*, tangled to
+   =~/.config/tridactyl/themes/zenburn.css= and selected with
+   =colourscheme zenburn=. It is noweb-expanded from the existing
+   =zenburn-palette= block, the same source the two stylesheets use, so the
+   browser's command line matches Emacs and the chrome without a third
+   hand-maintained colour list.
+3. *=set editorcmd emacsclient -c +%l:%c %f=*. =-c= creates a frame and blocks
+   until =server-edit=, which is what upstream requires of the command, and
+   =+%l:%c= lands the cursor where it was in the textarea.
+4. *The native messenger becomes declared external state.*
+   =firefox-chrome-install= grows a check for the manifest and the binary it
+   names, reported by its existing =--check= and therefore by
+   =+my/external-state-checks= at startup. Installing it stays a call to
+   upstream's installer — a downloaded binary is not something this repository
+   can tangle — but its *absence* stops being invisible.
+5. *=:guiset= is never used here*, and the tangled rc says so in a comment.
+   Firefox chrome is ADR-043's, expressed in one tangled =userChrome.css=.
+
+Keybindings themselves are deliberately left thin: Tridactyl's defaults are
+already the Vim ones, and the value of this decision is the file being tangled,
+not a large personal bind list. What the rc does carry is the small set that
+disagree with Emacs or with this configuration's habits, added as they come up.
+
+** Consequences
+
+- The extension itself is installed by hand from AMO and is not declared
+  anywhere. That is true of all 19 extensions in the profile today; this ADR
+  does not fix it, and a general answer to "extensions are undeclared state"
+  belongs with the =/etc= gap ADR-049 left open rather than here.
+- The native messenger has to be reinstalled when Tridactyl's protocol version
+  moves. Tridactyl warns in-browser when it is out of date; the =--check=
+  addition above proves it exists, not that it is current.
+- A second thing now writes into =~/.config/tridactyl/=. The rc and the theme
+  are tangled, so =mktridactylrc= must never be run against them — it would
+  overwrite generated files with a dump of live settings, which is the same
+  direction-of-truth mistake as =:guiset=.
+- =passff= is unaffected and still waits on the
+  [[id:adr-credential-backup-enforced][ADR-048]] rebuild.
+
+** Rejected alternatives
+
+See the Candidates table above, which carries the fate and reason for each.
+
+One sub-alternative is worth naming separately: *keeping the rc hand-written at
+=~/.config/tridactyl/tridactylrc= and out of =config.org=*. It is what upstream
+documents and it works. It is rejected for the reason
+[[id:adr-literate-config][ADR-035]] gives for every other dotfile here — a file
+the repository does not own is a file that reverts without anyone noticing,
+which is precisely what happened to the shell layer before it was tangled.
+
+** Validation
+
+Nothing below has been run; this ADR is written before implementation, and each
+line is the acceptance criterion rather than a result.
+
+- =:findrc= inside Firefox reports =~/.config/tridactyl/tridactylrc=, and its
+  contents match the tangled file byte for byte.
+- =doom sync= re-tangles both files and Firefox picks the change up on restart.
+- The command line and hint labels render in zenburn, and changing =doom-theme=
+  changes them on the next tangle — the same test ADR-043's palette block
+  already has to pass.
+- Focusing a textarea and pressing =Ctrl-i= opens it in a new Emacs frame at the
+  right line and column; =C-x #= returns the edited text to the page.
+- =firefox-chrome-install --check= exits zero with the messenger installed and
+  non-zero with its manifest removed.
+- =PROJECT.org='s three-part acceptance — tangled config, zenburn colourscheme,
+  textarea in Emacs — is met together, as ADR-049 predicted it now could be.
+
+** Rollback
+
+Remove the extension from =about:addons=, delete
+=~/.config/tridactyl/=, =~/.local/share/tridactyl/= and
+=~/.mozilla/native-messaging-hosts/tridactyl.json=, and drop the =config.org=
+section with its =firefox-chrome-install= check. Nothing in Emacs or in the
+chrome layer depends on any of it, so the removal is local.
+
+If =:guiset= has been run at any point, restore =userChrome.css= by re-running
+=firefox-chrome-install= rather than by hand — Tridactyl's =userChrome.orig.css=
+backup is a snapshot of whatever was there when it first ran, not necessarily
+the tangled file.
+
+** Revisit when
+
+- Tridactyl breaks under a Firefox release and stays broken — Manifest V3
+  churn is the realistic trigger, and =editorcmd= depends on a native
+  messaging API rather than on the extension alone.
+- Extensions in general get declared, at which point the "installed by hand from
+  AMO" consequence above should be folded into that mechanism.
+- The keybinding list outgrows "the few that disagree with Emacs" and starts
+  encoding real workflows, which would make it worth its own section in
+  =docs/ai/keybindings.org= rather than living only in the rc.

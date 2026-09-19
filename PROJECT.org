@@ -690,6 +690,16 @@ responsibility question explicitly.
   none of them it) and there is still no =~/.config/tridactyl=. *ADR-049 landed
   2026-09-14, so this is unblocked* — nothing further to investigate, and the
   only gate left is its own ADR before implementation.
+
+  *ADR written 2026-09-18*: [[id:adr-tridactyl][ADR-050]] — Tridactyl from AMO,
+  =tridactylrc= and a zenburn theme tangled from =config.org= (the theme
+  noweb-expanded from the same =zenburn-palette= block the two stylesheets use),
+  =set editorcmd emacsclient -c +%l:%c %f=, and the native messenger declared as
+  external state behind =firefox-chrome-install --check=. The one thing reading
+  upstream's source turned up that this entry did not know: =:guiset= rewrites
+  the profile's =chrome/userChrome.css=, the file
+  [[id:adr-firefox-chrome-layer][ADR-043]] tangles, so the two layers collide on
+  one file — visibly, since =--check= diffs it. Implementation is what remains.
 - [ ] *passff*, putting the existing =pass= store behind Firefox autofill
   instead of standing up a second credential path. *The shared native-messaging
   spike is done, 2026-09-14* — written up as
