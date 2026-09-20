@@ -4750,13 +4750,19 @@ files_dst=("$PROFILE/chrome/userChrome.css" "$PROFILE/chrome/userContent.css" "$
 # loads and editorcmd does nothing -- three silent failures from one missing
 # file.
 NM_MANIFEST="${TRIDACTYL_MANIFEST:-$HOME/.mozilla/native-messaging-hosts/tridactyl.json}"
-NM_INSTALL='curl -fsSl https://raw.githubusercontent.com/tridactyl/native_messenger/master/installers/install.sh | bash'
+# Upstream's own command, which `:nativeinstall` inside Firefox copies to the
+# clipboard with %TAG replaced by the installed extension's version -- that is
+# the copy to prefer, since it pins the binary to the extension. This is the
+# fallback for when Firefox is the thing that is broken.
+NM_INSTALL='curl -fsSl https://raw.githubusercontent.com/tridactyl/native_messenger/master/installers/install.sh -o /tmp/trinativeinstall.sh && sh /tmp/trinativeinstall.sh %TAG'
 
 check_messenger() {
     local bin
     if [ ! -f "$NM_MANIFEST" ]; then
         echo "  NOT INSTALLED $NM_MANIFEST"
-        echo "                install with: $NM_INSTALL"
+        echo "                run :nativeinstall in Firefox -- it copies the command"
+        echo "                with the right version; or, as a fallback:"
+        echo "                $NM_INSTALL"
         return 1
     fi
     # The manifest names the binary, so trust it rather than guessing the
