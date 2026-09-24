@@ -9195,8 +9195,24 @@ clarity.
 * ADR-050: Tridactyl for modal browsing — a tangled =tridactylrc=, a generated zenburn theme, and the native messenger treated as external state
 :PROPERTIES:
 :ID:       adr-tridactyl
-:STATUS:   Repository half implemented 2026-09-19; the extension, its native messenger and every live check below are still outstanding
+:STATUS:   Implemented and live-verified 2026-09-23
 :LOGBOOK:
+- 2026-09-23 Live-verified, all of it. Extension installed from AMO, native
+  messenger 0.5.0 in place, and =firefox-chrome-install --check= exits 0 with
+  the manifest resolving to =~/.local/share/tridactyl/native_main=. =:findrc=
+  finds the tangled rc, =:get theme= is =zenburn=, =:get editorcmd= is
+  =emacsclient -c +%l:%c %f=, and a textarea opens in Emacs and returns on
+  =C-x #=. The colours needed no =!important= and no second look at
+  specificity: overriding the semantic =--tridactyl-*= variables in a theme
+  loaded from disk is enough, which is what the Evidence section assumed and
+  had not proved.
+
+  One diagnostic worth keeping: the native messenger can be driven straight
+  from a shell, without Firefox, by writing a little-endian length prefix and a
+  JSON message to its stdin — a =version= message and a =read= one both answer
+  with =code: 0=. That separates "the helper cannot see the file" from "the
+  browser never applied it" in one step,
+  and it is the check that ruled out paths and permissions here.
 - 2026-09-19 Implemented the half this repository owns. =config.org= gained a
   Tridactyl section tangling =~/.config/tridactyl/tridactylrc= and
   =~/.config/tridactyl/themes/zenburn.css= (the latter noweb-expanded from the

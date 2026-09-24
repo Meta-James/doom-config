@@ -652,7 +652,7 @@ responsibility question explicitly.
   ordering it prescribed is still the right one, and is what should be followed
   next time rather than relying on the snapshot.
 
-- [ ] *Tridactyl.* Vim keys in the browser — the Evil-first rule applied to the
+- [X] *Tridactyl.* Vim keys in the browser — the Evil-first rule applied to the
   one application that currently ignores it. No existing tool owns this
   responsibility, so ADR-021 permits it, but the ADR should say so rather than
   assume it. Two things make it fit this repository specifically: its config is
@@ -701,14 +701,14 @@ responsibility question explicitly.
   [[id:adr-firefox-chrome-layer][ADR-043]] tangles, so the two layers collide on
   one file — visibly, since =--check= diffs it.
 
-  *Repository half implemented 2026-09-19.* =config.org= tangles
-  =~/.config/tridactyl/tridactylrc= and =~/.config/tridactyl/themes/zenburn.css=,
-  and =firefox-chrome-install --check= now reports the native messenger's
-  manifest and the binary it names. What is left is not code: install the
-  extension from the add-ons site, run the messenger installer =:nativeinstall=
-  prints, and check the three acceptance criteria live. Until that happens the
-  startup drift check warns, correctly — the messenger is declared state and it
-  is not there.
+  *Done 2026-09-23.* =config.org= tangles =~/.config/tridactyl/tridactylrc= and
+  =~/.config/tridactyl/themes/zenburn.css=, the extension and native messenger
+  0.5.0 are installed, and =firefox-chrome-install --check= exits 0 with the
+  messenger's manifest and binary among the things it verifies. All three
+  acceptance criteria met live: =:findrc= finds the tangled rc, the command
+  line and hints render zenburn, and a textarea edits in Emacs. The ADR-050
+  =:guiset= hazard stays a hazard — nothing enforces it beyond the comment in
+  the rc and the drift check noticing afterwards.
 - [ ] *passff*, putting the existing =pass= store behind Firefox autofill
   instead of standing up a second credential path. *The shared native-messaging
   spike is done, 2026-09-14* — written up as
