@@ -3674,10 +3674,12 @@ See the above repository for updates as well as full license text. */
      grid auto-placement follows order-modified document order -- so the first
      value is the navigation side and the second is the tabs side.
 
-     7fr 3fr rather than upstream's 6fr 4fr because these tabs are favicons:
-     ~40px each, so 30% of a 1920px window still holds about fourteen of them,
-     and the address bar keeps the rest. */
-  :root{ --uc-oneline-toolbar-split: 7fr 3fr; }
+     6fr 4fr rather than upstream's own 6fr 4fr default, kept here explicit
+     rather than implied, since these tabs are favicons: ~40px each, so 40% of
+     a 1920px window holds about nineteen of them, and the address bar keeps
+     the rest. Widened from an earlier 7fr 3fr split to give the tab strip more
+     room. */
+  :root{ --uc-oneline-toolbar-split: 6fr 4fr; }
 
   :root:not([chromehidden~="toolbar"]) #navigator-toolbox{
     grid-template-columns: var(--uc-oneline-toolbar-split);

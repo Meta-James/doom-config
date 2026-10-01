@@ -7434,7 +7434,7 @@ file, and drop it from =standards.org='s list.
 * ADR-043: Firefox chrome layer — tangle the three profile files, copy them in with a resolver, and replace the bottom toolbar with a combined zenburn bar
 :PROPERTIES:
 :ID:       adr-firefox-chrome-layer
-:STATUS:   Decided; tangled, upstream fidelity and the resolver both verified against this machine. =firefox-chrome-install= has *not* been run against the live profile — see Validation
+:STATUS:   Decided; tangled, installed against the live profile, and confirmed rendered after restart — see Validation
 :DATE:     2026-09-06
 :END:
 
@@ -7685,13 +7685,14 @@ in the repository, and the cost of drift is a slightly wrong-looking browser.
   =userChrome.css.bak-2026-09-06= exactly once. The stale native root
   =~/.mozilla/firefox/s5v1taq3.default-release/chrome/= was correctly left
   alone.
-- *Not yet done*: Firefox has not been restarted since that install, so none of
-  this has been seen rendered. On the next restart, confirm: one toolbar row;
-  tabs as favicons on the right of the address bar; downloads, extensions,
-  hamburger, passwords, new-tab and all-tabs all present on that row; zenburn
-  colours in the chrome, the hamburger panel and the address-bar dropdown; and
-  a yellow line above the active tab. The 7fr/3fr split is a guess at a
-  comfortable width and is the most likely thing to want adjusting.
+- Firefox has since been restarted and the chrome confirmed rendered: one
+  toolbar row; tabs as favicons on the right of the address bar; downloads,
+  extensions, hamburger, passwords, new-tab and all-tabs all present on that
+  row; zenburn colours in the chrome, the hamburger panel and the address-bar
+  dropdown; and a yellow line above the active tab.
+- The split was retuned from the initial 7fr/3fr guess to 6fr/4fr (nav-bar
+  60%, tabs 40%) after live use showed the tab strip wanted more room; see
+  =config.org='s =--uc-oneline-toolbar-split= comment for the per-tab-width math.
 - =--prune= was exercised against both the live profile and a sandbox one: it
   reports =vars.css= (January 2021) as unmanaged and
   =userChrome.css.bak-2026-09-06= as a backup, distinguishing the two, and it
